@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject } from "@nestjs/common";
+import { Injectable, NotFoundException, ConflictException, Inject } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import type { CreateStaffDto } from "./dto/create-staff.dto";
@@ -105,12 +105,20 @@ export class StaffService {
       .map(([k], i) => `${this.toSnakeCase(k)} = $${i + 3}`);
     const values = Object.values(dto).filter((v) => v !== undefined);
 
-    const result = await this.db.query(
-      `UPDATE staff SET ${fields.join(", ")}, updated_at = NOW()
-       WHERE id = $1 AND tenant_id = $2 RETURNING *`,
-      [id, tenantId, ...values],
-    );
-    return { data: result.rows[0] };
+    try {
+      const result = await this.db.query(
+        `UPDATE staff SET ${fields.join(", ")}, updated_at = NOW()
+         WHERE id = $1 AND tenant_id = $2 RETURNING *`,
+        [id, tenantId, ...values],
+      );
+      return { data: result.rows[0] };
+    } catch (e) {
+      // UNIQUE(tenant_id, employee_id) violation -> friendly 409 instead of 500
+      if ((e as { code?: string }).code === "23505") {
+        throw new ConflictException("That Employee ID is already in use by another staff member.");
+      }
+      throw e;
+    }
   }
 
   async updateAvatar(tenantId: string, id: string, avatarUrl: string | null) {

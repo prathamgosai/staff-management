@@ -74,8 +74,12 @@ function EditStatusModal({ staffId, current, onClose }: { staffId: string; curre
   const qc = useQueryClient();
   const [status, setStatus] = useState(current);
   const mutation = useMutation({
-    mutationFn: () => apiClient.patch(`/staff/${staffId}`, { employmentStatus: status }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["staff-detail", staffId] }); onClose(); },
+    mutationFn: () => apiClient.put(`/staff/${staffId}`, { employmentStatus: status }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["staff-detail", staffId] });
+      qc.invalidateQueries({ queryKey: ["staff"] });
+      onClose();
+    },
   });
   const statuses = ["active", "on_leave", "probation", "terminated", "inactive"];
   return (
@@ -102,6 +106,86 @@ function EditStatusModal({ staffId, current, onClose }: { staffId: string; curre
           className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition flex items-center justify-center gap-2">
           {mutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
           Save Status
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Edit Details Modal ──────────────────────────────────────────────── */
+function EditContactModal({ staffId, current, onClose }: { staffId: string; current: { phone: string; email: string | null; employeeId: string }; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [employeeId, setEmployeeId] = useState(current.employeeId ?? "");
+  const [phone, setPhone] = useState(current.phone ?? "");
+  const [email, setEmail] = useState(current.email ?? "");
+  const [err, setErr] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const e = email.trim();
+      // Send null (not "") to clear email so @IsOptional()/@IsEmail() passes
+      return apiClient.put(`/staff/${staffId}`, {
+        employeeId: employeeId.trim(),
+        phone: phone.trim(),
+        email: e ? e : null,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["staff-detail", staffId] });
+      qc.invalidateQueries({ queryKey: ["staff"] });
+      onClose();
+    },
+    onError: (error) => {
+      const e = error as { response?: { data?: { message?: string | string[] } } };
+      const m = e?.response?.data?.message;
+      setErr(Array.isArray(m) ? m.join(", ") : m ?? "Could not save. Please try again.");
+    },
+  });
+
+  function save() {
+    setErr(null);
+    if (!employeeId.trim()) { setErr("Employee ID is required."); return; }
+    if (employeeId.trim().length > 30) { setErr("Employee ID must be 30 characters or fewer."); return; }
+    if (!phone.trim()) { setErr("Phone number is required."); return; }
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setErr("Please enter a valid email address."); return;
+    }
+    mutation.mutate();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-96 max-w-[calc(100vw-2rem)] mx-4 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-gray-900">Edit Details</h3>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X size={16} /></button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Employee ID</label>
+            <input value={employeeId} onChange={e => setEmployeeId(e.target.value)} type="text" maxLength={30}
+              placeholder="e.g. CU-028"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Phone</label>
+            <input value={phone} onChange={e => setPhone(e.target.value)} type="tel"
+              placeholder="e.g. +91 98765 43210"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Email</label>
+            <input value={email} onChange={e => setEmail(e.target.value)} type="email"
+              placeholder="name@example.com (optional)"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          {err && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{err}</p>}
+        </div>
+        <button onClick={save} disabled={mutation.isPending}
+          className="mt-5 w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition flex items-center justify-center gap-2">
+          {mutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+          Save Changes
         </button>
       </div>
     </div>
@@ -207,6 +291,7 @@ export default function StaffDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [showEditStatus, setShowEditStatus] = useState(false);
+  const [showEditContact, setShowEditContact] = useState(false);
 
   const { data, isLoading, isError } = useQuery<{ data: StaffDetail }>({
     queryKey: ["staff-detail", id],
@@ -254,6 +339,9 @@ export default function StaffDetailPage() {
       {showEditStatus && (
         <EditStatusModal staffId={id} current={staff.employmentStatus} onClose={() => setShowEditStatus(false)} />
       )}
+      {showEditContact && (
+        <EditContactModal staffId={id} current={{ phone: staff.phone, email: staff.email, employeeId: staff.employeeId }} onClose={() => setShowEditContact(false)} />
+      )}
 
       <div className="max-w-3xl mx-auto space-y-5">
         {/* Back */}
@@ -300,7 +388,13 @@ export default function StaffDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Contact & Identity */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Contact</p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Contact</p>
+              <button onClick={() => setShowEditContact(true)}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition">
+                <Pencil size={11} /> Edit
+              </button>
+            </div>
             <InfoRow icon={Phone} label="Phone" value={staff.phone} />
             <InfoRow icon={Mail}  label="Email" value={staff.email} />
             <InfoRow icon={Hash}  label="Employee ID" value={staff.employeeId} />
