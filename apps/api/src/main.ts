@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, VersioningType } from "@nestjs/common";
+import { NestExpressApplication } from "@nestjs/platform-express";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import { ConfigService } from "@nestjs/config";
 import helmet from "helmet";
@@ -8,8 +9,14 @@ import * as compression from "compression";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { logger: ["error", "warn", "log"] });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    logger: ["error", "warn", "log"],
+  });
   const config = app.get(ConfigService);
+
+  // Accept larger JSON bodies so base64 profile-photo uploads aren't rejected
+  app.useBodyParser("json", { limit: "8mb" });
+  app.useBodyParser("urlencoded", { limit: "8mb", extended: true });
 
   app.use(helmet());
   app.use(compression());

@@ -3,18 +3,20 @@
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { fileToAvatarDataUrl } from "@/lib/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   ArrowLeft, Phone, Mail, MapPin, Briefcase, Calendar,
   Clock, Building2, User, ChevronDown, Check, Loader2,
-  Pencil, X, Shield, Hash,
+  Pencil, X, Shield, Hash, Camera,
 } from "lucide-react";
 import { format } from "date-fns";
 
 /* ─── types ──────────────────────────────────────────────────────────── */
 interface StaffDetail {
   id: string; employeeId: string; name: string;
+  avatarUrl: string | null;
   email: string | null; phone: string; whatsapp: string | null;
   primaryOutletId: string; currentOutletId: string;
   departmentId: string; positionId: string;
@@ -139,6 +141,67 @@ function LeaveHistory({ staffId }: { staffId: string }) {
   );
 }
 
+/* ─── Avatar uploader ─────────────────────────────────────────────────── */
+function AvatarUploader({ staffId, name, avatarUrl }: { staffId: string; name: string; avatarUrl: string | null }) {
+  const qc = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: (newUrl: string) => apiClient.put(`/staff/${staffId}/avatar`, { avatarUrl: newUrl }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["staff-detail", staffId] });
+      qc.invalidateQueries({ queryKey: ["staff"] });
+      setError(null);
+    },
+    onError: () => setError("Upload failed. Try again."),
+  });
+
+  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // let the same file be re-selected later
+    if (!file) return;
+    setError(null);
+    if (file.size > 10 * 1024 * 1024) { setError("Image must be under 10 MB."); return; }
+    try {
+      const dataUrl = await fileToAvatarDataUrl(file);
+      mutation.mutate(dataUrl);
+    } catch (err) {
+      setError((err as Error).message || "Could not process that image.");
+    }
+  }
+
+  const busy = mutation.isPending;
+
+  return (
+    <div className="shrink-0">
+      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPick} />
+      <button type="button" onClick={() => fileRef.current?.click()} disabled={busy}
+        title="Upload photo"
+        className="group relative w-20 h-20 rounded-2xl overflow-hidden block focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+        {avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
+        ) : (
+          <span className={`w-full h-full ${avatarColor(name)} text-white flex items-center justify-center text-2xl font-black`}>
+            {initials(name)}
+          </span>
+        )}
+        <span className={`absolute inset-0 flex items-center justify-center bg-black/45 text-white transition-opacity ${busy ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+          {busy ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
+        </span>
+      </button>
+      {avatarUrl && !busy && (
+        <button type="button" onClick={() => mutation.mutate("")}
+          className="mt-1.5 w-full text-[11px] text-gray-400 hover:text-red-500 transition">
+          Remove
+        </button>
+      )}
+      {error && <p className="mt-1.5 text-[11px] text-red-500 leading-tight w-20">{error}</p>}
+    </div>
+  );
+}
+
 /* ─── Page ────────────────────────────────────────────────────────────── */
 export default function StaffDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -202,9 +265,7 @@ export default function StaffDetailPage() {
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <div className="flex items-start gap-5">
             {/* Avatar */}
-            <div className={`w-20 h-20 rounded-2xl ${avatarColor(staff.name)} text-white flex items-center justify-center text-2xl font-black shrink-0`}>
-              {initials(staff.name)}
-            </div>
+            <AvatarUploader staffId={id} name={staff.name} avatarUrl={staff.avatarUrl} />
 
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-3 flex-wrap">

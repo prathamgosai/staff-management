@@ -6,6 +6,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from "@nestjs/swagger"
 import { StaffService } from "./staff.service";
 import { CreateStaffDto } from "./dto/create-staff.dto";
 import { UpdateStaffDto } from "./dto/update-staff.dto";
+import { UpdateAvatarDto } from "./dto/update-avatar.dto";
 import { StaffQueryDto } from "./dto/staff-query.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
@@ -42,6 +43,16 @@ export class StaffController {
     @Body() dto: UpdateStaffDto,
   ) {
     return this.staffService.update(user.tenantId, id, dto);
+  }
+
+  @Put(":id/avatar")
+  @ApiOperation({ summary: "Upload, change, or remove a staff member's profile photo" })
+  updateAvatar(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateAvatarDto,
+  ) {
+    return this.staffService.updateAvatar(user.tenantId, id, dto.avatarUrl);
   }
 
   @Delete(":id")

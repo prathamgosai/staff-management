@@ -113,6 +113,17 @@ export class StaffService {
     return { data: result.rows[0] };
   }
 
+  async updateAvatar(tenantId: string, id: string, avatarUrl: string | null) {
+    await this.findOne(tenantId, id); // 404s if the staff member doesn't exist
+    const value = avatarUrl && avatarUrl.trim() ? avatarUrl : null;
+    const result = await this.db.query(
+      `UPDATE staff SET avatar_url = $3, updated_at = NOW()
+       WHERE id = $1 AND tenant_id = $2 RETURNING *`,
+      [id, tenantId, value],
+    );
+    return { data: this.mapRow(result.rows[0]) };
+  }
+
   async softDelete(tenantId: string, id: string): Promise<void> {
     await this.db.query(
       "UPDATE staff SET employment_status = 'terminated', updated_at = NOW() WHERE id = $1 AND tenant_id = $2",

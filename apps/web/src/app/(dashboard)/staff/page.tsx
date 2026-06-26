@@ -12,6 +12,7 @@ import {
 /* ─── types ──────────────────────────────────────────────────────────── */
 interface StaffRow {
   id: string; name: string; phone: string;
+  avatar_url?: string | null; avatarUrl?: string | null;
   employee_id?: string; employeeId?: string;
   employment_type?: string; employmentType?: string;
   employment_status?: string; employmentStatus?: string;
@@ -518,9 +519,15 @@ export default function StaffPage() {
                       <tr key={staff.id} className="hover:bg-blue-50/30 transition-colors group">
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-3">
-                            <div className={`w-9 h-9 rounded-full ${avatarColor(staff.name)} text-white flex items-center justify-center font-bold text-xs shrink-0`}>
-                              {initials(staff.name)}
-                            </div>
+                            {staff.avatarUrl || staff.avatar_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={(staff.avatarUrl || staff.avatar_url) as string} alt={staff.name}
+                                className="w-9 h-9 rounded-full object-cover shrink-0" />
+                            ) : (
+                              <div className={`w-9 h-9 rounded-full ${avatarColor(staff.name)} text-white flex items-center justify-center font-bold text-xs shrink-0`}>
+                                {initials(staff.name)}
+                              </div>
+                            )}
                             <div>
                               <p className="font-semibold text-gray-900 leading-tight">{staff.name}</p>
                               <p className="text-xs text-gray-400 mt-0.5">{staff.phone}</p>
