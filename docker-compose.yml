@@ -1,0 +1,118 @@
+version: "3.9"
+
+services:
+  # ── PostgreSQL 16 + TimescaleDB ──────────────────────────────
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: workforceiq-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: workforceiq
+      POSTGRES_USER: workforceiq_user
+      POSTGRES_PASSWORD: change_me_in_production
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./assets/db/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql
+      - ./assets/db/002_seed.sql:/docker-entrypoint-initdb.d/002_seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workforceiq_user -d workforceiq"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis (cache + BullMQ queues) ────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: workforceiq-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MinIO (local S3-compatible object storage) ───────────────
+  minio:
+    image: minio/minio:latest
+    container_name: workforceiq-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  # ── NestJS API ────────────────────────────────────────────────
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: workforceiq-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      ML_SERVICE_URL: http://ml-service:8000
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./apps/api:/app
+      - /app/node_modules
+
+  # ── Python ML Service ────────────────────────────────────────
+  ml-service:
+    build:
+      context: ./apps/ml-service
+      dockerfile: Dockerfile
+    container_name: workforceiq-ml
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      REDIS_HOST: redis
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./apps/ml-service:/app
+
+  # ── Next.js Frontend ─────────────────────────────────────────
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: workforceiq-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    env_file: .env
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
