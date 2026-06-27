@@ -9,10 +9,12 @@ import { apiClient } from "@/lib/api-client";
 import {
   LayoutDashboard, Users, Building2, Calendar, Clock,
   CalendarOff, TrendingUp, ArrowLeftRight, BarChart3,
-  LogOut, Menu, X, ShieldCheck,
+  LogOut, Menu, X, ShieldCheck, KeyRound, type LucideIcon,
 } from "lucide-react";
 
-const NAV_ITEMS = [
+type NavItem = { href: string; label: string; icon: LucideIcon; badge?: boolean; adminOnly?: boolean };
+
+const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/staff",     label: "Staff",      icon: Users },
   { href: "/outlets",   label: "Outlets",    icon: Building2 },
@@ -22,7 +24,8 @@ const NAV_ITEMS = [
   { href: "/forecasting",label:"Forecasting",icon: TrendingUp },
   { href: "/allocation",label: "Allocation", icon: ArrowLeftRight },
   { href: "/reports",   label: "Reports",    icon: BarChart3 },
-  { href: "/approvals", label: "Approvals",  icon: ShieldCheck, badge: true },
+  { href: "/accounts",  label: "Accounts",   icon: KeyRound, adminOnly: true },
+  { href: "/approvals", label: "Approvals",  icon: ShieldCheck, badge: true, adminOnly: true },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -49,8 +52,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!user) return null;
 
-  // Approvals is a super-admin-only area; hide it from everyone else.
-  const navItems = NAV_ITEMS.filter((item) => item.href !== "/approvals" || isSuperAdmin);
+  // Admin-only areas (Accounts, Approvals) are hidden from everyone else.
+  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || isSuperAdmin);
 
   const handleLogout = () => {
     logout();

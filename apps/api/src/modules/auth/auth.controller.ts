@@ -80,4 +80,26 @@ export class AuthController {
   reviewRegistration(@Param("id") id: string, @Body() body: { action: "approve" | "reject" }) {
     return this.authService.reviewRegistration(id, body.action);
   }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.SUPER_ADMIN)
+  @Get("accounts")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "List all staff accounts — login ID, role, status (super admin only)" })
+  getAccounts(@CurrentUser() user: AuthUser) {
+    return this.authService.getAllAccounts(user.tenantId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.SUPER_ADMIN)
+  @Post("accounts/:id/reset-password")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Reset a staff member's password; returns a temp password if none supplied (super admin only)" })
+  resetPassword(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body() body: { newPassword?: string },
+  ) {
+    return this.authService.resetPassword(user.tenantId, id, body.newPassword);
+  }
 }

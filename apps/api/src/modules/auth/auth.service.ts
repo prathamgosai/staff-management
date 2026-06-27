@@ -3,6 +3,7 @@ import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import { Pool } from "pg";
 import * as bcrypt from "bcrypt";
+import { randomInt } from "crypto";
 import { DB_POOL } from "../../database/database.module";
 import type { AuthUser, AuthTokens, TokenPayload } from "@workforceiq/shared";
 import type { LoginDto } from "./dto/login.dto";
@@ -15,6 +16,14 @@ function generateTicket(): string {
   const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
   const rand = Math.floor(1000 + Math.random() * 9000);
   return `WIQ-${ymd}-${rand}`;
+}
+
+// Readable temporary password (no ambiguous chars like 0/O, 1/l/I).
+function generateTempPassword(length = 10): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  let p = "";
+  for (let i = 0; i < length; i++) p += chars[randomInt(chars.length)];
+  return p;
 }
 
 @Injectable()
@@ -118,6 +127,57 @@ export class AuthService {
       await this.db.query("UPDATE staff SET user_id = NULL WHERE user_id = $1", [userId]);
       await this.db.query("DELETE FROM users WHERE id = $1", [userId]);
     }
+  }
+
+  /** Super-admin: list every account with login ID, role and status. Never returns passwords. */
+  async getAllAccounts(tenantId: string) {
+    const result = await this.db.query(
+      `SELECT u.id, u.email, u.name, u.role, u.is_active, u.pending_approval,
+              u.ticket_number, u.last_login_at, u.created_at,
+              s.employee_id
+       FROM users u
+       LEFT JOIN staff s ON s.user_id = u.id
+       WHERE u.tenant_id = $1
+       ORDER BY u.pending_approval DESC, u.is_active ASC, u.name`,
+      [tenantId],
+    );
+    return { data: result.rows };
+  }
+
+  /**
+   * Super-admin: reset a user's password. If newPassword is omitted, a temporary
+   * password is generated and returned ONCE so the admin can hand it over.
+   */
+  async resetPassword(
+    tenantId: string,
+    userId: string,
+    newPassword?: string,
+  ): Promise<{ data: { tempPassword?: string } }> {
+    const userRes = await this.db.query(
+      "SELECT id FROM users WHERE id = $1 AND tenant_id = $2",
+      [userId, tenantId],
+    );
+    if (!userRes.rows[0]) throw new BadRequestException("Account not found");
+
+    let password = newPassword?.trim();
+    const generated = !password;
+    if (generated) {
+      password = generateTempPassword();
+    } else if (password!.length < 8) {
+      throw new BadRequestException("Password must be at least 8 characters");
+    }
+
+    const hash = await bcrypt.hash(password!, 12);
+    await this.db.query(
+      "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3",
+      [hash, userId, tenantId],
+    );
+    // Invalidate existing sessions so the old password can't keep one alive.
+    await this.db.query(
+      "UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL",
+      [userId],
+    );
+    return { data: generated ? { tempPassword: password } : {} };
   }
 
   async refreshTokens(refreshToken: string): Promise<AuthTokens> {

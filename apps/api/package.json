@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "nest build",
-    "dev": "ts-node -r tsconfig-paths/register -r reflect-metadata src/main.ts",
+    "dev": "node scripts/free-port.js 4000 && ts-node -r tsconfig-paths/register -r reflect-metadata src/main.ts",
     "start": "node dist/main",
     "lint": "eslint src/ --ext .ts",
     "typecheck": "tsc --noEmit",

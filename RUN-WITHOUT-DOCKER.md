@@ -12,17 +12,28 @@ The app no longer needs Docker. The backing services run **natively on Windows**
 Everything lives in the git-ignored `.services\` folder (binaries + data). The
 `.env` already points at `localhost:5432` / `localhost:6379`, so no config changes are needed.
 
-## Start it
+## Start it (easiest — one command)
 
 ```powershell
-.\start-services.ps1      # starts PostgreSQL + Redis (idempotent)
-pnpm dev                  # starts API (:4000) and Web (:3000)
+.\run-app.ps1
 ```
 
-Then open http://localhost:3000 and sign in with `admin@workforceiq.app` / `Admin@123`.
+This ensures Postgres + Redis are running, **frees ports 4000/3000 so you never get `EADDRINUSE`**, and launches the API and Web each in its own window. Safe to re-run anytime. When the Web window says `Ready`, open http://localhost:3000 and sign in with `admin@workforceiq.app` / `Admin@123`.
 
-> If PowerShell blocks the script with an execution-policy error, run:
-> `powershell -ExecutionPolicy Bypass -File .\start-services.ps1`
+### Or start things manually
+```powershell
+.\start-services.ps1      # starts PostgreSQL + Redis (idempotent)
+# then, in TWO separate terminals:
+cd apps\api ; pnpm dev    # API  -> http://localhost:4000
+cd apps\web ; pnpm dev    # Web  -> http://localhost:3000
+```
+
+> **`EADDRINUSE: :::4000` means an API is already running** — you don't need a second one.
+> Don't run `pnpm dev` again in a folder whose server is already up. To force-free a port:
+> `Get-NetTCPConnection -LocalPort 4000 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }`
+
+> If PowerShell blocks a script with an execution-policy error, run:
+> `powershell -ExecutionPolicy Bypass -File .\run-app.ps1`
 
 ## Stop it
 
