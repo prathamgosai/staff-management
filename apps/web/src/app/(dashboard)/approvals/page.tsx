@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { format } from "date-fns";
 import { UserCheck, UserX, Ticket, Loader2, RefreshCw, ShieldCheck, Bell } from "lucide-react";
+import { useAuthStore } from "@/store/auth.store";
 
 interface PendingUser {
   id: string;
@@ -19,6 +20,7 @@ interface PendingUser {
 
 export default function ApprovalsPage() {
   const qc = useQueryClient();
+  const isAdmin = useAuthStore((s) => s.user?.role === "super_admin");
   const [actingId, setActingId] = useState<string | null>(null);
   const [actingAction, setActingAction] = useState<"approve" | "reject" | null>(null);
 
@@ -28,6 +30,7 @@ export default function ApprovalsPage() {
     staleTime: 0,
     refetchOnMount: "always",
     refetchInterval: 30_000,
+    enabled: isAdmin,
   });
 
   const mutation = useMutation({
@@ -48,6 +51,18 @@ export default function ApprovalsPage() {
   }
 
   const rows = data?.data ?? [];
+
+  if (!isAdmin) {
+    return (
+      <div className="max-w-md mx-auto text-center py-24">
+        <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
+          <ShieldCheck size={26} strokeWidth={1.5} className="text-red-400" />
+        </div>
+        <p className="font-bold text-gray-700">Restricted area</p>
+        <p className="text-sm text-gray-400 mt-1">Only super admins can review account approvals.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

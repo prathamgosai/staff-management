@@ -2,12 +2,14 @@ import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Pars
 import { ApiTags, ApiBearerAuth } from "@nestjs/swagger";
 import { DepartmentService } from "./department.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { RolesGuard } from "../../common/guards/roles.guard";
+import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
-import type { AuthUser } from "@workforceiq/shared";
+import { ROLES, type AuthUser } from "@workforceiq/shared";
 
 @ApiTags("Departments & Positions")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("departments")
 export class DepartmentController {
   constructor(private readonly svc: DepartmentService) {}
@@ -18,11 +20,13 @@ export class DepartmentController {
   }
 
   @Post()
+  @Roles(ROLES.SUPER_ADMIN)
   createDepartment(@Body() body: { outletId: string; name: string }) {
     return this.svc.createDepartment(body.outletId, body.name);
   }
 
   @Delete(":id")
+  @Roles(ROLES.SUPER_ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
   deleteDepartment(@Param("id", ParseUUIDPipe) id: string) {
     return this.svc.deleteDepartment(id);
@@ -34,6 +38,7 @@ export class DepartmentController {
   }
 
   @Post("/positions")
+  @Roles(ROLES.SUPER_ADMIN)
   createPosition(
     @CurrentUser() user: AuthUser,
     @Body() body: { name: string; level?: number; defaultHoursWeek?: number },

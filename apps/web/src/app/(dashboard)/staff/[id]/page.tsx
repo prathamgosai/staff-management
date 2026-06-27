@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { fileToAvatarDataUrl } from "@/lib/image";
+import { useAuthStore } from "@/store/auth.store";
 import Link from "next/link";
 import { useState, useRef } from "react";
 import {
@@ -16,6 +17,7 @@ import { format } from "date-fns";
 /* ─── types ──────────────────────────────────────────────────────────── */
 interface StaffDetail {
   id: string; employeeId: string; name: string;
+  userId: string | null;
   avatarUrl: string | null;
   email: string | null; phone: string; whatsapp: string | null;
   primaryOutletId: string; currentOutletId: string;
@@ -113,7 +115,7 @@ function EditStatusModal({ staffId, current, onClose }: { staffId: string; curre
 }
 
 /* ─── Edit Details Modal ──────────────────────────────────────────────── */
-function EditContactModal({ staffId, current, onClose }: { staffId: string; current: { phone: string; email: string | null; employeeId: string }; onClose: () => void }) {
+function EditContactModal({ staffId, current, allowEmployeeId, onClose }: { staffId: string; current: { phone: string; email: string | null; employeeId: string }; allowEmployeeId: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const [employeeId, setEmployeeId] = useState(current.employeeId ?? "");
   const [phone, setPhone] = useState(current.phone ?? "");
@@ -123,12 +125,11 @@ function EditContactModal({ staffId, current, onClose }: { staffId: string; curr
   const mutation = useMutation({
     mutationFn: () => {
       const e = email.trim();
-      // Send null (not "") to clear email so @IsOptional()/@IsEmail() passes
-      return apiClient.put(`/staff/${staffId}`, {
-        employeeId: employeeId.trim(),
-        phone: phone.trim(),
-        email: e ? e : null,
-      });
+      // Send null (not "") to clear email so @IsOptional()/@IsEmail() passes.
+      // Employee ID is admin-only — never send it when self-editing (backend would 403).
+      const payload: Record<string, unknown> = { phone: phone.trim(), email: e ? e : null };
+      if (allowEmployeeId) payload.employeeId = employeeId.trim();
+      return apiClient.put(`/staff/${staffId}`, payload);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["staff-detail", staffId] });
@@ -144,8 +145,10 @@ function EditContactModal({ staffId, current, onClose }: { staffId: string; curr
 
   function save() {
     setErr(null);
-    if (!employeeId.trim()) { setErr("Employee ID is required."); return; }
-    if (employeeId.trim().length > 30) { setErr("Employee ID must be 30 characters or fewer."); return; }
+    if (allowEmployeeId) {
+      if (!employeeId.trim()) { setErr("Employee ID is required."); return; }
+      if (employeeId.trim().length > 30) { setErr("Employee ID must be 30 characters or fewer."); return; }
+    }
     if (!phone.trim()) { setErr("Phone number is required."); return; }
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       setErr("Please enter a valid email address."); return;
@@ -162,12 +165,14 @@ function EditContactModal({ staffId, current, onClose }: { staffId: string; curr
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X size={16} /></button>
         </div>
         <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Employee ID</label>
-            <input value={employeeId} onChange={e => setEmployeeId(e.target.value)} type="text" maxLength={30}
-              placeholder="e.g. CU-028"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
+          {allowEmployeeId && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Employee ID</label>
+              <input value={employeeId} onChange={e => setEmployeeId(e.target.value)} type="text" maxLength={30}
+                placeholder="e.g. CU-028"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          )}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Phone</label>
             <input value={phone} onChange={e => setPhone(e.target.value)} type="tel"
@@ -226,7 +231,7 @@ function LeaveHistory({ staffId }: { staffId: string }) {
 }
 
 /* ─── Avatar uploader ─────────────────────────────────────────────────── */
-function AvatarUploader({ staffId, name, avatarUrl }: { staffId: string; name: string; avatarUrl: string | null }) {
+function AvatarUploader({ staffId, name, avatarUrl, canEdit }: { staffId: string; name: string; avatarUrl: string | null; canEdit: boolean }) {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -256,6 +261,24 @@ function AvatarUploader({ staffId, name, avatarUrl }: { staffId: string; name: s
   }
 
   const busy = mutation.isPending;
+
+  // Read-only avatar for viewers who can't edit this profile.
+  if (!canEdit) {
+    return (
+      <div className="shrink-0">
+        <div className="w-20 h-20 rounded-2xl overflow-hidden">
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
+          ) : (
+            <span className={`w-full h-full ${avatarColor(name)} text-white flex items-center justify-center text-2xl font-black`}>
+              {initials(name)}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="shrink-0">
@@ -292,6 +315,7 @@ export default function StaffDetailPage() {
   const router = useRouter();
   const [showEditStatus, setShowEditStatus] = useState(false);
   const [showEditContact, setShowEditContact] = useState(false);
+  const currentUser = useAuthStore((s) => s.user);
 
   const { data, isLoading, isError } = useQuery<{ data: StaffDetail }>({
     queryKey: ["staff-detail", id],
@@ -300,6 +324,9 @@ export default function StaffDetailPage() {
   });
 
   const staff = data?.data;
+  const isAdmin = currentUser?.role === "super_admin";
+  const isSelf = !!staff && !!currentUser && staff.userId === currentUser.id;
+  const canEditProfile = isAdmin || isSelf; // super admin edits anyone; others edit only their own profile
 
   if (isLoading) {
     return (
@@ -340,7 +367,7 @@ export default function StaffDetailPage() {
         <EditStatusModal staffId={id} current={staff.employmentStatus} onClose={() => setShowEditStatus(false)} />
       )}
       {showEditContact && (
-        <EditContactModal staffId={id} current={{ phone: staff.phone, email: staff.email, employeeId: staff.employeeId }} onClose={() => setShowEditContact(false)} />
+        <EditContactModal staffId={id} current={{ phone: staff.phone, email: staff.email, employeeId: staff.employeeId }} allowEmployeeId={isAdmin} onClose={() => setShowEditContact(false)} />
       )}
 
       <div className="max-w-3xl mx-auto space-y-5">
@@ -353,7 +380,7 @@ export default function StaffDetailPage() {
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <div className="flex items-start gap-5">
             {/* Avatar */}
-            <AvatarUploader staffId={id} name={staff.name} avatarUrl={staff.avatarUrl} />
+            <AvatarUploader staffId={id} name={staff.name} avatarUrl={staff.avatarUrl} canEdit={canEditProfile} />
 
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -361,11 +388,13 @@ export default function StaffDetailPage() {
                   <h1 className="text-2xl font-bold text-gray-900">{staff.name}</h1>
                   <p className="text-sm text-gray-500 mt-0.5">{staff.positionName} · {staff.departmentName}</p>
                 </div>
-                <button onClick={() => setShowEditStatus(true)}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 hover:bg-gray-50 transition">
-                  <Pencil size={11} className="text-gray-400" />
-                  Edit Status
-                </button>
+                {isAdmin && (
+                  <button onClick={() => setShowEditStatus(true)}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 hover:bg-gray-50 transition">
+                    <Pencil size={11} className="text-gray-400" />
+                    Edit Status
+                  </button>
+                )}
               </div>
 
               {/* Badges */}
@@ -390,10 +419,12 @@ export default function StaffDetailPage() {
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Contact</p>
-              <button onClick={() => setShowEditContact(true)}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition">
-                <Pencil size={11} /> Edit
-              </button>
+              {canEditProfile && (
+                <button onClick={() => setShowEditContact(true)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition">
+                  <Pencil size={11} /> Edit
+                </button>
+              )}
             </div>
             <InfoRow icon={Phone} label="Phone" value={staff.phone} />
             <InfoRow icon={Mail}  label="Email" value={staff.email} />

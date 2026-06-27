@@ -7,7 +7,9 @@ import { ChangePasswordDto } from "./dto/change-password.dto";
 import { Public } from "../../common/decorators/public.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
-import type { AuthUser } from "@workforceiq/shared";
+import { RolesGuard } from "../../common/guards/roles.guard";
+import { Roles } from "../../common/decorators/roles.decorator";
+import { ROLES, type AuthUser } from "@workforceiq/shared";
 
 @ApiTags("Auth")
 @Controller("auth")
@@ -26,7 +28,7 @@ export class AuthController {
   @Post("register")
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: "Staff self-registration — account pending Head Chef approval" })
-  register(@Body() body: { employeeId: string; password: string; confirmPassword: string }) {
+  register(@Body() body: { name: string; email: string; password: string; confirmPassword: string }) {
     return this.authService.register(body);
   }
 
@@ -61,18 +63,20 @@ export class AuthController {
     return this.authService.changePassword(user.id, dto);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.SUPER_ADMIN)
   @Get("pending-registrations")
   @ApiBearerAuth()
-  @ApiOperation({ summary: "List staff accounts pending Head Chef approval" })
+  @ApiOperation({ summary: "List staff accounts pending approval (super admin only)" })
   getPendingRegistrations() {
     return this.authService.getPendingRegistrations();
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.SUPER_ADMIN)
   @Put("registrations/:id/review")
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Approve or reject a pending staff registration" })
+  @ApiOperation({ summary: "Approve or reject a pending staff registration (super admin only)" })
   reviewRegistration(@Param("id") id: string, @Body() body: { action: "approve" | "reject" }) {
     return this.authService.reviewRegistration(id, body.action);
   }

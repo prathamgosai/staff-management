@@ -1,9 +1,13 @@
-import { Injectable, NotFoundException, ConflictException, Inject } from "@nestjs/common";
+import { Injectable, NotFoundException, ConflictException, ForbiddenException, Inject } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
+import type { AuthUser } from "@workforceiq/shared";
 import type { CreateStaffDto } from "./dto/create-staff.dto";
 import type { UpdateStaffDto } from "./dto/update-staff.dto";
 import type { StaffQueryDto } from "./dto/staff-query.dto";
+
+// Fields a non-admin is allowed to change on their OWN profile.
+const SELF_EDITABLE_FIELDS = new Set(["phone", "email", "whatsapp"]);
 
 @Injectable()
 export class StaffService {
@@ -98,18 +102,21 @@ export class StaffService {
     return { data: this.mapRow(result.rows[0]) };
   }
 
-  async update(tenantId: string, id: string, dto: UpdateStaffDto) {
-    await this.findOne(tenantId, id);
+  async update(user: AuthUser, id: string, dto: UpdateStaffDto) {
+    const existing = (await this.findOne(user.tenantId, id)).data as { userId?: string | null };
+    this.assertCanEditProfile(user, existing, dto);
+
     const fields = Object.entries(dto)
       .filter(([, v]) => v !== undefined)
       .map(([k], i) => `${this.toSnakeCase(k)} = $${i + 3}`);
     const values = Object.values(dto).filter((v) => v !== undefined);
+    if (fields.length === 0) return { data: existing };
 
     try {
       const result = await this.db.query(
         `UPDATE staff SET ${fields.join(", ")}, updated_at = NOW()
          WHERE id = $1 AND tenant_id = $2 RETURNING *`,
-        [id, tenantId, ...values],
+        [id, user.tenantId, ...values],
       );
       return { data: result.rows[0] };
     } catch (e) {
@@ -121,15 +128,39 @@ export class StaffService {
     }
   }
 
-  async updateAvatar(tenantId: string, id: string, avatarUrl: string | null) {
-    await this.findOne(tenantId, id); // 404s if the staff member doesn't exist
+  async updateAvatar(user: AuthUser, id: string, avatarUrl: string | null) {
+    const existing = (await this.findOne(user.tenantId, id)).data as { userId?: string | null };
+    if (user.role !== "super_admin" && existing.userId !== user.id) {
+      throw new ForbiddenException("You can only change your own profile photo.");
+    }
     const value = avatarUrl && avatarUrl.trim() ? avatarUrl : null;
     const result = await this.db.query(
       `UPDATE staff SET avatar_url = $3, updated_at = NOW()
        WHERE id = $1 AND tenant_id = $2 RETURNING *`,
-      [id, tenantId, value],
+      [id, user.tenantId, value],
     );
     return { data: this.mapRow(result.rows[0]) };
+  }
+
+  /** super_admin can edit anyone; everyone else may edit only their own contact fields. */
+  private assertCanEditProfile(
+    user: AuthUser,
+    target: { userId?: string | null },
+    dto: UpdateStaffDto,
+  ) {
+    if (user.role === "super_admin") return;
+    const isOwnProfile = !!target.userId && target.userId === user.id;
+    if (!isOwnProfile) {
+      throw new ForbiddenException("You can only edit your own profile.");
+    }
+    const blocked = Object.keys(dto).filter(
+      (k) => (dto as Record<string, unknown>)[k] !== undefined && !SELF_EDITABLE_FIELDS.has(k),
+    );
+    if (blocked.length > 0) {
+      throw new ForbiddenException(
+        `You can only update your contact details (phone, email). Not allowed: ${blocked.join(", ")}.`,
+      );
+    }
   }
 
   async softDelete(tenantId: string, id: string): Promise<void> {
@@ -186,6 +217,7 @@ export class StaffService {
       id: row.id,
       tenantId: row.tenant_id,
       employeeId: row.employee_id,
+      userId: row.user_id,
       name: row.name,
       email: row.email,
       phone: row.phone,

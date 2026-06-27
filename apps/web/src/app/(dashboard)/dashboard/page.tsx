@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { useAuthStore } from "@/store/auth.store";
 import {
   Users, Building2, CalendarOff, Clock, ChevronDown,
   Wand2, TrendingUp, Shield, Loader2, ChevronRight, CheckCircle2,
@@ -103,6 +104,7 @@ export default function DashboardPage() {
   const [outletFilter, setOutletFilter]     = useState("");
   const [expandedOutlet, setExpandedOutlet] = useState<string | null>(null);
   const [editing, setEditing]               = useState<StaffRow | null>(null);
+  const isAdmin = useAuthStore((s) => s.user?.role === "super_admin");
 
   const { data: overviewRes, isLoading: ovLoading } = useQuery<{ data: OverviewData }>({
     queryKey: ["dashboard-overview"],
@@ -298,14 +300,24 @@ export default function DashboardPage() {
                         <p className="text-sm font-semibold text-gray-900 truncate">{s.name}</p>
                         <p className="text-xs text-gray-400 font-mono">{s.employee_id}</p>
                       </div>
-                      <button onClick={() => setEditing(s)} title="Change designation"
-                        className="text-xs text-gray-500 hidden sm:block min-w-[120px] text-left hover:text-blue-600 transition truncate">
-                        {s.position_name}
-                      </button>
-                      <button onClick={() => setEditing(s)} title="Change designation"
-                        className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 transition cursor-pointer hover:ring-2 hover:ring-blue-300 hover:ring-offset-1 ${HIERARCHY_COLORS[s.hierarchy_level]}`}>
-                        {HIERARCHY_LABELS[s.hierarchy_level]}
-                      </button>
+                      {isAdmin ? (
+                        <button onClick={() => setEditing(s)} title="Change designation"
+                          className="text-xs text-gray-500 hidden sm:block min-w-[120px] text-left hover:text-blue-600 transition truncate">
+                          {s.position_name}
+                        </button>
+                      ) : (
+                        <p className="text-xs text-gray-500 hidden sm:block min-w-[120px] truncate">{s.position_name}</p>
+                      )}
+                      {isAdmin ? (
+                        <button onClick={() => setEditing(s)} title="Change designation"
+                          className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 transition cursor-pointer hover:ring-2 hover:ring-blue-300 hover:ring-offset-1 ${HIERARCHY_COLORS[s.hierarchy_level]}`}>
+                          {HIERARCHY_LABELS[s.hierarchy_level]}
+                        </button>
+                      ) : (
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${HIERARCHY_COLORS[s.hierarchy_level]}`}>
+                          {HIERARCHY_LABELS[s.hierarchy_level]}
+                        </span>
+                      )}
                       <div className="hidden md:block min-w-[150px] text-right">
                         {s.todays_shift ? (
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${SHIFT_COLORS[s.todays_shift] ?? "bg-gray-100 text-gray-600"}`}>
@@ -315,10 +327,12 @@ export default function DashboardPage() {
                           <span className="text-xs text-gray-300">No shift today</span>
                         )}
                       </div>
-                      <button onClick={() => setEditing(s)} title="Change designation"
-                        className="p-1.5 rounded-lg text-gray-300 hover:text-blue-600 hover:bg-blue-50 transition shrink-0">
-                        <Pencil size={14} />
-                      </button>
+                      {isAdmin && (
+                        <button onClick={() => setEditing(s)} title="Change designation"
+                          className="p-1.5 rounded-lg text-gray-300 hover:text-blue-600 hover:bg-blue-50 transition shrink-0">
+                          <Pencil size={14} />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>

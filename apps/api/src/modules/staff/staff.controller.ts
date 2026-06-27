@@ -9,12 +9,14 @@ import { UpdateStaffDto } from "./dto/update-staff.dto";
 import { UpdateAvatarDto } from "./dto/update-avatar.dto";
 import { StaffQueryDto } from "./dto/staff-query.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { RolesGuard } from "../../common/guards/roles.guard";
+import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
-import type { AuthUser } from "@workforceiq/shared";
+import { ROLES, type AuthUser } from "@workforceiq/shared";
 
 @ApiTags("Staff")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("staff")
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
@@ -31,32 +33,36 @@ export class StaffController {
   }
 
   @Post()
-  @ApiOperation({ summary: "Create a new staff member" })
+  @Roles(ROLES.SUPER_ADMIN)
+  @ApiOperation({ summary: "Create a new staff member (super admin only)" })
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateStaffDto) {
     return this.staffService.create(user.tenantId, dto);
   }
 
   @Put(":id")
+  @ApiOperation({ summary: "Update a staff member (super admin, or the owner editing their own contact details)" })
   update(
     @CurrentUser() user: AuthUser,
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateStaffDto,
   ) {
-    return this.staffService.update(user.tenantId, id, dto);
+    return this.staffService.update(user, id, dto);
   }
 
   @Put(":id/avatar")
-  @ApiOperation({ summary: "Upload, change, or remove a staff member's profile photo" })
+  @ApiOperation({ summary: "Upload/change/remove a profile photo (super admin, or the owner)" })
   updateAvatar(
     @CurrentUser() user: AuthUser,
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateAvatarDto,
   ) {
-    return this.staffService.updateAvatar(user.tenantId, id, dto.avatarUrl);
+    return this.staffService.updateAvatar(user, id, dto.avatarUrl);
   }
 
   @Delete(":id")
+  @Roles(ROLES.SUPER_ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Deactivate a staff member (super admin only)" })
   remove(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
     return this.staffService.softDelete(user.tenantId, id);
   }

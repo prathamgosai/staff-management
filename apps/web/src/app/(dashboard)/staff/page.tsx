@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { useAuthStore } from "@/store/auth.store";
 import Link from "next/link";
 import {
   Search, Plus, Filter, Users, ChevronLeft, ChevronRight,
@@ -363,6 +364,7 @@ export default function StaffPage() {
   const [showFilter, setShowFilter] = useState(false);
   const [filters, setFilters] = useState({ outletId: "", status: "", employmentType: "" });
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const isAdmin = useAuthStore((s) => s.user?.role === "super_admin");
   const qc = useQueryClient();
 
   const params: Record<string, string | number> = { page, limit: 20 };
@@ -404,10 +406,12 @@ export default function StaffPage() {
               {isLoading ? "Loading…" : `${total} members${activeFilters > 0 ? " (filtered)" : " across all outlets"}`}
             </p>
           </div>
-          <button onClick={() => setShowAdd(true)}
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition shadow-sm">
-            <Plus size={15} /> Add Staff
-          </button>
+          {isAdmin && (
+            <button onClick={() => setShowAdd(true)}
+              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition shadow-sm">
+              <Plus size={15} /> Add Staff
+            </button>
+          )}
         </div>
 
         {/* Search & filter */}
@@ -550,7 +554,14 @@ export default function StaffPage() {
                             : <span className="text-gray-300 text-xs">—</span>}
                         </td>
                         <td className="px-4 py-4 text-right">
-                          {confirmDeleteId === staff.id ? (
+                          {!isAdmin ? (
+                            <div className="flex items-center justify-end opacity-0 group-hover:opacity-100 transition">
+                              <Link href={`/staff/${staff.id}`}
+                                className="text-blue-600 hover:text-blue-800 text-xs font-medium">
+                                View →
+                              </Link>
+                            </div>
+                          ) : confirmDeleteId === staff.id ? (
                             <div className="flex items-center justify-end gap-2">
                               <span className="text-xs text-red-600 font-medium whitespace-nowrap">Delete?</span>
                               <button

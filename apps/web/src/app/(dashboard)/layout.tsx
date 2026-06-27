@@ -35,17 +35,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (!accessToken) router.replace("/login");
   }, [accessToken, router]);
 
-  // Poll pending registrations count for sidebar badge
+  const isSuperAdmin = user?.role === "super_admin";
+
+  // Poll pending registrations count for sidebar badge (super admin only — others get 403)
   const { data: pendingData } = useQuery<{ data: unknown[] }>({
     queryKey: ["pending-registrations"],
     queryFn: () => apiClient.get("/auth/pending-registrations").then(r => r.data),
     refetchInterval: 30_000,
     staleTime: 0,
-    enabled: !!accessToken,
+    enabled: !!accessToken && isSuperAdmin,
   });
   const pendingCount = pendingData?.data?.length ?? 0;
 
   if (!user) return null;
+
+  // Approvals is a super-admin-only area; hide it from everyone else.
+  const navItems = NAV_ITEMS.filter((item) => item.href !== "/approvals" || isSuperAdmin);
 
   const handleLogout = () => {
     logout();
@@ -69,7 +74,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4">
-          {NAV_ITEMS.map(({ href, label, icon: Icon, badge }) => {
+          {navItems.map(({ href, label, icon: Icon, badge }) => {
             const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
             const showBadge = badge && pendingCount > 0;
             return (
