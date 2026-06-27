@@ -5,9 +5,18 @@
 
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "timescaledb";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";   -- fuzzy search on staff names
 CREATE EXTENSION IF NOT EXISTS "unaccent";
+
+-- TimescaleDB is optional. It powers the pax_data time-series hypertable, but the
+-- platform runs fine on vanilla PostgreSQL (pax_data falls back to a plain table).
+-- Wrapped so a missing extension does NOT abort the whole schema load.
+DO $$
+BEGIN
+  CREATE EXTENSION IF NOT EXISTS "timescaledb";
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'TimescaleDB not available — pax_data will be a plain PostgreSQL table.';
+END $$;
 
 -- ──────────────────────────────────────────────────────────────
 -- ENUMS
@@ -426,7 +435,14 @@ CREATE TABLE pax_data (
     special_event    VARCHAR(200),
     PRIMARY KEY (outlet_id, recorded_at)
 );
-SELECT create_hypertable('pax_data', 'recorded_at');
+-- Convert pax_data to a TimescaleDB hypertable when the extension is present;
+-- on vanilla PostgreSQL this is skipped and pax_data stays a regular table.
+DO $$
+BEGIN
+  PERFORM create_hypertable('pax_data', 'recorded_at', if_not_exists => TRUE);
+EXCEPTION WHEN undefined_function THEN
+  RAISE NOTICE 'create_hypertable() unavailable — pax_data remains a plain table.';
+END $$;
 
 -- Demand forecast results
 CREATE TABLE demand_forecasts (

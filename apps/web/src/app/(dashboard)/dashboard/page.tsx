@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import {
   Users, Building2, CalendarOff, Clock, ChevronDown,
   Wand2, TrendingUp, Shield, Loader2, ChevronRight, CheckCircle2,
+  Pencil, X, Check,
 } from "lucide-react";
 import { format, startOfWeek } from "date-fns";
 import Link from "next/link";
@@ -13,7 +14,8 @@ import Link from "next/link";
 interface OverviewData { totalOutlets: number; activeStaff: number; staffOnLeaveToday: number; presentToday: number; }
 interface TodaySnapshot { staffOnShift: number; pendingLeave: number; pendingApprovals: number; }
 interface OutletRow { outlet_id: string; outlet_name: string; outlet_code: string; total_staff: number; full_time: number; part_time: number; departments: number; pending_leaves: number; }
-interface StaffRow { id: string; name: string; employee_id: string; position_name: string; department_name: string; outlet_name: string; hierarchy_level: number; todays_shift: string | null; }
+interface StaffRow { id: string; name: string; employee_id: string; position_id: string | null; position_name: string; department_name: string; outlet_name: string; hierarchy_level: number; todays_shift: string | null; }
+interface PositionOption { id: string; name: string; level: number; }
 
 const SHIFT_COLORS: Record<string, string> = {
   "Shift A (12:00–21:00)": "bg-blue-100 text-blue-700",
@@ -28,9 +30,79 @@ const HIERARCHY_COLORS: Record<number, string> = {
   4: "bg-gray-100 text-gray-600",
 };
 
+/* ─── Change Designation Modal ────────────────────────────────────────── */
+function EditDesignationModal({ staff, onClose }: { staff: StaffRow; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [positionId, setPositionId] = useState<string | null>(staff.position_id);
+  const [err, setErr] = useState<string | null>(null);
+
+  const { data: posRes, isLoading } = useQuery<{ data: PositionOption[] }>({
+    queryKey: ["positions"],
+    queryFn: () => apiClient.get("/departments/positions").then(r => r.data),
+    staleTime: 300_000,
+  });
+  const positions = posRes?.data ?? [];
+
+  const mutation = useMutation({
+    mutationFn: () => apiClient.put(`/staff/${staff.id}`, { positionId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dashboard-hierarchy"] });
+      qc.invalidateQueries({ queryKey: ["staff"] });
+      qc.invalidateQueries({ queryKey: ["staff-detail", staff.id] });
+      onClose();
+    },
+    onError: (error) => {
+      const e = error as { response?: { data?: { message?: string | string[] } } };
+      const m = e?.response?.data?.message;
+      setErr(Array.isArray(m) ? m.join(", ") : m ?? "Could not save. Please try again.");
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-96 max-w-[calc(100vw-2rem)] mx-4 p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-bold text-gray-900">Change Designation</h3>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X size={16} /></button>
+        </div>
+        <p className="text-xs text-gray-400 mb-4">{staff.name} · <span className="font-mono">{staff.employee_id}</span></p>
+
+        {isLoading ? (
+          <div className="py-10 flex justify-center"><Loader2 size={20} className="animate-spin text-gray-300" /></div>
+        ) : positions.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">No positions defined yet</p>
+        ) : (
+          <div className="space-y-1.5 mb-5 max-h-72 overflow-y-auto pr-1">
+            {positions.map(p => (
+              <button key={p.id} onClick={() => setPositionId(p.id)}
+                className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium border-2 transition flex items-center justify-between gap-2 ${
+                  positionId === p.id ? "border-blue-500 bg-blue-50 text-blue-700" : "border-transparent bg-gray-50 text-gray-700 hover:bg-gray-100"
+                }`}>
+                <span>{p.name}</span>
+                {positionId === p.id && <Check size={15} className="text-blue-600 shrink-0" />}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {err && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">{err}</p>}
+
+        <button onClick={() => mutation.mutate()}
+          disabled={mutation.isPending || !positionId || positionId === staff.position_id}
+          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition flex items-center justify-center gap-2">
+          {mutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+          Save Designation
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [outletFilter, setOutletFilter]     = useState("");
   const [expandedOutlet, setExpandedOutlet] = useState<string | null>(null);
+  const [editing, setEditing]               = useState<StaffRow | null>(null);
 
   const { data: overviewRes, isLoading: ovLoading } = useQuery<{ data: OverviewData }>({
     queryKey: ["dashboard-overview"],
@@ -81,6 +153,8 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {editing && <EditDesignationModal staff={editing} onClose={() => setEditing(null)} />}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -224,10 +298,14 @@ export default function DashboardPage() {
                         <p className="text-sm font-semibold text-gray-900 truncate">{s.name}</p>
                         <p className="text-xs text-gray-400 font-mono">{s.employee_id}</p>
                       </div>
-                      <p className="text-xs text-gray-500 hidden sm:block min-w-[120px]">{s.position_name}</p>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${HIERARCHY_COLORS[s.hierarchy_level]}`}>
+                      <button onClick={() => setEditing(s)} title="Change designation"
+                        className="text-xs text-gray-500 hidden sm:block min-w-[120px] text-left hover:text-blue-600 transition truncate">
+                        {s.position_name}
+                      </button>
+                      <button onClick={() => setEditing(s)} title="Change designation"
+                        className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 transition cursor-pointer hover:ring-2 hover:ring-blue-300 hover:ring-offset-1 ${HIERARCHY_COLORS[s.hierarchy_level]}`}>
                         {HIERARCHY_LABELS[s.hierarchy_level]}
-                      </span>
+                      </button>
                       <div className="hidden md:block min-w-[150px] text-right">
                         {s.todays_shift ? (
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${SHIFT_COLORS[s.todays_shift] ?? "bg-gray-100 text-gray-600"}`}>
@@ -237,6 +315,10 @@ export default function DashboardPage() {
                           <span className="text-xs text-gray-300">No shift today</span>
                         )}
                       </div>
+                      <button onClick={() => setEditing(s)} title="Change designation"
+                        className="p-1.5 rounded-lg text-gray-300 hover:text-blue-600 hover:bg-blue-50 transition shrink-0">
+                        <Pencil size={14} />
+                      </button>
                     </div>
                   ))}
                 </div>

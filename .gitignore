@@ -57,3 +57,6 @@ coverage/
 .venv/
 venv/
 env/
+
+# Local backing services (Postgres + Redis binaries & data) for running without Docker
+.services/
