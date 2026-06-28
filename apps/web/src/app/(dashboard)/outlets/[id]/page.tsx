@@ -5,6 +5,7 @@ import { apiClient } from "@/lib/api-client";
 import {
   ArrowLeft, MapPin, Users, Building2, Coffee, Utensils,
   ShoppingBag, Truck, Wine, MoreHorizontal, Phone, Hash,
+  type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -32,7 +33,7 @@ function f(row: StaffRow, s: keyof StaffRow, c: keyof StaffRow): string {
   return (row[c] as string) || (row[s] as string) || "";
 }
 
-const OUTLET_TYPE_MAP: Record<string, { label: string; Icon: React.FC<{ size?: number }> }> = {
+const OUTLET_TYPE_MAP: Record<string, { label: string; Icon: LucideIcon }> = {
   dine_in:       { label: "Dine In",       Icon: Utensils },
   quick_service: { label: "Quick Service", Icon: ShoppingBag },
   cafe:          { label: "Café",          Icon: Coffee },
