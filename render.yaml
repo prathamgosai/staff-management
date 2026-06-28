@@ -1,0 +1,102 @@
+# ──────────────────────────────────────────────────────────────────────────
+# Render Blueprint for WorkforceIQ
+# Creates: PostgreSQL 16, Key Value (Redis), API web service, Web web service.
+#
+# Deploy:  Render Dashboard → New + → Blueprint → pick this repo.
+# After the first deploy, load the database (see DEPLOY-RENDER.md, step 4).
+#
+# NOTE: the two cross-service URLs (APP_URL on the API, NEXT_PUBLIC_API_URL on
+# the web) are hard-coded to the predicted *.onrender.com hostnames below.
+# If Render assigns different hostnames (e.g. the name was taken), update them
+# in the dashboard after the services are created, then redeploy.
+# ──────────────────────────────────────────────────────────────────────────
+
+databases:
+  - name: workforceiq-db
+    databaseName: workforceiq
+    user: workforceiq_user
+    plan: free
+    region: singapore
+    postgresMajorVersion: "16"
+
+services:
+  # ── Redis / Key Value (cache + BullMQ queues) ─────────────────────────────
+  - type: keyvalue
+    name: workforceiq-redis
+    plan: free
+    region: singapore
+    ipAllowList: [] # internal connections only
+
+  # ── NestJS API ────────────────────────────────────────────────────────────
+  - type: web
+    name: workforceiq-api
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: .
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @workforceiq/shared build && pnpm --filter @workforceiq/api build
+    startCommand: node apps/api/dist/main.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_PREFIX
+        value: api/v1
+      # Database (wired from the managed Postgres above)
+      - key: DB_HOST
+        fromDatabase: { name: workforceiq-db, property: host }
+      - key: DB_PORT
+        fromDatabase: { name: workforceiq-db, property: port }
+      - key: DB_NAME
+        fromDatabase: { name: workforceiq-db, property: database }
+      - key: DB_USER
+        fromDatabase: { name: workforceiq-db, property: user }
+      - key: DB_PASSWORD
+        fromDatabase: { name: workforceiq-db, property: password }
+      - key: DB_SSL
+        value: "true"
+      # Redis (wired from the Key Value service above)
+      - key: REDIS_HOST
+        fromService: { name: workforceiq-redis, type: keyvalue, property: host }
+      - key: REDIS_PORT
+        fromService: { name: workforceiq-redis, type: keyvalue, property: port }
+      # Auth secrets (Render generates strong random values)
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      # CORS origin — must be the web service's public URL
+      - key: APP_URL
+        value: https://workforceiq-web.onrender.com
+      # Misc
+      - key: EMAIL_PROVIDER
+        value: mock
+      - key: ENABLE_ML_FORECASTING
+        value: "false"
+      - key: ENABLE_WHATSAPP
+        value: "false"
+      - key: ENABLE_BIOMETRIC_SYNC
+        value: "false"
+
+  # ── Next.js Web ───────────────────────────────────────────────────────────
+  - type: web
+    name: workforceiq-web
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: .
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @workforceiq/shared build && pnpm --filter @workforceiq/web build
+    startCommand: pnpm --filter @workforceiq/web start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Public API base URL — baked into the client bundle at BUILD time
+      - key: NEXT_PUBLIC_API_URL
+        value: https://workforceiq-api.onrender.com/api/v1
+      - key: NEXT_PUBLIC_WS_URL
+        value: wss://workforceiq-api.onrender.com
+      - key: NEXT_PUBLIC_APP_NAME
+        value: WorkforceIQ
