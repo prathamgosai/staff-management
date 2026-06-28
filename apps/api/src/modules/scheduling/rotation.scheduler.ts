@@ -7,6 +7,22 @@ import { SchedulingService } from "./scheduling.service";
 const TENANT_ID = "00000000-0000-0000-0000-000000000001";
 const SYSTEM_USER_ID = "50000000-0000-0000-0000-000000000001"; // admin user
 
+/**
+ * Produce a readable message for any error. An AggregateError (e.g. the pg Pool
+ * failing to connect to a Postgres that isn't running — ECONNREFUSED on both
+ * ::1 and 127.0.0.1) has an empty `.message`, which would otherwise log as a
+ * blank line. Surface the underlying errors so the failure is diagnosable.
+ */
+function formatError(e: unknown): string {
+  if (e instanceof AggregateError) {
+    const inner = e.errors
+      .map((x) => (x instanceof Error ? x.message : String(x)))
+      .join("; ");
+    return `${e.message || "AggregateError"} [${inner}]`;
+  }
+  return e instanceof Error ? e.message : String(e);
+}
+
 @Injectable()
 export class RotationScheduler implements OnApplicationBootstrap {
   private readonly logger = new Logger(RotationScheduler.name);
@@ -51,7 +67,7 @@ export class RotationScheduler implements OnApplicationBootstrap {
             await this.schedulingService.autoGenerateRotation(TENANT_ID, outlet.id, thisMonday, SYSTEM_USER_ID);
             generated++;
           } catch (e) {
-            this.logger.warn(`Could not generate for outlet ${outlet.id}: ${(e as Error).message}`);
+            this.logger.warn(`Could not generate for outlet ${outlet.id}: ${formatError(e)}`);
           }
         }
       }
@@ -62,8 +78,10 @@ export class RotationScheduler implements OnApplicationBootstrap {
         this.logger.log("✅ All outlet schedules already exist for this week");
       }
     } catch (e) {
-      // Never let a startup DB error become an unhandled rejection that crashes the process
-      this.logger.error(`Startup schedule check failed: ${(e as Error).message}`);
+      // Never let a startup DB error become an unhandled rejection that crashes the process.
+      // Most common cause here: backing services (Postgres/Redis) not started — run
+      // `.\start-services.ps1` before `pnpm dev`. See formatError() above.
+      this.logger.error(`Startup schedule check failed: ${formatError(e)}`);
     }
   }
 
@@ -78,7 +96,7 @@ export class RotationScheduler implements OnApplicationBootstrap {
         await this.schedulingService.autoGenerateRotation(TENANT_ID, outlet.id, mondayStr, SYSTEM_USER_ID);
         ok++;
       } catch (e) {
-        this.logger.warn(`Rotation failed for ${outlet.name}: ${(e as Error).message}`);
+        this.logger.warn(`Rotation failed for ${outlet.name}: ${formatError(e)}`);
       }
     }
     this.logger.log(`✅ Weekly rotation complete: ${ok}/${outlets.rows.length} outlets scheduled for ${mondayStr}`);
