@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException } from "@nestjs/common";
+import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException } from "@nestjs/common";
 import { InjectQueue } from "@nestjs/bull";
 import { Queue } from "bull";
 import { Pool } from "pg";
@@ -97,7 +97,7 @@ export class SchedulingService {
         "SELECT * FROM shift_templates WHERE outlet_id = $1 AND is_active = true ORDER BY start_time LIMIT 3",
         [outletId],
       );
-      if (tmplResult.rows.length === 0) throw new Error("No shift templates found for this outlet");
+      if (tmplResult.rows.length === 0) throw new BadRequestException("No shift templates configured for this outlet — add shift templates before generating a roster.");
       const templates = tmplResult.rows; // [A, B, C]
 
       // 3. Get active staff for this outlet, sorted consistently
@@ -108,7 +108,7 @@ export class SchedulingService {
         [outletId, tenantId],
       );
       const staff = staffResult.rows;
-      if (staff.length === 0) throw new Error("No active staff found for this outlet");
+      if (staff.length === 0) throw new BadRequestException("No active staff assigned to this outlet — assign staff before generating a roster.");
 
       // 4. Split staff into 3 rotation groups
       const groupSize = Math.ceil(staff.length / 3);
@@ -194,7 +194,11 @@ export class SchedulingService {
 
   async triggerAutoGenerate(tenantId: string, outletId: string, weekStartDate: string, userId: string) {
     // Use direct rotation instead of queue
-    return this.autoGenerateRotation(tenantId, outletId, weekStartDate, userId);
+    const result = await this.autoGenerateRotation(tenantId, outletId, weekStartDate, userId);
+    // Return the freshly-committed roster alongside the summary so the client can
+    // render immediately — no fixed-delay refetch / timing race.
+    const roster = await this.getWeeklyRoster(tenantId, outletId, weekStartDate);
+    return { data: { generated: result.data, roster: roster.data } };
   }
 
   async publishSchedule(tenantId: string, scheduleId: string, userId: string) {
@@ -291,6 +295,65 @@ export class SchedulingService {
       [outletId],
     );
     return { data: result.rows };
+  }
+
+  /**
+   * Manually override a shift's start/end time (e.g. a chef adjusts Shift A).
+   * Updates the template (so future auto-rotations use the new time) and, when
+   * fromWeekStartDate is given, the already-generated shifts from that week
+   * onward so the change is visible immediately. Past weeks stay as a record.
+   */
+  async updateShiftTemplate(
+    tenantId: string,
+    templateId: string,
+    body: { startTime: string; endTime: string; breakMinutes?: number; fromWeekStartDate?: string },
+  ) {
+    const tmpl = await this.db.query(
+      `SELECT st.*, o.tenant_id FROM shift_templates st
+       JOIN outlets o ON o.id = st.outlet_id
+       WHERE st.id = $1`,
+      [templateId],
+    );
+    if (!tmpl.rows[0]) throw new NotFoundException("Shift template not found");
+    if (tmpl.rows[0].tenant_id !== tenantId) throw new ForbiddenException("This shift template belongs to another tenant");
+
+    const start = (body.startTime ?? "").slice(0, 5);
+    const end = (body.endTime ?? "").slice(0, 5);
+    if (!/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) {
+      throw new BadRequestException("startTime and endTime must be in HH:MM (24-hour) format");
+    }
+    // An end at/before the start wraps past midnight (e.g. 15:00 → 00:00).
+    const isOvernight = end <= start;
+
+    // Keep the "(HH:MM–HH:MM)" suffix that the UI shows in sync with the times.
+    const timeLabel = `(${start}–${end})`;
+    const oldName: string = tmpl.rows[0].name;
+    const newName = /\(.*\)/.test(oldName) ? oldName.replace(/\(.*\)/, timeLabel) : `${oldName} ${timeLabel}`;
+
+    const breakMinutes = Number.isFinite(body.breakMinutes as number)
+      ? body.breakMinutes
+      : tmpl.rows[0].break_minutes;
+
+    await this.db.query(
+      `UPDATE shift_templates SET start_time = $2, end_time = $3, is_overnight = $4, name = $5, break_minutes = $6
+       WHERE id = $1`,
+      [templateId, start, end, isOvernight, newName, breakMinutes],
+    );
+
+    let updatedShifts = 0;
+    if (body.fromWeekStartDate) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(body.fromWeekStartDate)) {
+        throw new BadRequestException("fromWeekStartDate must be YYYY-MM-DD");
+      }
+      const res = await this.db.query(
+        `UPDATE schedule_shifts SET start_time = $2, end_time = $3, is_overnight = $4
+         WHERE template_id = $1 AND date >= $5`,
+        [templateId, start, end, isOvernight, body.fromWeekStartDate],
+      );
+      updatedShifts = res.rowCount ?? 0;
+    }
+
+    return { data: { id: templateId, name: newName, startTime: start, endTime: end, isOvernight, breakMinutes, updatedShifts } };
   }
 
   async getCoverageSummary(outletId: string, weekStartDate: string) {

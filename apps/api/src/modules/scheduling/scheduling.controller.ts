@@ -85,6 +85,16 @@ export class SchedulingController {
     return this.schedulingService.getShiftTemplates(outletId);
   }
 
+  @Put("shift-templates/:id")
+  @ApiOperation({ summary: "Manually override a shift's start/end time" })
+  updateTemplate(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: { startTime: string; endTime: string; breakMinutes?: number; fromWeekStartDate?: string },
+  ) {
+    return this.schedulingService.updateShiftTemplate(user.tenantId, id, body);
+  }
+
   @Get("coverage-summary")
   @ApiOperation({ summary: "Weekly coverage % and gap analysis" })
   coverageSummary(

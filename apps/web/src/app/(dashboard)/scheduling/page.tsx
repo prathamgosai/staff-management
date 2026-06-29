@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import {
   ChevronLeft, ChevronRight, Clock, Users, Building2,
-  ChevronDown, Info,
+  ChevronDown, Info, RefreshCw,
 } from "lucide-react";
 import { format, addWeeks, subWeeks, startOfWeek } from "date-fns";
 
@@ -21,17 +21,21 @@ interface RosterShift {
   dates: Record<string, ShiftDateSlot>;
 }
 
-const SHIFT_BG: Record<string, string> = {
-  "Shift A (12:00–21:00)": "border-l-blue-500 bg-blue-50",
-  "Shift B (13:00–22:00)": "border-l-purple-500 bg-purple-50",
-  "Shift C (15:00–00:00)": "border-l-amber-500 bg-amber-50",
-};
-const SHIFT_BADGE: Record<string, string> = {
-  "Shift A (12:00–21:00)": "bg-blue-600",
-  "Shift B (13:00–22:00)": "bg-purple-600",
-  "Shift C (15:00–00:00)": "bg-amber-500",
-};
-const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+// Style by the shift LABEL prefix (Shift A/B/C) rather than the full name, so a
+// manually-edited time — which changes the "(HH:MM–HH:MM)" suffix — keeps its colour.
+function shiftStyle(name: string): { bg: string; badge: string } {
+  const n = (name ?? "").toLowerCase();
+  if (n.startsWith("shift a")) return { bg: "border-l-blue-500 bg-blue-50",    badge: "bg-blue-600" };
+  if (n.startsWith("shift b")) return { bg: "border-l-purple-500 bg-purple-50", badge: "bg-purple-600" };
+  if (n.startsWith("shift c")) return { bg: "border-l-amber-500 bg-amber-50",   badge: "bg-amber-500" };
+  return { bg: "border-l-gray-400 bg-gray-50", badge: "bg-gray-500" };
+}
+
+interface ShiftTemplate {
+  id: string; name: string;
+  start_time: string; end_time: string;
+  is_overnight: boolean; break_minutes: number | null;
+}
 
 const DEPARTMENTS = [
   { label: "All Staff",   value: "" },
@@ -63,8 +67,11 @@ export default function SchedulingPage() {
     queryFn: () => apiClient.get("/outlets").then(r => r.data),
   });
 
-  const { data: rosterRes, isLoading, refetch: refetchRoster } = useQuery<{ data: RosterShift[] }>({
-    queryKey: ["weekly-roster", selectedOutletId, weekStartDate],
+  const queryClient = useQueryClient();
+  const rosterKey = ["weekly-roster", selectedOutletId, weekStartDate];
+
+  const { data: rosterRes, isLoading } = useQuery<{ data: RosterShift[] }>({
+    queryKey: rosterKey,
     queryFn: () => apiClient.get("/scheduling/weekly-roster", {
       params: { outletId: selectedOutletId, weekStartDate },
     }).then(r => r.data),
@@ -73,14 +80,83 @@ export default function SchedulingPage() {
   });
 
   const generateMutation = useMutation({
-    mutationFn: () => apiClient.post("/scheduling/schedules/generate", {
-      outletId: selectedOutletId,
-      weekStartDate,
-    }),
-    onSuccess: () => {
-      // Small delay so the DB commit is visible before re-querying
-      setTimeout(() => refetchRoster(), 600);
+    mutationFn: async () => {
+      const res = await apiClient.post("/scheduling/schedules/generate", {
+        outletId: selectedOutletId,
+        weekStartDate,
+      });
+      // Newer API echoes the roster back as { data: { generated, roster } }.
+      const echoed = res.data?.data?.roster as RosterShift[] | undefined;
+      if (Array.isArray(echoed) && echoed.length > 0) return echoed;
+      // Older API build only returns a summary — fetch the freshly-committed
+      // roster so the page renders regardless of which API version is running.
+      return apiClient.get("/scheduling/weekly-roster", {
+        params: { outletId: selectedOutletId, weekStartDate },
+      }).then(r => (r.data?.data ?? []) as RosterShift[]);
     },
+    onSuccess: (roster) => {
+      // Push the generated roster straight into the cache — no timing race,
+      // no fixed-delay refetch that could miss the commit and hang.
+      queryClient.setQueryData(rosterKey, { data: roster });
+    },
+  });
+
+  // Reset stale generate state whenever the outlet or week changes, so an old
+  // error/spinner never leaks into a different roster view.
+  useEffect(() => {
+    generateMutation.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedOutletId, weekStartDate]);
+
+  const generateError = (generateMutation.error as { response?: { data?: { message?: string } } } | null)
+    ?.response?.data?.message;
+
+  /* ─── manual shift-time editor ─────────────────────────────────────────── */
+  const { data: templatesRes } = useQuery<{ data: ShiftTemplate[] }>({
+    queryKey: ["shift-templates", selectedOutletId],
+    queryFn: () => apiClient.get("/scheduling/shift-templates", {
+      params: { outletId: selectedOutletId },
+    }).then(r => r.data),
+    enabled: !!selectedOutletId,
+  });
+  const templates: ShiftTemplate[] = templatesRes?.data ?? [];
+
+  const [showShiftEditor, setShowShiftEditor] = useState(false);
+  const [shiftEdits, setShiftEdits] = useState<Record<string, { start: string; end: string }>>({});
+
+  // Seed the editable inputs from the fetched templates.
+  useEffect(() => {
+    const init: Record<string, { start: string; end: string }> = {};
+    for (const t of templatesRes?.data ?? []) {
+      init[t.id] = { start: (t.start_time ?? "").slice(0, 5), end: (t.end_time ?? "").slice(0, 5) };
+    }
+    setShiftEdits(init);
+  }, [templatesRes]);
+
+  const saveShiftTimes = useMutation({
+    mutationFn: async () => {
+      const changed = templates.filter(t => {
+        const e = shiftEdits[t.id];
+        return e && (e.start !== (t.start_time ?? "").slice(0, 5) || e.end !== (t.end_time ?? "").slice(0, 5));
+      });
+      await Promise.all(changed.map(t =>
+        apiClient.put(`/scheduling/shift-templates/${t.id}`, {
+          startTime: shiftEdits[t.id].start,
+          endTime: shiftEdits[t.id].end,
+          fromWeekStartDate: weekStartDate,
+        }),
+      ));
+      return changed.length;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["shift-templates", selectedOutletId] });
+      queryClient.invalidateQueries({ queryKey: rosterKey });
+    },
+  });
+
+  const shiftTimesDirty = templates.some(t => {
+    const e = shiftEdits[t.id];
+    return e && (e.start !== (t.start_time ?? "").slice(0, 5) || e.end !== (t.end_time ?? "").slice(0, 5));
   });
 
   const outlets = outletRes?.data ?? [];
@@ -157,7 +233,7 @@ export default function SchedulingPage() {
 
       {/* Day filter tabs */}
       {selectedOutletId && (
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
           <button onClick={() => setSelectedDay(null)}
             className={`text-xs font-semibold px-3 py-1.5 rounded-xl transition ${!selectedDay ? "bg-gray-900 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
             All Days
@@ -168,6 +244,81 @@ export default function SchedulingPage() {
               {format(d, "EEE d")}
             </button>
           ))}
+          {roster.length > 0 && (
+            <button onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}
+              className="ml-auto inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 transition">
+              <RefreshCw size={12} className={generateMutation.isPending ? "animate-spin" : ""} />
+              {generateMutation.isPending ? "Regenerating…" : "Regenerate"}
+            </button>
+          )}
+          {roster.length > 0 && generateMutation.isError && (
+            <span className="text-xs text-red-500 w-full">
+              {generateError ?? "Could not regenerate. Please try again."}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Manual shift-timing bar — override the auto-rotation start/end times */}
+      {selectedOutletId && templates.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+          <button onClick={() => setShowShiftEditor(v => !v)}
+            className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-gray-50 transition">
+            <Clock size={15} className="text-indigo-600 shrink-0" />
+            <span className="font-semibold text-sm text-gray-800">Manual shift timings</span>
+            <span className="text-xs text-gray-400 hidden sm:inline">
+              — adjust each shift’s start/end for {selectedOutletName}
+            </span>
+            <ChevronDown size={16} className={`ml-auto text-gray-400 transition-transform shrink-0 ${showShiftEditor ? "rotate-180" : ""}`} />
+          </button>
+
+          {showShiftEditor && (
+            <div className="border-t border-gray-100 px-4 py-4 space-y-3">
+              {templates.map(t => {
+                const style = shiftStyle(t.name);
+                const e = shiftEdits[t.id] ?? { start: "", end: "" };
+                const overnight = e.end !== "" && e.start !== "" && e.end <= e.start;
+                return (
+                  <div key={t.id} className="flex items-center gap-3 flex-wrap">
+                    <span className={`w-2.5 h-2.5 rounded-full ${style.badge} shrink-0`} />
+                    <span className="font-semibold text-sm text-gray-700 min-w-[72px]">
+                      {t.name.split("(")[0].trim()}
+                    </span>
+                    <label className="text-xs text-gray-500 flex items-center gap-1.5">
+                      Start
+                      <input type="time" value={e.start}
+                        onChange={ev => setShiftEdits(p => ({ ...p, [t.id]: { ...(p[t.id] ?? { start: "", end: "" }), start: ev.target.value } }))}
+                        className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </label>
+                    <label className="text-xs text-gray-500 flex items-center gap-1.5">
+                      End
+                      <input type="time" value={e.end}
+                        onChange={ev => setShiftEdits(p => ({ ...p, [t.id]: { ...(p[t.id] ?? { start: "", end: "" }), end: ev.target.value } }))}
+                        className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </label>
+                    {overnight && <span className="text-[11px] text-amber-600 font-semibold">overnight →</span>}
+                  </div>
+                );
+              })}
+
+              <div className="flex items-center gap-3 flex-wrap pt-1">
+                <button onClick={() => saveShiftTimes.mutate()}
+                  disabled={saveShiftTimes.isPending || !shiftTimesDirty}
+                  className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition">
+                  {saveShiftTimes.isPending ? "Saving…" : "Save shift times"}
+                </button>
+                <span className="text-xs text-gray-400">
+                  Applies from {format(currentWeek, "d MMM")} onward · future auto-rotations use these times
+                </span>
+                {saveShiftTimes.isSuccess && !saveShiftTimes.isPending && !shiftTimesDirty && (
+                  <span className="text-xs text-emerald-600 font-semibold">Saved ✓</span>
+                )}
+                {saveShiftTimes.isError && (
+                  <span className="text-xs text-red-500">Could not save — please try again.</span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -191,18 +342,20 @@ export default function SchedulingPage() {
             No shifts have been generated for {selectedOutletName} · {format(currentWeek, "d MMM")} – {format(weekDays[6], "d MMM")}
           </p>
           {generateMutation.isError && (
-            <p className="text-xs text-red-500 mb-3">Failed to generate. Please try again.</p>
+            <p className="text-xs text-red-500 mb-3">
+              {generateError ?? "Failed to generate. Please try again."}
+            </p>
           )}
-          {generateMutation.isPending || generateMutation.isSuccess ? (
+          {generateMutation.isPending ? (
             <div className="flex items-center justify-center gap-2 text-sm text-emerald-700 font-semibold">
               <span className="w-4 h-4 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-              {generateMutation.isPending ? "Generating shifts…" : "Generated! Loading roster…"}
+              Generating shifts for {selectedOutletName}…
             </div>
           ) : (
             <button
               onClick={() => generateMutation.mutate()}
               className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition">
-              Generate Schedule for This Week
+              {generateMutation.isError ? "Try Again" : "Generate Schedule for This Week"}
             </button>
           )}
         </div>
@@ -210,8 +363,7 @@ export default function SchedulingPage() {
         <div className="space-y-4">
           {roster.map(shift => {
             const isExpanded = expandedShift === null || expandedShift === shift.shiftName;
-            const shiftBg = SHIFT_BG[shift.shiftName] ?? "border-l-gray-400 bg-gray-50";
-            const badge   = SHIFT_BADGE[shift.shiftName] ?? "bg-gray-500";
+            const { bg: shiftBg, badge } = shiftStyle(shift.shiftName);
             // Total unique staff across all days (they repeat, so pick from first day)
             const firstDayKey = Object.keys(shift.dates)[0];
             const allStaff    = firstDayKey ? shift.dates[firstDayKey].staff : [];
