@@ -34,7 +34,33 @@ export class RotationScheduler implements OnApplicationBootstrap {
 
   /** Run on app start — generate current week's schedule for any outlet that doesn't have one yet */
   async onApplicationBootstrap() {
-    setTimeout(() => this.generateMissingSchedules(), 5000);
+    // Defer so the rest of the app finishes booting. The API can start before
+    // Postgres is ready (e.g. `pnpm dev` before `.\start-services.ps1`), so this
+    // retries until the DB is reachable instead of giving up after one attempt.
+    setTimeout(() => this.generateMissingSchedulesWithRetry(), 5000);
+  }
+
+  /** Keep retrying the startup backfill until Postgres is reachable. */
+  private async generateMissingSchedulesWithRetry(attempt = 1): Promise<void> {
+    const MAX_ATTEMPTS = 12;
+    const RETRY_MS = 5000;
+    try {
+      await this.db.query("SELECT 1");
+    } catch (e) {
+      if (attempt < MAX_ATTEMPTS) {
+        this.logger.warn(
+          `DB not reachable yet (attempt ${attempt}/${MAX_ATTEMPTS}): ${formatError(e)} — retrying in ${RETRY_MS / 1000}s`,
+        );
+        setTimeout(() => this.generateMissingSchedulesWithRetry(attempt + 1), RETRY_MS);
+        return;
+      }
+      this.logger.error(
+        `Startup schedule check aborted — DB unreachable after ${MAX_ATTEMPTS} attempts: ${formatError(e)}. ` +
+          "Start backing services (.\\start-services.ps1) and restart the API.",
+      );
+      return;
+    }
+    await this.generateMissingSchedules();
   }
 
   /** Every Monday at 00:05 AM — auto-generate next week's rotation for all outlets */
@@ -107,6 +133,13 @@ export class RotationScheduler implements OnApplicationBootstrap {
     const day = d.getDay(); // 0=Sun, 1=Mon
     const diff = day === 0 ? -6 : 1 - day;
     d.setDate(d.getDate() + diff);
-    return d.toISOString().split("T")[0];
+    // Format from LOCAL components. toISOString() would convert to UTC and, for
+    // any run between 00:00–05:30 IST (the weekly cron fires at 00:05), shift the
+    // result back to Sunday — a date the web app (which uses the local Monday)
+    // never queries. Keep this aligned with the client's startOfWeek(Mon).
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
   }
 }
