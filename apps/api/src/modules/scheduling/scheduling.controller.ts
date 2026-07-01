@@ -5,12 +5,16 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from "@nestjs/swagger";
 import { SchedulingService } from "./scheduling.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { PermissionsGuard } from "../../common/guards/permissions.guard";
+import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "@workforceiq/shared";
 
 @ApiTags("Scheduling")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+// PermissionsGuard only enforces routes that carry @RequirePermission(); the
+// unannotated routes here stay JwtAuthGuard-only, exactly as before.
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller("scheduling")
 export class SchedulingController {
   constructor(private readonly schedulingService: SchedulingService) {}
@@ -93,6 +97,16 @@ export class SchedulingController {
     @Body() body: { startTime: string; endTime: string; breakMinutes?: number; fromWeekStartDate?: string },
   ) {
     return this.schedulingService.updateShiftTemplate(user.tenantId, id, body);
+  }
+
+  @Post("assignments/move")
+  @RequirePermission("schedule:write")
+  @ApiOperation({ summary: "Move one staff member onto a specific shift (this week onward)" })
+  moveStaff(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { outletId: string; staffId: string; templateId: string; weekStartDate: string },
+  ) {
+    return this.schedulingService.moveStaffToShift(user.tenantId, user.id, body);
   }
 
   @Get("coverage-summary")

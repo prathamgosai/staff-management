@@ -75,9 +75,9 @@ export default function RegisterPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 px-4">
         <div className="w-full max-w-md">
-          <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
+          <div className="bg-card rounded-3xl shadow-2xl overflow-hidden">
             <div className="bg-gradient-to-r from-emerald-500 to-teal-500 px-8 py-8 text-center text-white">
-              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
+              <div className="w-16 h-16 bg-card/20 rounded-full flex items-center justify-center mx-auto mb-3">
                 <CheckCircle size={34} className="text-white" />
               </div>
               <h1 className="text-2xl font-bold">Request Submitted!</h1>
@@ -86,16 +86,16 @@ export default function RegisterPage() {
 
             <div className="px-8 py-8 space-y-5">
               {/* Ticket */}
-              <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-5 text-center">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Your Ticket Number</p>
+              <div className="bg-muted border-2 border-dashed border-border rounded-2xl p-5 text-center">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">Your Ticket Number</p>
                 <div className="flex items-center justify-center gap-3">
-                  <span className="text-3xl font-black font-mono text-gray-900 tracking-wider">{ticket}</span>
+                  <span className="text-3xl font-black font-mono text-foreground tracking-wider">{ticket}</span>
                   <button onClick={copyTicket}
-                    className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 transition">
+                    className="p-2 rounded-xl bg-muted hover:bg-border text-muted-foreground transition">
                     {copied ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
                   </button>
                 </div>
-                <p className="text-xs text-gray-400 mt-2">Save this number — your Head Chef will need it</p>
+                <p className="text-xs text-muted-foreground mt-2">Save this number — your Head Chef will need it</p>
               </div>
 
               {/* Steps */}
@@ -106,28 +106,28 @@ export default function RegisterPage() {
                   { n: "3", title: "You're in!", desc: `Sign in with ${email.trim().toLowerCase()} and your password` },
                 ].map(step => (
                   <div key={step.n} className="flex gap-3 items-start">
-                    <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
                       {step.n}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-gray-800 leading-tight">{step.title}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">{step.desc}</p>
+                      <p className="text-sm font-semibold text-foreground leading-tight">{step.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{step.desc}</p>
                     </div>
                   </div>
                 ))}
               </div>
 
               {/* Credential reminder */}
-              <div className="bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3.5">
-                <p className="text-xs font-semibold text-blue-700 mb-2">Your login credentials (once approved)</p>
+              <div className="bg-blue-50 dark:bg-blue-500/15 border border-blue-100 dark:border-blue-500/30 rounded-2xl px-4 py-3.5">
+                <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-2">Your login credentials (once approved)</p>
                 <div className="space-y-1 font-mono text-xs">
                   <div className="flex gap-2">
-                    <span className="text-gray-400 w-16 shrink-0">Email:</span>
-                    <span className="text-gray-800 font-semibold break-all">{email.trim().toLowerCase()}</span>
+                    <span className="text-muted-foreground w-16 shrink-0">Email:</span>
+                    <span className="text-foreground font-semibold break-all">{email.trim().toLowerCase()}</span>
                   </div>
                   <div className="flex gap-2">
-                    <span className="text-gray-400 w-16 shrink-0">Password:</span>
-                    <span className="text-gray-800">the one you just set</span>
+                    <span className="text-muted-foreground w-16 shrink-0">Password:</span>
+                    <span className="text-foreground">the one you just set</span>
                   </div>
                 </div>
               </div>
@@ -147,10 +147,10 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 px-4">
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
+        <div className="bg-card rounded-3xl shadow-2xl overflow-hidden">
           {/* Header */}
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-8 text-white text-center">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-white/20 mb-3">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-card/20 mb-3">
               <span className="text-2xl font-black">W</span>
             </div>
             <h1 className="text-2xl font-bold">Create Your Account</h1>
@@ -158,42 +158,42 @@ export default function RegisterPage() {
           </div>
 
           <div className="px-8 py-7">
-            <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+            <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
               Fill in your details below. After submitting, a ticket will be generated and your
-              <strong className="text-gray-700"> Head Chef</strong> will approve your access.
+              <strong className="text-foreground"> Head Chef</strong> will approve your access.
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Full Name */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Full Name *</label>
+                <label className="block text-sm font-semibold text-foreground mb-1.5">Full Name *</label>
                 <input
                   type="text"
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="e.g. Rahul Jatin Shah"
                   autoComplete="name"
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-sm"
+                  className="w-full px-4 py-2.5 border border-border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-sm"
                 />
               </div>
 
               {/* Email */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Email Address *</label>
+                <label className="block text-sm font-semibold text-foreground mb-1.5">Email Address *</label>
                 <input
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="your@email.com"
                   autoComplete="email"
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-sm"
+                  className="w-full px-4 py-2.5 border border-border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-sm"
                 />
-                <p className="text-xs text-gray-400 mt-1">This will be your login ID</p>
+                <p className="text-xs text-muted-foreground mt-1">This will be your login ID</p>
               </div>
 
               {/* Password */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Password *</label>
+                <label className="block text-sm font-semibold text-foreground mb-1.5">Password *</label>
                 <div className="relative">
                   <input
                     type={showPwd ? "text" : "password"}
@@ -201,10 +201,10 @@ export default function RegisterPage() {
                     onChange={e => setPassword(e.target.value)}
                     placeholder="Min 8 chars, 1 uppercase, 1 number"
                     autoComplete="new-password"
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-sm pr-10"
+                    className="w-full px-4 py-2.5 border border-border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-sm pr-10"
                   />
                   <button type="button" onClick={() => setShowPwd(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground">
                     {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
@@ -213,7 +213,7 @@ export default function RegisterPage() {
                   <div className="mt-2 space-y-1">
                     <div className="flex gap-1">
                       {[1, 2, 3, 4].map(i => (
-                        <div key={i} className={`h-1 flex-1 rounded-full transition-all ${i <= passwordStrength ? strengthColor : "bg-gray-100"}`} />
+                        <div key={i} className={`h-1 flex-1 rounded-full transition-all ${i <= passwordStrength ? strengthColor : "bg-muted"}`} />
                       ))}
                     </div>
                     <p className={`text-xs font-medium ${["", "text-red-500", "text-amber-500", "text-blue-500", "text-emerald-600"][passwordStrength]}`}>
@@ -225,7 +225,7 @@ export default function RegisterPage() {
 
               {/* Confirm Password */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Confirm Password *</label>
+                <label className="block text-sm font-semibold text-foreground mb-1.5">Confirm Password *</label>
                 <div className="relative">
                   <input
                     type={showCfm ? "text" : "password"}
@@ -234,11 +234,11 @@ export default function RegisterPage() {
                     placeholder="Re-enter your password"
                     autoComplete="new-password"
                     className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-sm pr-10 ${
-                      confirm && confirm !== password ? "border-red-300 bg-red-50" : "border-gray-200"
+                      confirm && confirm !== password ? "border-red-300 dark:border-red-500/30 bg-red-50 dark:bg-red-500/15" : "border-border"
                     }`}
                   />
                   <button type="button" onClick={() => setShowCfm(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground">
                     {showCfm ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
@@ -248,7 +248,7 @@ export default function RegisterPage() {
               </div>
 
               {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 text-sm text-red-700">
+                <div className="bg-red-50 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30 rounded-xl p-3.5 text-sm text-red-700 dark:text-red-300">
                   {error}
                 </div>
               )}
@@ -261,8 +261,8 @@ export default function RegisterPage() {
               </button>
             </form>
 
-            <div className="mt-5 pt-5 border-t border-gray-100 text-center">
-              <p className="text-sm text-gray-500">
+            <div className="mt-5 pt-5 border-t border-border text-center">
+              <p className="text-sm text-muted-foreground">
                 Already have an account?{" "}
                 <Link href="/login" className="text-blue-600 hover:text-blue-700 font-semibold">Sign in</Link>
               </p>

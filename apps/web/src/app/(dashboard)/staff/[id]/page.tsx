@@ -32,18 +32,18 @@ interface StaffDetail {
 }
 
 const STATUS_CLS: Record<string, string> = {
-  active:     "bg-emerald-100 text-emerald-700",
-  on_leave:   "bg-amber-100 text-amber-700",
-  probation:  "bg-blue-100 text-blue-700",
-  terminated: "bg-red-100 text-red-700",
-  inactive:   "bg-gray-100 text-gray-600",
+  active:     "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
+  on_leave:   "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300",
+  probation:  "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300",
+  terminated: "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300",
+  inactive:   "bg-muted text-muted-foreground",
 };
 const TYPE_CLS: Record<string, string> = {
-  full_time: "bg-violet-100 text-violet-700",
-  part_time: "bg-orange-100 text-orange-700",
-  contract:  "bg-cyan-100 text-cyan-700",
-  temporary: "bg-yellow-100 text-yellow-700",
-  intern:    "bg-pink-100 text-pink-700",
+  full_time: "bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300",
+  part_time: "bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-300",
+  contract:  "bg-cyan-100 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300",
+  temporary: "bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-300",
+  intern:    "bg-pink-100 dark:bg-pink-500/20 text-pink-700 dark:text-pink-300",
 };
 const AVATAR_COLORS = [
   "bg-blue-500","bg-violet-500","bg-emerald-500","bg-amber-500",
@@ -60,13 +60,13 @@ function initials(name: string) {
 /* ─── Info row ────────────────────────────────────────────────────────── */
 function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-3 py-3 border-b border-gray-100 last:border-0">
-      <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center shrink-0 mt-0.5">
-        <Icon size={14} className="text-gray-500" />
+    <div className="flex items-start gap-3 py-3 border-b border-border last:border-0">
+      <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0 mt-0.5">
+        <Icon size={14} className="text-muted-foreground" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-gray-400 mb-0.5">{label}</p>
-        <div className="text-sm font-semibold text-gray-900">{value || <span className="text-gray-300 font-normal">—</span>}</div>
+        <p className="text-xs font-medium text-muted-foreground mb-0.5">{label}</p>
+        <div className="text-sm font-semibold text-foreground">{value || <span className="text-muted-foreground/60 font-normal">—</span>}</div>
       </div>
     </div>
   );
@@ -88,18 +88,18 @@ function EditStatusModal({ staffId, current, onClose }: { staffId: string; curre
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-80 mx-4 p-6">
+      <div className="relative bg-card rounded-2xl shadow-2xl w-80 mx-4 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-gray-900">Update Status</h3>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X size={16} /></button>
+          <h3 className="font-bold text-foreground">Update Status</h3>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted"><X size={16} /></button>
         </div>
         <div className="space-y-2 mb-5">
           {statuses.map(s => (
             <button key={s} onClick={() => setStatus(s)}
               className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium border-2 transition ${
-                status === s ? "border-blue-500 bg-blue-50 text-blue-700" : "border-transparent bg-gray-50 text-gray-700 hover:bg-gray-100"
+                status === s ? "border-blue-500 bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300" : "border-transparent bg-muted text-foreground hover:bg-muted"
               }`}>
-              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_CLS[s] ?? "bg-gray-100 text-gray-600"}`}>
+              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_CLS[s] ?? "bg-muted text-muted-foreground"}`}>
                 {s.replace(/_/g, " ")}
               </span>
             </button>
@@ -160,33 +160,33 @@ function EditContactModal({ staffId, current, allowEmployeeId, onClose }: { staf
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-96 max-w-[calc(100vw-2rem)] mx-4 p-6">
+      <div className="relative bg-card rounded-2xl shadow-2xl w-96 max-w-[calc(100vw-2rem)] mx-4 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-gray-900">Edit Details</h3>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X size={16} /></button>
+          <h3 className="font-bold text-foreground">Edit Details</h3>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted"><X size={16} /></button>
         </div>
         <div className="space-y-4">
           {allowEmployeeId && (
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Employee ID</label>
+              <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Employee ID</label>
               <input value={employeeId} onChange={e => setEmployeeId(e.target.value)} type="text" maxLength={30}
                 placeholder="e.g. CU-028"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           )}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Phone</label>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Phone</label>
             <input value={phone} onChange={e => setPhone(e.target.value)} type="tel"
               placeholder="e.g. +91 98765 43210"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Email</label>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Email</label>
             <input value={email} onChange={e => setEmail(e.target.value)} type="email"
               placeholder="name@example.com (optional)"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          {err && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{err}</p>}
+          {err && <p className="text-xs text-red-600 bg-red-50 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30 rounded-lg px-3 py-2">{err}</p>}
         </div>
         <button onClick={save} disabled={mutation.isPending}
           className="mt-5 w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition flex items-center justify-center gap-2">
@@ -206,22 +206,22 @@ function LeaveHistory({ staffId }: { staffId: string }) {
     staleTime: 30_000,
   });
   const leaves = data?.data ?? [];
-  if (leaves.length === 0) return <p className="text-sm text-gray-400 py-4 text-center">No leave records found</p>;
+  if (leaves.length === 0) return <p className="text-sm text-muted-foreground py-4 text-center">No leave records found</p>;
   return (
     <div className="space-y-2">
       {leaves.map(l => (
-        <div key={l.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
+        <div key={l.id} className="flex items-center gap-3 bg-muted rounded-xl px-4 py-3">
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 capitalize">{l.leaveType?.replace(/_/g, " ")}</p>
-            <p className="text-xs text-gray-400 mt-0.5">
+            <p className="text-sm font-semibold text-foreground capitalize">{l.leaveType?.replace(/_/g, " ")}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
               {l.startDate ? format(new Date(l.startDate), "d MMM yyyy") : "—"} →{" "}
               {l.endDate   ? format(new Date(l.endDate),   "d MMM yyyy") : "—"}
             </p>
           </div>
           <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-            l.status === "approved"  ? "bg-emerald-100 text-emerald-700" :
-            l.status === "rejected"  ? "bg-red-100 text-red-700" :
-            "bg-amber-100 text-amber-700"
+            l.status === "approved"  ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300" :
+            l.status === "rejected"  ? "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300" :
+            "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300"
           }`}>
             {l.status}
           </span>
@@ -301,7 +301,7 @@ function AvatarUploader({ staffId, name, avatarUrl, canEdit }: { staffId: string
       </button>
       {avatarUrl && !busy && (
         <button type="button" onClick={() => mutation.mutate("")}
-          className="mt-1.5 w-full text-[11px] text-gray-400 hover:text-red-500 transition">
+          className="mt-1.5 w-full text-[11px] text-muted-foreground hover:text-red-500 transition">
           Remove
         </button>
       )}
@@ -332,13 +332,13 @@ export default function StaffDetailPage() {
   if (isLoading) {
     return (
       <div className="max-w-3xl mx-auto space-y-6">
-        <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
-        <div className="bg-white rounded-2xl border border-gray-200 p-8 animate-pulse space-y-4">
+        <div className="h-8 w-32 bg-border rounded animate-pulse" />
+        <div className="bg-card rounded-2xl border border-border p-8 animate-pulse space-y-4">
           <div className="flex items-center gap-5">
-            <div className="w-20 h-20 rounded-full bg-gray-200 shrink-0" />
+            <div className="w-20 h-20 rounded-full bg-border shrink-0" />
             <div className="space-y-3 flex-1">
-              <div className="h-6 bg-gray-200 rounded w-1/2" />
-              <div className="h-4 bg-gray-100 rounded w-1/3" />
+              <div className="h-6 bg-border rounded w-1/2" />
+              <div className="h-4 bg-muted rounded w-1/3" />
             </div>
           </div>
         </div>
@@ -350,7 +350,7 @@ export default function StaffDetailPage() {
     return (
       <div className="max-w-3xl mx-auto text-center py-24">
         <p className="text-2xl mb-2">⚠️</p>
-        <p className="font-semibold text-gray-700">Staff member not found</p>
+        <p className="font-semibold text-foreground">Staff member not found</p>
         <Link href="/staff" className="mt-4 inline-flex items-center gap-2 text-blue-600 text-sm font-medium">
           <ArrowLeft size={14} /> Back to Staff
         </Link>
@@ -373,12 +373,12 @@ export default function StaffDetailPage() {
 
       <div className="max-w-3xl mx-auto space-y-5">
         {/* Back */}
-        <Link href="/staff" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 font-medium transition">
+        <Link href="/staff" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground font-medium transition">
           <ArrowLeft size={15} /> Back to Staff
         </Link>
 
         {/* Profile header card */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
           <div className="flex items-start gap-5">
             {/* Avatar */}
             <AvatarUploader staffId={id} name={staff.name} avatarUrl={staff.avatarUrl} canEdit={canEditProfile} />
@@ -386,13 +386,13 @@ export default function StaffDetailPage() {
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">{staff.name}</h1>
-                  <p className="text-sm text-gray-500 mt-0.5">{staff.positionName} · {staff.departmentName}</p>
+                  <h1 className="text-2xl font-bold text-foreground">{staff.name}</h1>
+                  <p className="text-sm text-muted-foreground mt-0.5">{staff.positionName} · {staff.departmentName}</p>
                 </div>
                 {isAdmin && (
                   <button onClick={() => setShowEditStatus(true)}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 hover:bg-gray-50 transition">
-                    <Pencil size={11} className="text-gray-400" />
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-border hover:bg-muted transition">
+                    <Pencil size={11} className="text-muted-foreground" />
                     Edit Status
                   </button>
                 )}
@@ -400,13 +400,13 @@ export default function StaffDetailPage() {
 
               {/* Badges */}
               <div className="flex flex-wrap gap-2 mt-3">
-                <span className={`text-xs font-semibold px-3 py-1 rounded-full ${STATUS_CLS[staff.employmentStatus] ?? "bg-gray-100 text-gray-600"}`}>
+                <span className={`text-xs font-semibold px-3 py-1 rounded-full ${STATUS_CLS[staff.employmentStatus] ?? "bg-muted text-muted-foreground"}`}>
                   {staff.employmentStatus.replace(/_/g, " ")}
                 </span>
-                <span className={`text-xs font-semibold px-3 py-1 rounded-full ${TYPE_CLS[staff.employmentType] ?? "bg-gray-100 text-gray-600"}`}>
+                <span className={`text-xs font-semibold px-3 py-1 rounded-full ${TYPE_CLS[staff.employmentType] ?? "bg-muted text-muted-foreground"}`}>
                   {staff.employmentType.replace(/_/g, " ")}
                 </span>
-                <span className="text-xs font-mono font-semibold px-3 py-1 rounded-full bg-gray-100 text-gray-600">
+                <span className="text-xs font-mono font-semibold px-3 py-1 rounded-full bg-muted text-muted-foreground">
                   {staff.employeeId}
                 </span>
               </div>
@@ -417,9 +417,9 @@ export default function StaffDetailPage() {
         {/* Two-column grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Contact & Identity */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+          <div className="bg-card rounded-2xl border border-border shadow-sm p-5">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Contact</p>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Contact</p>
               {canEditProfile && (
                 <button onClick={() => setShowEditContact(true)}
                   className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition">
@@ -433,8 +433,8 @@ export default function StaffDetailPage() {
           </div>
 
           {/* Work Info */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Work Info</p>
+          <div className="bg-card rounded-2xl border border-border shadow-sm p-5">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Work Info</p>
             <InfoRow icon={Building2}  label="Outlet"      value={`${staff.outletName} (${staff.outletCode})`} />
             <InfoRow icon={Briefcase}  label="Department"  value={staff.departmentName} />
             <InfoRow icon={User}       label="Position"    value={staff.positionName} />
@@ -442,8 +442,8 @@ export default function StaffDetailPage() {
           </div>
 
           {/* Schedule */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Schedule</p>
+          <div className="bg-card rounded-2xl border border-border shadow-sm p-5">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Schedule</p>
             <InfoRow icon={Clock}   label="Weekly Hours"      value={staff.weeklyHours ? `${parseFloat(staff.weeklyHours)} hrs/week` : null} />
             <InfoRow icon={Shield}  label="Overtime Eligible" value={staff.overtimeEligible ? "Yes" : "No"} />
             {staff.baseSalary  && <InfoRow icon={Briefcase} label="Base Salary"  value={`₹${staff.baseSalary.toLocaleString()}`} />}
@@ -451,8 +451,8 @@ export default function StaffDetailPage() {
           </div>
 
           {/* Leave History */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Leave History</p>
+          <div className="bg-card rounded-2xl border border-border shadow-sm p-5">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Leave History</p>
             <LeaveHistory staffId={id} />
           </div>
         </div>

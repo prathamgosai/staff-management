@@ -107,11 +107,11 @@ export default function AccountTypesPage() {
   if (!canManage) {
     return (
       <div className="max-w-md mx-auto text-center py-24">
-        <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
+        <div className="w-14 h-14 bg-red-50 dark:bg-red-500/15 rounded-full flex items-center justify-center mx-auto mb-3">
           <ShieldCheck size={26} strokeWidth={1.5} className="text-red-400" />
         </div>
-        <p className="font-bold text-gray-700">Restricted area</p>
-        <p className="text-sm text-gray-400 mt-1">You need the “Manage account types” permission to view this page.</p>
+        <p className="font-bold text-foreground">Restricted area</p>
+        <p className="text-sm text-muted-foreground mt-1">You need the “Manage account types” permission to view this page.</p>
       </div>
     );
   }
@@ -120,17 +120,17 @@ export default function AccountTypesPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+        <div className="w-10 h-10 bg-blue-100 dark:bg-blue-500/20 rounded-xl flex items-center justify-center">
           <UserCog size={20} className="text-blue-600" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Account Types &amp; Permissions</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Choose what each type of account is allowed to do.</p>
+          <h1 className="text-2xl font-bold text-foreground">Account Types &amp; Permissions</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Choose what each type of account is allowed to do.</p>
         </div>
       </div>
 
       {/* Info */}
-      <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-800 flex gap-2 items-start">
+      <div className="bg-blue-50 dark:bg-blue-500/15 border border-blue-100 dark:border-blue-500/30 rounded-xl px-4 py-3 text-sm text-blue-800 dark:text-blue-300 flex gap-2 items-start">
         <AlertCircle size={16} className="shrink-0 mt-0.5" />
         <span>
           Turn permissions on or off for an account type, then <b>Save changes</b>. Updates apply the next time
@@ -139,21 +139,21 @@ export default function AccountTypesPage() {
       </div>
 
       {isLoading ? (
-        <div className="bg-white rounded-2xl border border-gray-200 p-16 text-center">
-          <Loader2 size={24} className="animate-spin mx-auto text-gray-400" />
+        <div className="bg-card rounded-2xl border border-border p-16 text-center">
+          <Loader2 size={24} className="animate-spin mx-auto text-muted-foreground" />
         </div>
       ) : isError ? (
-        <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center text-sm text-red-500">
+        <div className="bg-card rounded-2xl border border-border p-12 text-center text-sm text-red-500">
           Could not load account types. Please refresh and try again.
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-5 items-start">
           {/* ─── Account type list ─────────────────────────────────────── */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 text-xs font-bold text-gray-500 uppercase tracking-wide">
+          <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-border text-xs font-bold text-muted-foreground uppercase tracking-wide">
               Account Types
             </div>
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-border">
               {roles.map((r) => {
                 const isSel = r.role === selected;
                 const count = r.editable ? ((drafts[r.role] ?? r.permissions).length) : null;
@@ -161,23 +161,23 @@ export default function AccountTypesPage() {
                   <button
                     key={r.role}
                     onClick={() => setSelected(r.role)}
-                    className={`w-full text-left px-4 py-3 flex items-center gap-3 transition ${isSel ? "bg-blue-50" : "hover:bg-gray-50"}`}
+                    className={`w-full text-left px-4 py-3 flex items-center gap-3 transition ${isSel ? "bg-blue-50 dark:bg-blue-500/15" : "hover:bg-muted"}`}
                   >
-                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${ROLE_ACCENT[r.role] ?? "bg-gray-300"}`} />
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${ROLE_ACCENT[r.role] ?? "bg-border"}`} />
                     <span className="flex-1 min-w-0">
                       <span className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-900 text-sm truncate">{r.label}</span>
+                        <span className="font-semibold text-foreground text-sm truncate">{r.label}</span>
                         {drafts[r.role] && !sameSet(drafts[r.role], r.permissions) && (
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="Unsaved changes" />
                         )}
                       </span>
-                      <span className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
+                      <span className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                         <Users size={11} /> {r.userCount} {r.userCount === 1 ? "user" : "users"}
-                        <span className="text-gray-300">·</span>
+                        <span className="text-muted-foreground/60">·</span>
                         {r.editable ? `${count} permissions` : "Full access"}
                       </span>
                     </span>
-                    {!r.editable && <Lock size={13} className="text-gray-300 shrink-0" />}
+                    {!r.editable && <Lock size={13} className="text-muted-foreground/60 shrink-0" />}
                   </button>
                 );
               })}
@@ -188,47 +188,47 @@ export default function AccountTypesPage() {
           {current && (
             <div className="space-y-5">
             {/* Users with this account type */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
-                <Users size={15} className="text-gray-500" />
-                <span className="font-semibold text-sm text-gray-800">Users with this account type</span>
-                <span className="ml-auto text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{current.userCount}</span>
+            <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-border flex items-center gap-2">
+                <Users size={15} className="text-muted-foreground" />
+                <span className="font-semibold text-sm text-foreground">Users with this account type</span>
+                <span className="ml-auto text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{current.userCount}</span>
               </div>
               <div className="max-h-64 overflow-y-auto divide-y divide-gray-50">
                 {usersLoading ? (
-                  <div className="py-8 text-center"><Loader2 size={18} className="animate-spin mx-auto text-gray-400" /></div>
+                  <div className="py-8 text-center"><Loader2 size={18} className="animate-spin mx-auto text-muted-foreground" /></div>
                 ) : users.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-gray-400">No users have this account type yet.</p>
+                  <p className="py-8 text-center text-sm text-muted-foreground">No users have this account type yet.</p>
                 ) : users.map((u) => (
                   <div key={u.id} className="flex items-center gap-3 px-5 py-2.5">
-                    <div className={`w-8 h-8 rounded-full ${ROLE_ACCENT[current.role] ?? "bg-gray-300"} text-white text-xs font-bold flex items-center justify-center shrink-0`}>
+                    <div className={`w-8 h-8 rounded-full ${ROLE_ACCENT[current.role] ?? "bg-border"} text-white text-xs font-bold flex items-center justify-center shrink-0`}>
                       {(u.name || u.email).split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{u.name || u.email}</p>
-                      <p className="text-xs text-gray-400 truncate">{u.email}{u.employee_id ? ` · #${u.employee_id}` : ""}</p>
+                      <p className="text-sm font-medium text-foreground truncate">{u.name || u.email}</p>
+                      <p className="text-xs text-muted-foreground truncate">{u.email}{u.employee_id ? ` · #${u.employee_id}` : ""}</p>
                     </div>
-                    {!u.is_active && <span className="ml-auto text-[11px] text-gray-400 shrink-0">inactive</span>}
+                    {!u.is_active && <span className="ml-auto text-[11px] text-muted-foreground shrink-0">inactive</span>}
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Permission editor */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
+            <div className="bg-card rounded-2xl border border-border shadow-sm">
               {/* Editor header */}
-              <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-4 flex-wrap">
+              <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-4 flex-wrap">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className={`w-3 h-3 rounded-full ${ROLE_ACCENT[current.role] ?? "bg-gray-300"}`} />
-                    <h2 className="font-bold text-gray-900">{current.label}</h2>
+                    <span className={`w-3 h-3 rounded-full ${ROLE_ACCENT[current.role] ?? "bg-border"}`} />
+                    <h2 className="font-bold text-foreground">{current.label}</h2>
                     {!current.editable && (
-                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
                         <Lock size={11} /> Locked
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-gray-500 mt-1 max-w-xl">{current.description}</p>
+                  <p className="text-sm text-muted-foreground mt-1 max-w-xl">{current.description}</p>
                 </div>
                 {current.editable && (
                   <div className="flex items-center gap-2">
@@ -240,7 +240,7 @@ export default function AccountTypesPage() {
                     <button
                       onClick={resetDraft}
                       disabled={!dirty || save.isPending}
-                      className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-800 border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition"
+                      className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground border border-border hover:bg-muted px-3 py-2 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition"
                     >
                       <RotateCcw size={14} /> Reset
                     </button>
@@ -257,7 +257,7 @@ export default function AccountTypesPage() {
               </div>
 
               {save.isError && (
-                <div className="mx-5 mt-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <div className="mx-5 mt-4 text-xs text-red-600 bg-red-50 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30 rounded-lg px-3 py-2">
                   Could not save. Please try again.
                 </div>
               )}
@@ -269,9 +269,9 @@ export default function AccountTypesPage() {
                   const activeCount = keys.filter((k) => draft.includes(k)).length;
                   const allOn = activeCount === keys.length;
                   return (
-                    <div key={mod.key} className="border border-gray-200 rounded-xl overflow-hidden">
-                      <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-                        <span className="font-semibold text-sm text-gray-700">{mod.label}</span>
+                    <div key={mod.key} className="border border-border rounded-xl overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-muted border-b border-border">
+                        <span className="font-semibold text-sm text-foreground">{mod.label}</span>
                         {current.editable ? (
                           <button
                             onClick={() => setModule(mod, !allOn)}
@@ -280,7 +280,7 @@ export default function AccountTypesPage() {
                             {allOn ? "Clear all" : "Select all"}
                           </button>
                         ) : (
-                          <span className="text-xs text-gray-400">{activeCount}/{keys.length}</span>
+                          <span className="text-xs text-muted-foreground">{activeCount}/{keys.length}</span>
                         )}
                       </div>
                       <div className="divide-y divide-gray-50">
@@ -289,18 +289,18 @@ export default function AccountTypesPage() {
                           return (
                             <label
                               key={p.key}
-                              className={`flex items-start gap-3 px-4 py-2.5 ${current.editable ? "cursor-pointer hover:bg-gray-50" : "opacity-70"} transition`}
+                              className={`flex items-start gap-3 px-4 py-2.5 ${current.editable ? "cursor-pointer hover:bg-muted" : "opacity-70"} transition`}
                             >
                               <input
                                 type="checkbox"
                                 checked={on}
                                 disabled={!current.editable || save.isPending}
                                 onChange={() => toggle(p.key)}
-                                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-60"
+                                className="mt-0.5 h-4 w-4 rounded border-border text-blue-600 focus:ring-blue-500 disabled:opacity-60"
                               />
                               <span className="min-w-0">
-                                <span className="block text-sm font-medium text-gray-800">{p.label}</span>
-                                {p.description && <span className="block text-xs text-gray-400">{p.description}</span>}
+                                <span className="block text-sm font-medium text-foreground">{p.label}</span>
+                                {p.description && <span className="block text-xs text-muted-foreground">{p.description}</span>}
                               </span>
                             </label>
                           );

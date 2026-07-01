@@ -31,17 +31,17 @@ function f(row: StaffRow, s: keyof StaffRow, c: keyof StaffRow): string {
 }
 
 const STATUS_CLS: Record<string, string> = {
-  active: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-  on_leave: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
-  probation: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
-  terminated: "bg-red-50 text-red-700 ring-1 ring-red-200",
+  active: "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-200",
+  on_leave: "bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-1 ring-amber-200",
+  probation: "bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 ring-1 ring-blue-200",
+  terminated: "bg-red-50 dark:bg-red-500/15 text-red-700 dark:text-red-300 ring-1 ring-red-200",
 };
 const TYPE_CLS: Record<string, string> = {
-  full_time: "bg-violet-50 text-violet-700 ring-1 ring-violet-200",
-  part_time: "bg-orange-50 text-orange-700 ring-1 ring-orange-200",
-  contract: "bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200",
-  temporary: "bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200",
-  intern: "bg-pink-50 text-pink-700 ring-1 ring-pink-200",
+  full_time: "bg-violet-50 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 ring-1 ring-violet-200",
+  part_time: "bg-orange-50 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300 ring-1 ring-orange-200",
+  contract: "bg-cyan-50 dark:bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 ring-1 ring-cyan-200",
+  temporary: "bg-yellow-50 dark:bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 ring-1 ring-yellow-200",
+  intern: "bg-pink-50 dark:bg-pink-500/15 text-pink-700 dark:text-pink-300 ring-1 ring-pink-200",
 };
 const AVATAR_COLORS = [
   "bg-blue-500","bg-violet-500","bg-emerald-500","bg-amber-500",
@@ -57,7 +57,7 @@ function initials(name: string) {
 
 /* ─── Select helper ───────────────────────────────────────────────────── */
 function Label({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs font-semibold text-gray-600 mb-1">{children}</p>;
+  return <p className="text-xs font-semibold text-muted-foreground mb-1">{children}</p>;
 }
 function Input({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
@@ -65,7 +65,7 @@ function Input({ label, ...props }: { label: string } & React.InputHTMLAttribute
       <Label>{label}</Label>
       <input
         {...props}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+        className="w-full border border-border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-muted disabled:text-muted-foreground"
       />
     </div>
   );
@@ -77,11 +77,11 @@ function Select({ label, children, ...props }: { label: string } & React.SelectH
       <div className="relative">
         <select
           {...props}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+          className="w-full border border-border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-card disabled:bg-muted disabled:text-muted-foreground"
         >
           {children}
         </select>
-        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
       </div>
     </div>
   );
@@ -169,15 +169,15 @@ function AddStaffModal({ open, onClose }: { open: boolean; onClose: () => void }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
+      <div className="relative bg-card rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Add Staff Member</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Fill in the details below to add a new staff member</p>
+            <h2 className="text-lg font-bold text-foreground">Add Staff Member</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Fill in the details below to add a new staff member</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition">
-            <X size={18} className="text-gray-500" />
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition">
+            <X size={18} className="text-muted-foreground" />
           </button>
         </div>
 
@@ -247,7 +247,7 @@ function AddStaffModal({ open, onClose }: { open: boolean; onClose: () => void }
           </div>
 
           {mutation.isError && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+            <div className="bg-red-50 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30 rounded-lg px-4 py-3 text-sm text-red-700 dark:text-red-300">
               {(() => {
                 const err = mutation.error as { response?: { data?: { message?: string | string[] } } };
                 const msgs = err?.response?.data?.message;
@@ -267,8 +267,8 @@ function AddStaffModal({ open, onClose }: { open: boolean; onClose: () => void }
         </form>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-muted rounded-b-2xl">
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted rounded-lg transition">
             Cancel
           </button>
           <button onClick={submit} disabled={mutation.isPending}
@@ -308,10 +308,10 @@ function FilterDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white w-80 h-full shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="font-bold text-gray-900">Filter Staff</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition">
+      <div className="relative bg-card w-80 h-full shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h2 className="font-bold text-foreground">Filter Staff</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition">
             <X size={16} />
           </button>
         </div>
@@ -340,7 +340,7 @@ function FilterDrawer({
           </Select>
         </div>
 
-        <div className="px-5 py-4 border-t border-gray-100 space-y-2">
+        <div className="px-5 py-4 border-t border-border space-y-2">
           <button onClick={() => { onChange(local); onClose(); }}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2.5 rounded-lg transition">
             Apply Filters
@@ -348,7 +348,7 @@ function FilterDrawer({
           <button onClick={() => {
             const empty = { outletId: "", status: "", employmentType: "" };
             setLocal(empty); onChange(empty); onClose();
-          }} className="w-full border border-gray-200 text-gray-600 text-sm font-medium py-2.5 rounded-lg hover:bg-gray-50 transition">
+          }} className="w-full border border-border text-muted-foreground text-sm font-medium py-2.5 rounded-lg hover:bg-muted transition">
             Clear All
           </button>
         </div>
@@ -402,8 +402,8 @@ export default function StaffPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Staff</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <h1 className="text-2xl font-bold text-foreground">Staff</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
               {isLoading ? "Loading…" : `${total} members${activeFilters > 0 ? " (filtered)" : " across all outlets"}`}
             </p>
           </div>
@@ -418,16 +418,16 @@ export default function StaffPage() {
         {/* Search & filter */}
         <div className="flex gap-3">
           <div className="relative flex-1">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
               placeholder="Search by name, employee ID, or phone…"
-              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" />
+              className="w-full pl-9 pr-4 py-2.5 border border-border rounded-xl text-sm bg-card shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" />
           </div>
           <button onClick={() => setShowFilter(true)}
             className={`inline-flex items-center gap-2 border px-4 py-2.5 rounded-xl text-sm font-medium shadow-sm transition ${
               activeFilters > 0
-                ? "border-blue-500 bg-blue-50 text-blue-700"
-                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                ? "border-blue-500 bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300"
+                : "border-border bg-card text-muted-foreground hover:bg-muted"
             }`}>
             <Filter size={15} />
             Filter
@@ -443,19 +443,19 @@ export default function StaffPage() {
         {activeFilters > 0 && (
           <div className="flex flex-wrap gap-2">
             {filters.outletId && (
-              <span className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 border border-blue-200 text-xs px-3 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/30 text-xs px-3 py-1 rounded-full">
                 Outlet filtered
                 <button onClick={() => setFilters(f => ({ ...f, outletId: "" }))}><X size={11} /></button>
               </span>
             )}
             {filters.status && (
-              <span className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 border border-blue-200 text-xs px-3 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/30 text-xs px-3 py-1 rounded-full">
                 Status: {filters.status.replace(/_/g, " ")}
                 <button onClick={() => setFilters(f => ({ ...f, status: "" }))}><X size={11} /></button>
               </span>
             )}
             {filters.employmentType && (
-              <span className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 border border-blue-200 text-xs px-3 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/30 text-xs px-3 py-1 rounded-full">
                 Type: {filters.employmentType.replace(/_/g, " ")}
                 <button onClick={() => setFilters(f => ({ ...f, employmentType: "" }))}><X size={11} /></button>
               </span>
@@ -464,33 +464,33 @@ export default function StaffPage() {
         )}
 
         {/* Table */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
+                <tr className="bg-muted border-b border-border">
                   {["Staff Member","Emp ID","Outlet","Position","Type","Status",""].map(h => (
-                    <th key={h} className={`px-4 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide ${h === "" ? "" : "text-left"}`}>{h}</th>
+                    <th key={h} className={`px-4 py-3.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide ${h === "" ? "" : "text-left"}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-border">
                 {isLoading ? (
                   Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i} className="animate-pulse">
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-gray-200 shrink-0" />
+                          <div className="w-9 h-9 rounded-full bg-border shrink-0" />
                           <div className="space-y-1.5">
-                            <div className="h-3.5 w-36 bg-gray-200 rounded" />
-                            <div className="h-3 w-24 bg-gray-100 rounded" />
+                            <div className="h-3.5 w-36 bg-border rounded" />
+                            <div className="h-3 w-24 bg-muted rounded" />
                           </div>
                         </div>
                       </td>
                       {Array.from({ length: 5 }).map((_, j) => (
-                        <td key={j} className="px-4 py-4"><div className="h-3.5 bg-gray-100 rounded w-20" /></td>
+                        <td key={j} className="px-4 py-4"><div className="h-3.5 bg-muted rounded w-20" /></td>
                       ))}
-                      <td className="px-4 py-4"><div className="h-3.5 bg-gray-100 rounded w-8 ml-auto" /></td>
+                      <td className="px-4 py-4"><div className="h-3.5 bg-muted rounded w-8 ml-auto" /></td>
                     </tr>
                   ))
                 ) : isError ? (
@@ -498,15 +498,15 @@ export default function StaffPage() {
                     <div className="flex flex-col items-center gap-2 text-red-500">
                       <span className="text-3xl">⚠️</span>
                       <p className="font-medium">Failed to load staff data</p>
-                      <p className="text-xs text-gray-400">Make sure the API server is running</p>
+                      <p className="text-xs text-muted-foreground">Make sure the API server is running</p>
                     </div>
                   </td></tr>
                 ) : data?.data?.length === 0 ? (
                   <tr><td colSpan={7} className="text-center py-16">
-                    <div className="flex flex-col items-center gap-3 text-gray-400">
+                    <div className="flex flex-col items-center gap-3 text-muted-foreground">
                       <Users size={40} strokeWidth={1.2} />
                       <div>
-                        <p className="font-medium text-gray-600">No staff found</p>
+                        <p className="font-medium text-muted-foreground">No staff found</p>
                         <p className="text-xs mt-0.5">
                           {activeFilters > 0 ? "Try clearing filters" : "Add your first staff member"}
                         </p>
@@ -534,25 +534,25 @@ export default function StaffPage() {
                               </div>
                             )}
                             <div>
-                              <p className="font-semibold text-gray-900 leading-tight">{staff.name}</p>
-                              <p className="text-xs text-gray-400 mt-0.5">{staff.phone}</p>
+                              <p className="font-semibold text-foreground leading-tight">{staff.name}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{staff.phone}</p>
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-4">
-                          <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{empId || "—"}</span>
+                          <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">{empId || "—"}</span>
                         </td>
-                        <td className="px-4 py-4 text-xs font-medium text-gray-700">{outlet || <span className="text-gray-300">—</span>}</td>
-                        <td className="px-4 py-4 text-xs text-gray-500">{position || <span className="text-gray-300">—</span>}</td>
+                        <td className="px-4 py-4 text-xs font-medium text-foreground">{outlet || <span className="text-muted-foreground/60">—</span>}</td>
+                        <td className="px-4 py-4 text-xs text-muted-foreground">{position || <span className="text-muted-foreground/60">—</span>}</td>
                         <td className="px-4 py-4">
                           {empType
-                            ? <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_CLS[empType] ?? "bg-gray-100 text-gray-600"}`}>{empType.replace(/_/g, " ")}</span>
-                            : <span className="text-gray-300 text-xs">—</span>}
+                            ? <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_CLS[empType] ?? "bg-muted text-muted-foreground"}`}>{empType.replace(/_/g, " ")}</span>
+                            : <span className="text-muted-foreground/60 text-xs">—</span>}
                         </td>
                         <td className="px-4 py-4">
                           {empStatus
-                            ? <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_CLS[empStatus] ?? "bg-gray-100 text-gray-600"}`}>{empStatus.replace(/_/g, " ")}</span>
-                            : <span className="text-gray-300 text-xs">—</span>}
+                            ? <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_CLS[empStatus] ?? "bg-muted text-muted-foreground"}`}>{empStatus.replace(/_/g, " ")}</span>
+                            : <span className="text-muted-foreground/60 text-xs">—</span>}
                         </td>
                         <td className="px-4 py-4 text-right">
                           {!isAdmin ? (
@@ -573,7 +573,7 @@ export default function StaffPage() {
                               </button>
                               <button
                                 onClick={() => setConfirmDeleteId(null)}
-                                className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold px-2.5 py-1 rounded-lg transition">
+                                className="text-xs bg-muted hover:bg-border text-muted-foreground font-semibold px-2.5 py-1 rounded-lg transition">
                                 No
                               </button>
                             </div>
@@ -585,7 +585,7 @@ export default function StaffPage() {
                               </Link>
                               <button
                                 onClick={() => setConfirmDeleteId(staff.id)}
-                                className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition">
+                                className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition">
                                 <Trash2 size={14} />
                               </button>
                             </div>
@@ -601,19 +601,19 @@ export default function StaffPage() {
 
           {/* Pagination */}
           {data && totalPages > 1 && (
-            <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50">
-              <p className="text-xs text-gray-500">
-                Showing <span className="font-medium text-gray-700">{total === 0 ? 0 : (page-1)*20+1}–{Math.min(page*20, total)}</span>{" "}
-                of <span className="font-medium text-gray-700">{total}</span>
+            <div className="flex items-center justify-between px-5 py-3 border-t border-border bg-muted">
+              <p className="text-xs text-muted-foreground">
+                Showing <span className="font-medium text-foreground">{total === 0 ? 0 : (page-1)*20+1}–{Math.min(page*20, total)}</span>{" "}
+                of <span className="font-medium text-foreground">{total}</span>
               </p>
               <div className="flex items-center gap-1.5">
                 <button disabled={page === 1} onClick={() => setPage(page - 1)}
-                  className="p-1.5 rounded-lg border border-gray-200 bg-white disabled:opacity-40 hover:bg-gray-100 transition">
+                  className="p-1.5 rounded-lg border border-border bg-card disabled:opacity-40 hover:bg-muted transition">
                   <ChevronLeft size={14} />
                 </button>
-                <span className="px-3 py-1 text-xs font-medium text-gray-700">{page} / {totalPages}</span>
+                <span className="px-3 py-1 text-xs font-medium text-foreground">{page} / {totalPages}</span>
                 <button disabled={page === totalPages} onClick={() => setPage(page + 1)}
-                  className="p-1.5 rounded-lg border border-gray-200 bg-white disabled:opacity-40 hover:bg-gray-100 transition">
+                  className="p-1.5 rounded-lg border border-border bg-card disabled:opacity-40 hover:bg-muted transition">
                   <ChevronRight size={14} />
                 </button>
               </div>

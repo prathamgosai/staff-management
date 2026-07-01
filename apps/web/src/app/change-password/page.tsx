@@ -71,9 +71,9 @@ export default function ChangePasswordPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 px-4 py-8">
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
+        <div className="bg-card rounded-3xl shadow-2xl overflow-hidden">
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-7 text-white text-center">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-white/20 mb-3">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-card/20 mb-3">
               <KeyRound size={24} />
             </div>
             <h1 className="text-xl font-bold">Set a new password</h1>
@@ -86,7 +86,7 @@ export default function ChangePasswordPage() {
 
           <form onSubmit={onSubmit} className="px-8 py-7 space-y-4">
             {mustChangePassword && (
-              <div className="rounded-xl bg-blue-50 border border-blue-200 px-3.5 py-3 text-xs text-blue-800">
+              <div className="rounded-xl bg-blue-50 dark:bg-blue-500/15 border border-blue-200 dark:border-blue-500/30 px-3.5 py-3 text-xs text-blue-800 dark:text-blue-300">
                 Enter the password you just signed in with as your <strong>current password</strong>, then choose a new one.
               </div>
             )}
@@ -103,14 +103,14 @@ export default function ChangePasswordPage() {
               autoComplete="new-password" />
 
             <button type="button" onClick={() => setShow(v => !v)}
-              className="flex items-center gap-1.5 -mx-2 px-2 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg">
+              className="flex items-center gap-1.5 -mx-2 px-2 py-2 text-sm text-muted-foreground hover:text-foreground rounded-lg">
               {show ? <EyeOff size={18} /> : <Eye size={18} />}
               {show ? "Hide passwords" : "Show passwords"}
             </button>
 
             {error && (
               <div role="alert" aria-live="assertive"
-                className="rounded-xl p-3 text-sm bg-red-50 border border-red-200 text-red-700">
+                className="rounded-xl p-3 text-sm bg-red-50 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-300">
                 {error}
               </div>
             )}
@@ -121,7 +121,7 @@ export default function ChangePasswordPage() {
             </button>
 
             <button type="button" onClick={() => { logout(); router.replace("/login"); }}
-              className="w-full text-center text-sm font-medium text-gray-600 hover:text-gray-800 underline py-2.5 min-h-[44px]">
+              className="w-full text-center text-sm font-medium text-muted-foreground hover:text-foreground underline py-2.5 min-h-[44px]">
               Sign out instead
             </button>
           </form>
@@ -138,7 +138,7 @@ function Field({ label, value, onChange, show, hint, autoFocus, autoComplete }: 
   const id = useId();
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-semibold text-gray-700 mb-1.5">{label}</label>
+      <label htmlFor={id} className="block text-sm font-semibold text-foreground mb-1.5">{label}</label>
       <input
         id={id}
         name={autoComplete ?? id}
@@ -147,9 +147,9 @@ function Field({ label, value, onChange, show, hint, autoFocus, autoComplete }: 
         autoFocus={autoFocus}
         autoComplete={autoComplete}
         onChange={e => onChange(e.target.value)}
-        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-base"
+        className="w-full px-4 py-2.5 border border-border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-base"
       />
-      {hint && <p className="mt-1 text-xs text-gray-600">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }

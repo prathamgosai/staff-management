@@ -59,6 +59,24 @@ export class SchedulingService {
    * Staff are split into 3 groups by sort order. Each week they rotate.
    */
   async autoGenerateRotation(tenantId: string, outletId: string, weekStartDate: string, userId: string) {
+    // Load manual per-staff pins BEFORE opening the transaction. A failed query
+    // inside a transaction aborts it in Postgres ("current transaction is
+    // aborted"), so if staff_shift_overrides is missing (migration 011 not yet
+    // applied) this read must NOT run inside the txn — it stays outside and
+    // degrades to "no pins" on error, keeping core rotation working.
+    let pinRows: { staff_id: string; template_id: string }[] = [];
+    try {
+      const pins = await this.db.query(
+        `SELECT staff_id, template_id FROM staff_shift_overrides
+         WHERE outlet_id = $1 AND tenant_id = $2 AND effective_from <= $3`,
+        [outletId, tenantId, weekStartDate],
+      );
+      pinRows = pins.rows;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("staff_shift_overrides unavailable — skipping manual pins:", (err as Error).message);
+    }
+
     const client = await (this.db as Pool & { connect(): Promise<{ query: Pool["query"]; release(): void }> }).connect();
     try {
       await client.query("BEGIN");
@@ -94,7 +112,10 @@ export class SchedulingService {
 
       // 2. Get the 3 shift templates for this outlet (ordered by start_time)
       const tmplResult = await client.query(
-        "SELECT * FROM shift_templates WHERE outlet_id = $1 AND is_active = true ORDER BY start_time LIMIT 3",
+        // `, id` is a deterministic tie-breaker so the 3 rostered templates are
+        // stable week-to-week and match the client's target list even when two
+        // templates share a start_time.
+        "SELECT * FROM shift_templates WHERE outlet_id = $1 AND is_active = true ORDER BY start_time, id LIMIT 3",
         [outletId],
       );
       if (tmplResult.rows.length === 0) throw new BadRequestException("No shift templates configured for this outlet — add shift templates before generating a roster.");
@@ -127,7 +148,9 @@ export class SchedulingService {
         2: templates[(wk + 2) % 3],
       };
 
-      // 6. Create schedule_shifts for each day × each shift template
+      // 6. Create schedule_shifts for each day × each shift template.
+      //    Keyed by template id so a manual per-staff pin (below) can look up its
+      //    target shift regardless of which rotation group normally gets it.
       const days: string[] = [];
       for (let i = 0; i < 7; i++) {
         const d = new Date(weekStart);
@@ -135,7 +158,7 @@ export class SchedulingService {
         days.push(d.toISOString().split("T")[0]);
       }
 
-      const shiftRows: Record<number, Record<string, string>> = { 0: {}, 1: {}, 2: {} };
+      const shiftByTemplateDay: Record<string, Record<string, string>> = {};
       for (const day of days) {
         for (let g = 0; g < 3; g++) {
           const tmpl = groupShiftMap[g];
@@ -151,23 +174,43 @@ export class SchedulingService {
               tmpl.min_staff, tmpl.target_staff,
             ],
           );
-          shiftRows[g][day] = ins.rows[0].id;
+          if (!shiftByTemplateDay[tmpl.id]) shiftByTemplateDay[tmpl.id] = {};
+          shiftByTemplateDay[tmpl.id][day] = ins.rows[0].id;
         }
       }
 
-      // 7. Assign each staff member to their group's shift for every day
+      // 7. Decide each staff member's target shift template for the week:
+      //    default = their rotation group's template. A manual "pin" (a staff
+      //    who was moved to a specific shift) overrides that, so the move
+      //    survives the weekly rotation.
+      const staffTemplateId: Record<string, string> = {};
       for (let g = 0; g < 3; g++) {
-        for (const staffId of groups[g]) {
-          for (const day of days) {
-            const shiftId = shiftRows[g][day];
-            if (!shiftId) continue;
-            await client.query(
-              `INSERT INTO shift_assignments (shift_id, staff_id, status)
-               VALUES ($1, $2, 'published')
-               ON CONFLICT (shift_id, staff_id) DO UPDATE SET status='published'`,
-              [shiftId, staffId],
-            );
-          }
+        for (const staffId of groups[g]) staffTemplateId[staffId] = groupShiftMap[g].id;
+      }
+
+      // Apply manual pins (loaded before the transaction). Only honour a pin for
+      // staff actually rostered here this week and pointing at one of the 3
+      // shifts in play, so an override can never orphan an assignment.
+      const scheduledTemplateIds = new Set(templates.map((t: { id: string }) => t.id));
+      for (const pin of pinRows) {
+        if (staffTemplateId[pin.staff_id] && scheduledTemplateIds.has(pin.template_id)) {
+          staffTemplateId[pin.staff_id] = pin.template_id;
+        }
+      }
+
+      // 8. Assign each staff member to their target template's shift every day.
+      for (const staffId of Object.keys(staffTemplateId)) {
+        const dayMap = shiftByTemplateDay[staffTemplateId[staffId]];
+        if (!dayMap) continue;
+        for (const day of days) {
+          const shiftId = dayMap[day];
+          if (!shiftId) continue;
+          await client.query(
+            `INSERT INTO shift_assignments (shift_id, staff_id, status)
+             VALUES ($1, $2, 'published')
+             ON CONFLICT (shift_id, staff_id) DO UPDATE SET status='published'`,
+            [shiftId, staffId],
+          );
         }
       }
 
@@ -291,7 +334,9 @@ export class SchedulingService {
 
   async getShiftTemplates(outletId: string) {
     const result = await this.db.query(
-      "SELECT * FROM shift_templates WHERE outlet_id = $1 AND is_active = true ORDER BY start_time",
+      // Same ordering (with `, id` tie-breaker) as autoGenerateRotation, so the
+      // client's first-3 slice is exactly the set the rotation schedules.
+      "SELECT * FROM shift_templates WHERE outlet_id = $1 AND is_active = true ORDER BY start_time, id",
       [outletId],
     );
     return { data: result.rows };
@@ -354,6 +399,111 @@ export class SchedulingService {
     }
 
     return { data: { id: templateId, name: newName, startTime: start, endTime: end, isOvernight, breakMinutes, updatedShifts } };
+  }
+
+  /**
+   * Manually move ONE staff member onto a specific shift template (A→B, B→C,
+   * C→A, or any target), from the given week onward.
+   *   • Persists a per-staff "pin" (staff_shift_overrides) so future weekly
+   *     auto-rotations keep this staff on the chosen shift.
+   *   • Reassigns the already-generated shifts from weekStartDate onward so the
+   *     change is visible immediately. Past weeks stay as a record.
+   */
+  async moveStaffToShift(
+    tenantId: string,
+    userId: string,
+    body: { outletId: string; staffId: string; templateId: string; weekStartDate: string },
+  ) {
+    const { outletId, staffId, templateId, weekStartDate } = body ?? ({} as typeof body);
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuid.test(outletId ?? "") || !uuid.test(staffId ?? "") || !uuid.test(templateId ?? "")) {
+      throw new BadRequestException("outletId, staffId and templateId must be valid UUIDs");
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStartDate ?? "")) {
+      throw new BadRequestException("weekStartDate must be YYYY-MM-DD");
+    }
+
+    // Target shift must be an active template of this outlet (and same tenant).
+    const tmpl = await this.db.query(
+      `SELECT st.id, st.name, o.tenant_id
+       FROM shift_templates st JOIN outlets o ON o.id = st.outlet_id
+       WHERE st.id = $1 AND st.outlet_id = $2 AND st.is_active = true`,
+      [templateId, outletId],
+    );
+    if (!tmpl.rows[0]) throw new NotFoundException("Shift template not found for this outlet");
+    if (tmpl.rows[0].tenant_id !== tenantId) throw new ForbiddenException("This shift belongs to another tenant");
+
+    // Staff member must belong to this tenant and be based at this outlet.
+    const stf = await this.db.query(
+      "SELECT id, name FROM staff WHERE id = $1 AND tenant_id = $2 AND current_outlet_id = $3",
+      [staffId, tenantId, outletId],
+    );
+    if (!stf.rows[0]) throw new NotFoundException("Staff member not found in this outlet");
+
+    const client = await (this.db as Pool & { connect(): Promise<{ query: Pool["query"]; release(): void }> }).connect();
+    try {
+      await client.query("BEGIN");
+
+      // 1. Persist the pin so future auto-rotations keep this staff on the shift.
+      await client.query(
+        `INSERT INTO staff_shift_overrides
+           (tenant_id, staff_id, outlet_id, template_id, effective_from, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (staff_id) DO UPDATE SET
+           template_id    = EXCLUDED.template_id,
+           outlet_id      = EXCLUDED.outlet_id,
+           effective_from = EXCLUDED.effective_from,
+           updated_at     = NOW()`,
+        [tenantId, staffId, outletId, templateId, weekStartDate, userId],
+      );
+
+      // 2. Move already-generated assignments (this week onward). Assign to the
+      //    target shift FIRST; only cancel the staff's other shifts if the target
+      //    actually has shifts in range, so we never strand them off the roster.
+      const moved = await client.query(
+        `INSERT INTO shift_assignments (shift_id, staff_id, status)
+         SELECT ss.id, $1, 'published'
+         FROM schedule_shifts ss
+         WHERE ss.outlet_id = $2 AND ss.date >= $3 AND ss.template_id = $4
+         ON CONFLICT (shift_id, staff_id) DO UPDATE SET status = 'published', updated_at = NOW()`,
+        [staffId, outletId, weekStartDate, templateId],
+      );
+
+      if ((moved.rowCount ?? 0) > 0) {
+        await client.query(
+          `UPDATE shift_assignments sa
+           SET status = 'cancelled', updated_at = NOW()
+           FROM schedule_shifts ss
+           WHERE sa.shift_id = ss.id
+             AND sa.staff_id = $1
+             AND ss.outlet_id = $2
+             AND ss.date >= $3
+             AND ss.template_id IS DISTINCT FROM $4
+             AND sa.status <> 'cancelled'`,
+          [staffId, outletId, weekStartDate, templateId],
+        );
+      }
+
+      await client.query("COMMIT");
+
+      // Return the refreshed roster so the client can render immediately.
+      const roster = await this.getWeeklyRoster(tenantId, outletId, weekStartDate);
+      return {
+        data: {
+          staffId,
+          staffName: stf.rows[0].name,
+          templateId,
+          shiftName: tmpl.rows[0].name,
+          movedShifts: moved.rowCount ?? 0,
+          roster: roster.data,
+        },
+      };
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      (client as { release(): void }).release();
+    }
   }
 
   async getCoverageSummary(outletId: string, weekStartDate: string) {

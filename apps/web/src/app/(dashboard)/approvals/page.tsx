@@ -56,11 +56,11 @@ export default function ApprovalsPage() {
   if (!isAdmin) {
     return (
       <div className="max-w-md mx-auto text-center py-24">
-        <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
+        <div className="w-14 h-14 bg-red-50 dark:bg-red-500/15 rounded-full flex items-center justify-center mx-auto mb-3">
           <ShieldCheck size={26} strokeWidth={1.5} className="text-red-400" />
         </div>
-        <p className="font-bold text-gray-700">Restricted area</p>
-        <p className="text-sm text-gray-400 mt-1">Only super admins can review account approvals.</p>
+        <p className="font-bold text-foreground">Restricted area</p>
+        <p className="text-sm text-muted-foreground mt-1">Only super admins can review account approvals.</p>
       </div>
     );
   }
@@ -70,12 +70,12 @@ export default function ApprovalsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+          <div className="w-10 h-10 bg-blue-100 dark:bg-blue-500/20 rounded-xl flex items-center justify-center">
             <ShieldCheck size={20} className="text-blue-600" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Account Approvals</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Review staff self-registration requests</p>
+            <h1 className="text-2xl font-bold text-foreground">Account Approvals</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Review staff self-registration requests</p>
           </div>
           {rows.length > 0 && (
             <span className="bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full animate-pulse">
@@ -84,7 +84,7 @@ export default function ApprovalsPage() {
           )}
         </div>
         <button onClick={() => refetch()}
-          className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 border border-gray-200 rounded-xl px-3 py-2 transition hover:bg-gray-50">
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-xl px-3 py-2 transition hover:bg-muted">
           <RefreshCw size={14} /> Refresh
         </button>
       </div>
@@ -95,7 +95,7 @@ export default function ApprovalsPage() {
         <div>
           <p className="font-semibold mb-1">How the approval flow works</p>
           <ol className="text-sm text-blue-100 space-y-0.5 list-decimal list-inside">
-            <li>Staff goes to <span className="font-mono bg-white/20 px-1 rounded text-xs">/register</span> → enters their name, email and sets a password</li>
+            <li>Staff goes to <span className="font-mono bg-card/20 px-1 rounded text-xs">/register</span> → enters their name, email and sets a password</li>
             <li>A unique <strong className="text-white">ticket number</strong> is generated and shown to the staff member</li>
             <li>Staff shares their ticket with the Head Chef / Manager</li>
             <li>Head Chef finds the ticket here and clicks <strong className="text-white">Approve</strong></li>
@@ -105,36 +105,36 @@ export default function ApprovalsPage() {
       </div>
 
       {/* Pending table */}
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+      <div className="bg-card rounded-2xl border border-border overflow-hidden">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Ticket size={17} className="text-gray-400" />
-            <h2 className="font-bold text-gray-900">Pending Tickets</h2>
+            <Ticket size={17} className="text-muted-foreground" />
+            <h2 className="font-bold text-foreground">Pending Tickets</h2>
           </div>
           {rows.length > 0 && (
-            <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2.5 py-1 rounded-full">
+            <span className="bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-bold px-2.5 py-1 rounded-full">
               {rows.length} awaiting review
             </span>
           )}
         </div>
 
         {isLoading ? (
-          <div className="py-16 flex flex-col items-center justify-center gap-3 text-gray-400">
+          <div className="py-16 flex flex-col items-center justify-center gap-3 text-muted-foreground">
             <Loader2 size={28} className="animate-spin" />
             <p className="text-sm">Loading pending requests…</p>
           </div>
         ) : rows.length === 0 ? (
           <div className="py-16 text-center">
-            <div className="w-14 h-14 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-3">
+            <div className="w-14 h-14 bg-emerald-50 dark:bg-emerald-500/15 rounded-full flex items-center justify-center mx-auto mb-3">
               <ShieldCheck size={26} strokeWidth={1.5} className="text-emerald-400" />
             </div>
-            <p className="font-semibold text-gray-500">No pending approvals</p>
-            <p className="text-sm text-gray-400 mt-1">All registration requests have been reviewed.</p>
+            <p className="font-semibold text-muted-foreground">No pending approvals</p>
+            <p className="text-sm text-muted-foreground mt-1">All registration requests have been reviewed.</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-50">
             {rows.map(row => (
-              <div key={row.id} className="px-5 py-4 hover:bg-gray-50/60 transition flex items-center gap-4">
+              <div key={row.id} className="px-5 py-4 hover:bg-muted/60 transition flex items-center gap-4">
                 {/* Avatar */}
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold text-sm flex items-center justify-center shrink-0">
                   {row.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
@@ -143,15 +143,15 @@ export default function ApprovalsPage() {
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-bold text-gray-900">{row.name}</p>
+                    <p className="font-bold text-foreground">{row.name}</p>
                     {/* Ticket badge */}
-                    <span className="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                    <span className="inline-flex items-center gap-1 bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs font-bold px-2.5 py-0.5 rounded-full">
                       <Ticket size={10} />
                       {row.ticket_number}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-500 truncate">{row.email}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-sm text-muted-foreground truncate">{row.email}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     Registered {format(new Date(row.created_at), "d MMM yyyy 'at' HH:mm")}
                     {row.outlet_name && ` · ${row.outlet_name}`}
                     {row.position_name && ` · ${row.position_name}`}
@@ -172,7 +172,7 @@ export default function ApprovalsPage() {
                   <button
                     onClick={() => act(row.id, "reject")}
                     disabled={mutation.isPending && actingId === row.id}
-                    className="inline-flex items-center gap-1.5 border border-red-200 hover:bg-red-50 disabled:opacity-60 text-red-600 text-xs font-bold px-4 py-2 rounded-xl transition">
+                    className="inline-flex items-center gap-1.5 border border-red-200 dark:border-red-500/30 hover:bg-red-50 disabled:opacity-60 text-red-600 text-xs font-bold px-4 py-2 rounded-xl transition">
                     {mutation.isPending && actingId === row.id && actingAction === "reject"
                       ? <Loader2 size={12} className="animate-spin" />
                       : <UserX size={13} />}

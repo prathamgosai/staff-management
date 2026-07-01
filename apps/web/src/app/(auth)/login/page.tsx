@@ -93,10 +93,10 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
       <div className="w-full max-w-md px-4">
-        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
+        <div className="bg-card rounded-3xl shadow-2xl overflow-hidden">
           {/* Top band */}
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-8 text-white text-center">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-white/20 mb-3">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-card/20 mb-3">
               <span className="text-2xl font-black">W</span>
             </div>
             <h1 className="text-2xl font-bold">WorkforceIQ</h1>
@@ -104,13 +104,13 @@ export default function LoginPage() {
           </div>
 
           <div className="px-8 py-8">
-            <h2 className="text-xl font-bold text-gray-900 mb-1">Welcome back</h2>
-            <p className="text-sm text-gray-500 mb-6">Sign in with your Employee ID or email</p>
+            <h2 className="text-xl font-bold text-foreground mb-1">Welcome back</h2>
+            <p className="text-sm text-muted-foreground mb-6">Sign in with your Employee ID or email</p>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               {/* Employee ID / Email */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                <label className="block text-sm font-semibold text-foreground mb-1.5">
                   Employee ID / Email
                 </label>
                 <input
@@ -119,7 +119,7 @@ export default function LoginPage() {
                   autoComplete="username"
                   placeholder="CP-001 or admin@workforceiq.app"
                   aria-invalid={!!errors.email}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-base"
+                  className="w-full px-4 py-2.5 border border-border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-base"
                 />
                 {errors.email && (
                   <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>
@@ -128,7 +128,7 @@ export default function LoginPage() {
 
               {/* Password */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                <label className="block text-sm font-semibold text-foreground mb-1.5">
                   Password
                 </label>
                 <div className="relative">
@@ -138,12 +138,12 @@ export default function LoginPage() {
                     autoComplete="current-password"
                     placeholder="Your password"
                     aria-invalid={!!errors.password}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-base pr-10"
+                    className="w-full px-4 py-2.5 border border-border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-base pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground">
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
@@ -157,10 +157,10 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => setRememberMe(v => !v)}
                 className="flex items-center gap-2.5 group select-none">
-                <span className={`transition-colors ${rememberMe ? "text-blue-600" : "text-gray-300 group-hover:text-gray-400"}`}>
+                <span className={`transition-colors ${rememberMe ? "text-blue-600" : "text-muted-foreground/60 group-hover:text-muted-foreground"}`}>
                   {rememberMe ? <CheckSquare size={18} /> : <Square size={18} />}
                 </span>
-                <span className="text-sm text-gray-600 group-hover:text-gray-800 transition-colors">
+                <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
                   Remember me
                 </span>
               </button>
@@ -169,8 +169,8 @@ export default function LoginPage() {
               {error && (
                 <div role="alert" aria-live="assertive" className={`rounded-xl p-3.5 text-sm ${
                   isPending
-                    ? "bg-amber-50 border border-amber-200 text-amber-800"
-                    : "bg-red-50 border border-red-200 text-red-700"
+                    ? "bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 text-amber-800 dark:text-amber-300"
+                    : "bg-red-50 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-300"
                 }`}>
                   {isPending && <p className="font-semibold mb-0.5">Account Pending Approval</p>}
                   {error}
@@ -185,8 +185,8 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <div className="mt-6 pt-5 border-t border-gray-100 text-center">
-              <p className="text-sm text-gray-500">
+            <div className="mt-6 pt-5 border-t border-border text-center">
+              <p className="text-sm text-muted-foreground">
                 New staff?{" "}
                 <Link href="/register" className="text-blue-600 hover:text-blue-700 font-semibold">
                   Create your account

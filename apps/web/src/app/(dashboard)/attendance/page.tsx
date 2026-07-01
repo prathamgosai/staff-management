@@ -24,12 +24,12 @@ const STATUS_OPTIONS = [
 ];
 
 const STATUS_COLORS: Record<string, string> = {
-  present: "bg-green-100 text-green-700",
-  absent: "bg-red-100 text-red-700",
-  late: "bg-orange-100 text-orange-700",
-  on_leave: "bg-blue-100 text-blue-700",
-  rest_day: "bg-gray-100 text-gray-600",
-  public_holiday: "bg-purple-100 text-purple-700",
+  present: "bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300",
+  absent: "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300",
+  late: "bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-300",
+  on_leave: "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300",
+  rest_day: "bg-muted text-muted-foreground",
+  public_holiday: "bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300",
 };
 
 const EMPTY_FORM = { staffId: "", clockIn: "", clockOut: "", status: "present", note: "" };
@@ -63,32 +63,32 @@ function StaffPicker({ staff, value, onChange }: {
   return (
     <div className="relative" ref={ref}>
       <button type="button" onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between gap-2 border border-gray-300 rounded-xl px-3 py-2.5 text-sm bg-white text-left outline-none focus:ring-2 focus:ring-blue-500">
-        <span className={selected ? "text-gray-900 truncate" : "text-gray-400"}>
+        className="w-full flex items-center justify-between gap-2 border border-border rounded-xl px-3 py-2.5 text-sm bg-card text-left outline-none focus:ring-2 focus:ring-blue-500">
+        <span className={selected ? "text-foreground truncate" : "text-muted-foreground"}>
           {selected ? `${selected.name}${selected.employeeId ? ` · #${selected.employeeId}` : ""}` : "Select staff member…"}
         </span>
-        <ChevronDown size={16} className={`text-gray-400 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown size={16} className={`text-muted-foreground shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-          <div className="p-2 border-b border-gray-100">
+        <div className="absolute z-10 mt-1 w-full bg-card border border-border rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-border">
             <div className="relative">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <input autoFocus value={query} onChange={e => setQuery(e.target.value)}
                 placeholder="Search staff…"
-                className="w-full pl-8 pr-2 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full pl-8 pr-2 py-2 border border-border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           </div>
           <div className="max-h-56 overflow-y-auto">
             {filtered.length === 0 ? (
-              <p className="px-3 py-4 text-center text-sm text-gray-400">No staff found</p>
+              <p className="px-3 py-4 text-center text-sm text-muted-foreground">No staff found</p>
             ) : filtered.map(s => (
               <button key={s.id} type="button"
                 onClick={() => { onChange(s.id); setOpen(false); setQuery(""); }}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center justify-between gap-2 ${s.id === value ? "bg-blue-50" : ""}`}>
-                <span className="font-medium text-gray-800 truncate">{s.name}</span>
-                {s.employeeId && <span className="text-xs text-gray-400 shrink-0">#{s.employeeId}</span>}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center justify-between gap-2 ${s.id === value ? "bg-blue-50 dark:bg-blue-500/15" : ""}`}>
+                <span className="font-medium text-foreground truncate">{s.name}</span>
+                {s.employeeId && <span className="text-xs text-muted-foreground shrink-0">#{s.employeeId}</span>}
               </button>
             ))}
           </div>
@@ -176,8 +176,8 @@ export default function AttendancePage() {
       {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Attendance</h1>
-          <p className="text-gray-500 text-sm mt-1">Daily attendance tracking and correction management</p>
+          <h1 className="text-2xl font-bold text-foreground">Attendance</h1>
+          <p className="text-muted-foreground text-sm mt-1">Daily attendance tracking and correction management</p>
         </div>
         {selectedOutletId && (
           <button
@@ -194,7 +194,7 @@ export default function AttendancePage() {
         <select
           value={selectedOutletId}
           onChange={e => setSelectedOutletId(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]">
+          className="border border-border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]">
           <option value="">Select Outlet</option>
           {outlets?.data?.map((o: { id: string; name: string }) => (
             <option key={o.id} value={o.id}>{o.name}</option>
@@ -204,19 +204,19 @@ export default function AttendancePage() {
           type="date"
           value={selectedDate}
           onChange={e => setSelectedDate(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+          className="border border-border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
 
       {/* Live status banner */}
       {selectedDate === today && liveStatus?.data?.length > 0 && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-5">
-          <p className="text-sm font-medium text-green-800 mb-2 flex items-center gap-1.5">
+        <div className="bg-green-50 dark:bg-green-500/15 border border-green-200 dark:border-green-500/30 rounded-xl p-4 mb-5">
+          <p className="text-sm font-medium text-green-800 dark:text-green-300 mb-2 flex items-center gap-1.5">
             <CheckCircle2 size={14} /> Currently Clocked In ({liveStatus.data.length})
           </p>
           <div className="flex flex-wrap gap-2">
             {liveStatus.data.map((s: { staff_id: string; name: string; clock_in: string }) => (
-              <span key={s.staff_id} className="bg-white border border-green-200 text-green-800 text-xs px-2.5 py-1 rounded-full">
+              <span key={s.staff_id} className="bg-card border border-green-200 dark:border-green-500/30 text-green-800 dark:text-green-300 text-xs px-2.5 py-1 rounded-full">
                 {s.name} · {format(new Date(s.clock_in), "HH:mm")}
               </span>
             ))}
@@ -225,50 +225,50 @@ export default function AttendancePage() {
       )}
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Staff</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Clock In</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Clock Out</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Regular Hrs</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-700">OT Hrs</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Late (min)</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Status</th>
+            <tr className="bg-muted border-b border-border">
+              <th className="text-left px-4 py-3 font-medium text-foreground">Staff</th>
+              <th className="text-left px-4 py-3 font-medium text-foreground">Clock In</th>
+              <th className="text-left px-4 py-3 font-medium text-foreground">Clock Out</th>
+              <th className="text-left px-4 py-3 font-medium text-foreground">Regular Hrs</th>
+              <th className="text-left px-4 py-3 font-medium text-foreground">OT Hrs</th>
+              <th className="text-left px-4 py-3 font-medium text-foreground">Late (min)</th>
+              <th className="text-left px-4 py-3 font-medium text-foreground">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-border">
             {!selectedOutletId ? (
-              <tr><td colSpan={7} className="text-center py-12 text-gray-400">Select an outlet to view attendance</td></tr>
+              <tr><td colSpan={7} className="text-center py-12 text-muted-foreground">Select an outlet to view attendance</td></tr>
             ) : isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>{Array.from({ length: 7 }).map((_, j) => (
-                  <td key={j} className="px-4 py-3"><div className="h-4 bg-gray-100 rounded animate-pulse" /></td>
+                  <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded animate-pulse" /></td>
                 ))}</tr>
               ))
             ) : attendance?.data?.length === 0 ? (
               <tr>
                 <td colSpan={7} className="py-14 text-center">
-                  <Clock size={32} strokeWidth={1.2} className="text-gray-200 mx-auto mb-3" />
-                  <p className="text-gray-500 font-medium">No attendance records for this date</p>
-                  <p className="text-gray-400 text-xs mt-1">Use the "Mark Attendance" button above to add records manually</p>
+                  <Clock size={32} strokeWidth={1.2} className="text-muted-foreground/40 mx-auto mb-3" />
+                  <p className="text-muted-foreground font-medium">No attendance records for this date</p>
+                  <p className="text-muted-foreground text-xs mt-1">Use the "Mark Attendance" button above to add records manually</p>
                 </td>
               </tr>
             ) : (
               attendance?.data?.map((r: AttendanceRecord) => (
-                <tr key={r.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">
+                <tr key={r.id} className="hover:bg-muted">
+                  <td className="px-4 py-3 font-medium text-foreground">
                     {r.staff_name}
-                    <span className="text-xs text-gray-400 ml-1">#{r.employee_id}</span>
+                    <span className="text-xs text-muted-foreground ml-1">#{r.employee_id}</span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{r.clock_in ? format(new Date(r.clock_in), "HH:mm") : "—"}</td>
-                  <td className="px-4 py-3 text-gray-600">{r.clock_out ? format(new Date(r.clock_out), "HH:mm") : "—"}</td>
-                  <td className="px-4 py-3 text-gray-600">{r.regular_hours ? `${r.regular_hours}h` : "—"}</td>
-                  <td className="px-4 py-3 text-gray-600">{r.overtime_hours > 0 ? `${r.overtime_hours}h` : "—"}</td>
-                  <td className="px-4 py-3 text-gray-600">{r.late_minutes > 0 ? r.late_minutes : "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{r.clock_in ? format(new Date(r.clock_in), "HH:mm") : "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{r.clock_out ? format(new Date(r.clock_out), "HH:mm") : "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{r.regular_hours ? `${r.regular_hours}h` : "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{r.overtime_hours > 0 ? `${r.overtime_hours}h` : "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{r.late_minutes > 0 ? r.late_minutes : "—"}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[r.status] ?? "bg-gray-100 text-gray-600"}`}>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[r.status] ?? "bg-muted text-muted-foreground"}`}>
                       {r.status.replace(/_/g, " ")}
                     </span>
                   </td>
@@ -282,14 +282,14 @@ export default function AttendancePage() {
       {/* Mark Attendance Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md">
             {/* Modal header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <div>
-                <h2 className="font-bold text-gray-900 text-lg">Mark Attendance</h2>
-                <p className="text-xs text-gray-400 mt-0.5">{outletName} · {format(new Date(selectedDate + "T00:00:00"), "d MMM yyyy")}</p>
+                <h2 className="font-bold text-foreground text-lg">Mark Attendance</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">{outletName} · {format(new Date(selectedDate + "T00:00:00"), "d MMM yyyy")}</p>
               </div>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition">
+              <button onClick={() => setShowModal(false)} className="text-muted-foreground hover:text-muted-foreground p-1 rounded-lg hover:bg-muted transition">
                 <X size={18} />
               </button>
             </div>
@@ -298,7 +298,7 @@ export default function AttendancePage() {
             <div className="px-6 py-5 space-y-4">
               {/* Staff */}
               <div>
-                <label className="text-xs font-semibold text-gray-700 block mb-1.5">Staff Member <span className="text-red-500">*</span></label>
+                <label className="text-xs font-semibold text-foreground block mb-1.5">Staff Member <span className="text-red-500">*</span></label>
                 <StaffPicker
                   staff={staffList}
                   value={form.staffId}
@@ -308,7 +308,7 @@ export default function AttendancePage() {
 
               {/* Status */}
               <div>
-                <label className="text-xs font-semibold text-gray-700 block mb-1.5">Status <span className="text-red-500">*</span></label>
+                <label className="text-xs font-semibold text-foreground block mb-1.5">Status <span className="text-red-500">*</span></label>
                 <div className="flex gap-2 flex-wrap">
                   {STATUS_OPTIONS.map(s => (
                     <button key={s.value} type="button"
@@ -316,7 +316,7 @@ export default function AttendancePage() {
                       className={`text-xs font-semibold px-3 py-1.5 rounded-xl border transition ${
                         form.status === s.value
                           ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+                          : "bg-card text-muted-foreground border-border hover:border-border"
                       }`}>
                       {s.label}
                     </button>
@@ -327,34 +327,34 @@ export default function AttendancePage() {
               {/* Times */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-gray-700 block mb-1.5">Clock In <span className="text-red-500">*</span></label>
+                  <label className="text-xs font-semibold text-foreground block mb-1.5">Clock In <span className="text-red-500">*</span></label>
                   <input type="time" value={form.clockIn}
                     onChange={e => setForm(f => ({ ...f, clockIn: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-700 block mb-1.5">Clock Out <span className="text-gray-400">(optional)</span></label>
+                  <label className="text-xs font-semibold text-foreground block mb-1.5">Clock Out <span className="text-muted-foreground">(optional)</span></label>
                   <input type="time" value={form.clockOut}
                     onChange={e => setForm(f => ({ ...f, clockOut: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
 
               {/* Note */}
               <div>
-                <label className="text-xs font-semibold text-gray-700 block mb-1.5">Note <span className="text-gray-400">(optional)</span></label>
+                <label className="text-xs font-semibold text-foreground block mb-1.5">Note <span className="text-muted-foreground">(optional)</span></label>
                 <input type="text" placeholder="e.g. Manually added by manager"
                   value={form.note}
                   onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               {/* Error */}
               {formError && (
-                <div className="flex items-center gap-2 bg-red-50 text-red-700 text-sm px-3 py-2.5 rounded-xl border border-red-200">
+                <div className="flex items-center gap-2 bg-red-50 dark:bg-red-500/15 text-red-700 dark:text-red-300 text-sm px-3 py-2.5 rounded-xl border border-red-200 dark:border-red-500/30">
                   <AlertCircle size={14} className="shrink-0" />
                   {formError}
                 </div>
@@ -364,7 +364,7 @@ export default function AttendancePage() {
             {/* Modal footer */}
             <div className="px-6 pb-5 flex gap-3">
               <button onClick={() => setShowModal(false)}
-                className="flex-1 border border-gray-200 text-gray-600 font-semibold text-sm py-2.5 rounded-xl hover:bg-gray-50 transition">
+                className="flex-1 border border-border text-muted-foreground font-semibold text-sm py-2.5 rounded-xl hover:bg-muted transition">
                 Cancel
               </button>
               <button onClick={handleSubmit} disabled={markMutation.isPending}

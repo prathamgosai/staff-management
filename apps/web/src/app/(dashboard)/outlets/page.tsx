@@ -43,30 +43,30 @@ const OUTLET_TYPES = [
 ] as const;
 
 const TYPE_COLORS: Record<string, string> = {
-  dine_in:       "bg-blue-50 text-blue-700",
-  quick_service: "bg-orange-50 text-orange-700",
-  cafe:          "bg-amber-50 text-amber-700",
-  cloud_kitchen: "bg-violet-50 text-violet-700",
-  bar:           "bg-rose-50 text-rose-700",
-  other:         "bg-gray-50 text-gray-600",
+  dine_in:       "bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300",
+  quick_service: "bg-orange-50 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300",
+  cafe:          "bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  cloud_kitchen: "bg-violet-50 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300",
+  bar:           "bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300",
+  other:         "bg-muted text-muted-foreground",
 };
 const TYPE_ICON_COLORS: Record<string, string> = {
-  dine_in:       "bg-blue-100 text-blue-600",
-  quick_service: "bg-orange-100 text-orange-600",
-  cafe:          "bg-amber-100 text-amber-600",
-  cloud_kitchen: "bg-violet-100 text-violet-600",
-  bar:           "bg-rose-100 text-rose-600",
-  other:         "bg-gray-100 text-gray-600",
+  dine_in:       "bg-blue-100 dark:bg-blue-500/20 text-blue-600",
+  quick_service: "bg-orange-100 dark:bg-orange-500/20 text-orange-600",
+  cafe:          "bg-amber-100 dark:bg-amber-500/20 text-amber-600",
+  cloud_kitchen: "bg-violet-100 dark:bg-violet-500/20 text-violet-600",
+  bar:           "bg-rose-100 dark:bg-rose-500/20 text-rose-600",
+  other:         "bg-muted text-muted-foreground",
 };
 const STATUS_CLS: Record<string, string> = {
-  active:    "bg-emerald-50 text-emerald-700",
-  on_leave:  "bg-amber-50 text-amber-700",
-  probation: "bg-blue-50 text-blue-700",
+  active:    "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  on_leave:  "bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  probation: "bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300",
 };
 const TYPE_CLS: Record<string, string> = {
-  full_time: "bg-violet-50 text-violet-700",
-  part_time: "bg-orange-50 text-orange-700",
-  contract:  "bg-cyan-50 text-cyan-700",
+  full_time: "bg-violet-50 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300",
+  part_time: "bg-orange-50 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300",
+  contract:  "bg-cyan-50 dark:bg-cyan-500/15 text-cyan-700 dark:text-cyan-300",
 };
 const AVATAR_COLORS = [
   "bg-blue-500","bg-violet-500","bg-emerald-500","bg-amber-500",
@@ -85,14 +85,14 @@ function fv(row: StaffRow, s: keyof StaffRow, c: keyof StaffRow): string {
 
 /* ─── helpers ─────────────────────────────────────────────────────────── */
 function Label({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs font-semibold text-gray-600 mb-1">{children}</p>;
+  return <p className="text-xs font-semibold text-muted-foreground mb-1">{children}</p>;
 }
 function FInput({ label, error, ...props }: { label: string; error?: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div>
       <Label>{label}</Label>
       <input {...props}
-        className={`w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition ${error ? "border-red-300 bg-red-50" : "border-gray-200"}`} />
+        className={`w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition ${error ? "border-red-300 dark:border-red-500/30 bg-red-50 dark:bg-red-500/15" : "border-border"}`} />
       {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
     </div>
   );
@@ -103,10 +103,10 @@ function FSelect({ label, error, children, ...props }: { label: string; error?: 
       <Label>{label}</Label>
       <div className="relative">
         <select {...props}
-          className={`w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white transition ${error ? "border-red-300 bg-red-50" : "border-gray-200"}`}>
+          className={`w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-card transition ${error ? "border-red-300 dark:border-red-500/30 bg-red-50 dark:bg-red-500/15" : "border-border"}`}>
           {children}
         </select>
-        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
       </div>
       {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
     </div>
@@ -177,14 +177,14 @@ function AddOutletModal({ open, onClose }: { open: boolean; onClose: () => void 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[92vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div className="relative bg-card rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[92vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Add New Outlet</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Set up a new restaurant outlet or kitchen</p>
+            <h2 className="text-lg font-bold text-foreground">Add New Outlet</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Set up a new restaurant outlet or kitchen</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition">
-            <X size={18} className="text-gray-500" />
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition">
+            <X size={18} className="text-muted-foreground" />
           </button>
         </div>
         <form onSubmit={submit} className="overflow-y-auto px-6 py-5 space-y-4 flex-1">
@@ -194,7 +194,7 @@ function AddOutletModal({ open, onClose }: { open: boolean; onClose: () => void 
               {OUTLET_TYPES.map(({ value, label, icon: Icon }) => (
                 <button key={value} type="button" onClick={() => set("type", value)}
                   className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 text-xs font-medium transition ${
-                    form.type === value ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600 hover:border-gray-300"
+                    form.type === value ? "border-blue-500 bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300" : "border-border text-muted-foreground hover:border-border"
                   }`}>
                   <Icon size={18} />{label}
                 </button>
@@ -231,13 +231,13 @@ function AddOutletModal({ open, onClose }: { open: boolean; onClose: () => void 
           <FInput label="Seating Capacity (optional)" type="number" placeholder="e.g. 80"
             value={form.seatingCapacity} onChange={e => set("seatingCapacity", e.target.value)} min="0" max="9999" />
           {mutation.isError && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+            <div className="bg-red-50 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30 rounded-lg px-4 py-3 text-sm text-red-700 dark:text-red-300">
               Failed to create outlet. Please check the details and try again.
             </div>
           )}
         </form>
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition">Cancel</button>
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-muted rounded-b-2xl">
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted rounded-lg transition">Cancel</button>
           <button onClick={submit} disabled={mutation.isPending}
             className="inline-flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition">
             {mutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
@@ -260,10 +260,10 @@ function StaffList({ staff, activeDept, showOutletLabel = false }: {
     : staff.filter(s => (fv(s, "department_name", "departmentName") || "Unassigned") === activeDept);
 
   if (filtered.length === 0) {
-    return <p className="text-center text-sm text-gray-400 py-5">No staff in this department</p>;
+    return <p className="text-center text-sm text-muted-foreground py-5">No staff in this department</p>;
   }
   return (
-    <div className="bg-gray-50 rounded-xl overflow-hidden divide-y divide-gray-100">
+    <div className="bg-muted rounded-xl overflow-hidden divide-y divide-border">
       {filtered.map(s => {
         const empId     = fv(s, "employee_id", "employeeId");
         const empType   = fv(s, "employment_type", "employmentType");
@@ -275,22 +275,22 @@ function StaffList({ staff, activeDept, showOutletLabel = false }: {
               {initials(s.name)}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate leading-tight">{s.name}</p>
-              <p className="text-xs text-gray-400 truncate">
+              <p className="text-sm font-semibold text-foreground truncate leading-tight">{s.name}</p>
+              <p className="text-xs text-muted-foreground truncate">
                 {position || "—"}
                 {showOutletLabel && s.outletLabel && (
                   <span className="ml-1.5 text-blue-500 font-medium">· {s.outletLabel}</span>
                 )}
               </p>
             </div>
-            <span className="font-mono text-xs text-gray-400 shrink-0 hidden sm:block">{empId || "—"}</span>
+            <span className="font-mono text-xs text-muted-foreground shrink-0 hidden sm:block">{empId || "—"}</span>
             {empType && (
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 hidden md:block ${TYPE_CLS[empType] ?? "bg-gray-100 text-gray-600"}`}>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 hidden md:block ${TYPE_CLS[empType] ?? "bg-muted text-muted-foreground"}`}>
                 {empType.replace(/_/g, " ")}
               </span>
             )}
             {empStatus && (
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${STATUS_CLS[empStatus] ?? "bg-gray-100 text-gray-600"}`}>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${STATUS_CLS[empStatus] ?? "bg-muted text-muted-foreground"}`}>
                 {empStatus.replace(/_/g, " ")}
               </span>
             )}
@@ -317,7 +317,7 @@ function DeptChips({ staff, activeDept, onChange }: {
         return (
           <button key={d} onClick={() => onChange(d)}
             className={`text-xs font-semibold px-3 py-1 rounded-full transition ${
-              activeDept === d ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              activeDept === d ? "bg-blue-600 text-white" : "bg-muted text-muted-foreground hover:bg-border"
             }`}>
             {d} <span className="opacity-70">({count})</span>
           </button>
@@ -344,9 +344,9 @@ function StaffPanel({ outletId, outletCode }: { outletId: string; outletCode: st
       <div className="px-5 pb-5 pt-3 space-y-2">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 animate-pulse">
-            <div className="w-9 h-9 rounded-full bg-gray-200 shrink-0" />
-            <div className="flex-1 h-3 bg-gray-200 rounded" />
-            <div className="w-20 h-3 bg-gray-100 rounded" />
+            <div className="w-9 h-9 rounded-full bg-border shrink-0" />
+            <div className="flex-1 h-3 bg-border rounded" />
+            <div className="w-20 h-3 bg-muted rounded" />
           </div>
         ))}
       </div>
@@ -355,7 +355,7 @@ function StaffPanel({ outletId, outletCode }: { outletId: string; outletCode: st
 
   if (staff.length === 0) {
     return (
-      <div className="px-5 pb-5 pt-3 text-center text-sm text-gray-400">
+      <div className="px-5 pb-5 pt-3 text-center text-sm text-muted-foreground">
         No staff assigned to this outlet
       </div>
     );
@@ -397,9 +397,9 @@ function CityStaffPanel({ outlets }: { outlets: OutletRow[] }) {
       <div className="px-5 pb-5 pt-3 space-y-2">
         {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 animate-pulse">
-            <div className="w-9 h-9 rounded-full bg-blue-100 shrink-0" />
-            <div className="flex-1 h-3 bg-gray-200 rounded" />
-            <div className="w-24 h-3 bg-gray-100 rounded" />
+            <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-500/20 shrink-0" />
+            <div className="flex-1 h-3 bg-border rounded" />
+            <div className="w-24 h-3 bg-muted rounded" />
           </div>
         ))}
       </div>
@@ -407,7 +407,7 @@ function CityStaffPanel({ outlets }: { outlets: OutletRow[] }) {
   }
 
   if (allStaff.length === 0) {
-    return <div className="px-5 pb-4 text-center text-sm text-gray-400">No staff found in this city</div>;
+    return <div className="px-5 pb-4 text-center text-sm text-muted-foreground">No staff found in this city</div>;
   }
 
   return (
@@ -417,9 +417,9 @@ function CityStaffPanel({ outlets }: { outlets: OutletRow[] }) {
         {outlets.map((o, i) => {
           const count = results[i]?.data?.data?.length ?? 0;
           return (
-            <span key={o.id} className="inline-flex items-center gap-1 text-xs bg-white border border-gray-200 text-gray-600 font-medium px-2.5 py-1 rounded-full">
+            <span key={o.id} className="inline-flex items-center gap-1 text-xs bg-card border border-border text-muted-foreground font-medium px-2.5 py-1 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
-              {o.name} <span className="text-gray-400">({count})</span>
+              {o.name} <span className="text-muted-foreground">({count})</span>
             </span>
           );
         })}
@@ -451,12 +451,12 @@ function OutletAccordion({ outlet, expanded, onToggle, onDelete }: {
   const staffCount= Number(outlet.active_staff_count ?? outlet.activeStaffCount ?? 0);
   const typeEntry = OUTLET_TYPES.find(t => t.value === outlet.type);
   const Icon      = typeEntry?.icon ?? Building2;
-  const iconCls   = TYPE_ICON_COLORS[outlet.type] ?? "bg-gray-100 text-gray-600";
-  const typeCls   = TYPE_COLORS[outlet.type] ?? "bg-gray-50 text-gray-600";
+  const iconCls   = TYPE_ICON_COLORS[outlet.type] ?? "bg-muted text-muted-foreground";
+  const typeCls   = TYPE_COLORS[outlet.type] ?? "bg-muted text-muted-foreground";
   const typeLabel = typeEntry?.label ?? outlet.type;
 
   return (
-    <div className={`bg-white rounded-2xl border transition-all ${expanded ? "border-blue-300 shadow-md" : "border-gray-200 hover:border-gray-300"}`}>
+    <div className={`bg-card rounded-2xl border transition-all ${expanded ? "border-blue-300 dark:border-blue-500/30 shadow-md" : "border-border hover:border-border"}`}>
       <div className="px-5 py-4 flex items-center gap-4">
         {/* Clickable area */}
         <button onClick={onToggle} className="flex items-center gap-4 flex-1 min-w-0 text-left">
@@ -465,14 +465,14 @@ function OutletAccordion({ outlet, expanded, onToggle, onDelete }: {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="font-bold text-gray-900 text-sm leading-tight">{outlet.name}</p>
+              <p className="font-bold text-foreground text-sm leading-tight">{outlet.name}</p>
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${typeCls}`}>{typeLabel}</span>
               {isActive
-                ? <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-50 text-emerald-700">Active</span>
-                : <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-500">Inactive</span>
+                ? <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">Active</span>
+                : <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-muted text-muted-foreground">Inactive</span>
               }
             </div>
-            <p className="text-xs text-gray-400 mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5">
               {brandName} · <span className="font-mono">{outlet.code}</span>
               {outlet.address?.city && <> · <MapPin size={10} className="inline mr-0.5" />{outlet.address.city}</>}
             </p>
@@ -481,11 +481,11 @@ function OutletAccordion({ outlet, expanded, onToggle, onDelete }: {
 
         {/* Staff count */}
         <div className="text-right shrink-0">
-          <div className="flex items-center gap-1.5 text-gray-500">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
             <Users size={13} />
-            <span className="text-sm font-semibold text-gray-700">{staffCount}</span>
+            <span className="text-sm font-semibold text-foreground">{staffCount}</span>
           </div>
-          <p className="text-xs text-gray-400">staff</p>
+          <p className="text-xs text-muted-foreground">staff</p>
         </div>
 
         {/* Delete / confirm */}
@@ -499,27 +499,27 @@ function OutletAccordion({ outlet, expanded, onToggle, onDelete }: {
               {deleteMutation.isPending ? <Loader2 size={11} className="animate-spin" /> : "Yes, delete"}
             </button>
             <button onClick={() => setConfirmDelete(false)}
-              className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold px-2.5 py-1.5 rounded-lg transition">
+              className="text-xs bg-muted hover:bg-border text-muted-foreground font-semibold px-2.5 py-1.5 rounded-lg transition">
               Cancel
             </button>
           </div>
         ) : (
           <button
             onClick={e => { e.stopPropagation(); setConfirmDelete(true); }}
-            className="p-2 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition shrink-0">
+            className="p-2 rounded-lg text-muted-foreground/60 hover:text-red-500 hover:bg-red-50 transition shrink-0">
             <Trash2 size={15} />
           </button>
         )}
 
         {/* Chevron */}
-        <button onClick={onToggle} className={`ml-1 text-gray-400 transition-transform duration-200 shrink-0 ${expanded ? "rotate-180" : ""}`}>
+        <button onClick={onToggle} className={`ml-1 text-muted-foreground transition-transform duration-200 shrink-0 ${expanded ? "rotate-180" : ""}`}>
           <ChevronDown size={16} />
         </button>
       </div>
 
       {expanded && (
         <>
-          <div className="border-t border-gray-100 mx-5" />
+          <div className="border-t border-border mx-5" />
           <StaffPanel outletId={outlet.id} outletCode={outlet.code} />
         </>
       )}
@@ -569,8 +569,8 @@ export default function OutletsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Outlets</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <h1 className="text-2xl font-bold text-foreground">Outlets</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
               {isLoading ? "Loading…" : `${totalOutlets} outlets · ${cities.length} cities · ${totalStaff} staff`}
             </p>
           </div>
@@ -592,7 +592,7 @@ export default function OutletsPage() {
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition border ${
                     active
                       ? "bg-blue-600 text-white border-blue-600 shadow"
-                      : "bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100"
+                      : "bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-100 dark:border-blue-500/30 hover:bg-blue-100"
                   }`}>
                   <MapPin size={11} />
                   {city}: {cityOutlets.length} outlets · {cityStaff} staff
@@ -607,21 +607,21 @@ export default function OutletsPage() {
         {isLoading ? (
           <div className="space-y-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="bg-white rounded-2xl border border-gray-200 px-5 py-4 animate-pulse flex items-center gap-4">
-                <div className="w-10 h-10 bg-gray-200 rounded-xl shrink-0" />
+              <div key={i} className="bg-card rounded-2xl border border-border px-5 py-4 animate-pulse flex items-center gap-4">
+                <div className="w-10 h-10 bg-border rounded-xl shrink-0" />
                 <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-gray-200 rounded w-1/3" />
-                  <div className="h-3 bg-gray-100 rounded w-1/2" />
+                  <div className="h-4 bg-border rounded w-1/3" />
+                  <div className="h-3 bg-muted rounded w-1/2" />
                 </div>
-                <div className="h-6 w-12 bg-gray-100 rounded" />
+                <div className="h-6 w-12 bg-muted rounded" />
               </div>
             ))}
           </div>
         ) : isError ? (
           <div className="flex flex-col items-center gap-3 py-24 text-center">
             <span className="text-4xl">⚠️</span>
-            <p className="font-semibold text-gray-700">Failed to load outlets</p>
-            <p className="text-sm text-gray-400">Make sure the API server is running on port 4000</p>
+            <p className="font-semibold text-foreground">Failed to load outlets</p>
+            <p className="text-sm text-muted-foreground">Make sure the API server is running on port 4000</p>
           </div>
         ) : (
           <div className="space-y-8">
@@ -636,13 +636,13 @@ export default function OutletsPage() {
                   <div className="flex items-center gap-3 mb-3">
                     <button onClick={() => toggleCity(city)} className="flex items-center gap-2 group">
                       <MapPin size={15} className="text-blue-500 shrink-0" />
-                      <h2 className="text-base font-bold text-gray-800 group-hover:text-blue-600 transition">{city}</h2>
-                      <ChevronDown size={14} className={`text-gray-400 transition-transform ${cityOpen ? "rotate-180" : ""}`} />
+                      <h2 className="text-base font-bold text-foreground group-hover:text-blue-600 transition">{city}</h2>
+                      <ChevronDown size={14} className={`text-muted-foreground transition-transform ${cityOpen ? "rotate-180" : ""}`} />
                     </button>
-                    <span className="text-xs text-gray-400 font-medium">
+                    <span className="text-xs text-muted-foreground font-medium">
                       {cityOutlets.length} outlets · {cityStaff} staff
                     </span>
-                    <div className="flex-1 h-px bg-gray-200" />
+                    <div className="flex-1 h-px bg-border" />
                     {cityOpen && (
                       <span className="text-xs font-semibold text-blue-600">All {cityStaff} staff shown below</span>
                     )}
@@ -650,10 +650,10 @@ export default function OutletsPage() {
 
                   {/* City-wide staff panel */}
                   {cityOpen && (
-                    <div className="bg-white rounded-2xl border border-blue-200 shadow-sm mb-4 overflow-hidden">
-                      <div className="px-5 py-3 bg-blue-50 border-b border-blue-100 flex items-center gap-2">
+                    <div className="bg-card rounded-2xl border border-blue-200 dark:border-blue-500/30 shadow-sm mb-4 overflow-hidden">
+                      <div className="px-5 py-3 bg-blue-50 dark:bg-blue-500/15 border-b border-blue-100 dark:border-blue-500/30 flex items-center gap-2">
                         <Users size={14} className="text-blue-600" />
-                        <p className="text-sm font-bold text-blue-800">All Staff in {city}</p>
+                        <p className="text-sm font-bold text-blue-800 dark:text-blue-300">All Staff in {city}</p>
                         <span className="text-xs text-blue-400 ml-auto">Click a department to filter</span>
                       </div>
                       <CityStaffPanel outlets={cityOutlets} />
