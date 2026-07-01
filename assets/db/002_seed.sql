@@ -84,8 +84,10 @@ INSERT INTO positions (id, tenant_id, name, level, default_hours_week) VALUES
   ('40000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000001', 'Part-Time Crew', 1, 20.0);
 
 -- ── Super Admin User ──────────────────────────────────────────
--- Password: Admin@123  (bcrypt hash for demo only — CHANGE IN PROD)
-INSERT INTO users (id, tenant_id, email, password_hash, name, role, outlet_ids) VALUES
+-- Seeded with a bootstrap password that MUST be changed on first login
+-- (must_change_password = true). Do not document or rely on this value in
+-- production — reset it immediately after the first deploy.
+INSERT INTO users (id, tenant_id, email, password_hash, name, role, outlet_ids, must_change_password) VALUES
   ('50000000-0000-0000-0000-000000000001',
    '00000000-0000-0000-0000-000000000001',
    'admin@workforceiq.app',
@@ -94,17 +96,19 @@ INSERT INTO users (id, tenant_id, email, password_hash, name, role, outlet_ids) 
    'super_admin',
    ARRAY['20000000-0000-0000-0000-000000000001',
          '20000000-0000-0000-0000-000000000002',
-         '20000000-0000-0000-0000-000000000003']::UUID[]);
+         '20000000-0000-0000-0000-000000000003']::UUID[],
+   true);
 
 -- Outlet Manager for NH-KL01
-INSERT INTO users (id, tenant_id, email, password_hash, name, role, outlet_ids) VALUES
+INSERT INTO users (id, tenant_id, email, password_hash, name, role, outlet_ids, must_change_password) VALUES
   ('50000000-0000-0000-0000-000000000002',
    '00000000-0000-0000-0000-000000000001',
    'manager.klsentral@noodlehouse.my',
    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj2QwKfUL9Ni',
    'Ahmad Razif',
    'outlet_manager',
-   ARRAY['20000000-0000-0000-0000-000000000001']::UUID[]);
+   ARRAY['20000000-0000-0000-0000-000000000001']::UUID[],
+   true);
 
 -- ── Leave Type Configs ────────────────────────────────────────
 INSERT INTO leave_type_configs (tenant_id, type, name, annual_entitlement, carry_forward_max, requires_approval, requires_document, min_notice_days, is_paid) VALUES

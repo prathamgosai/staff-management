@@ -3,6 +3,8 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { ScheduleModule } from "@nestjs/schedule";
 import { BullModule } from "@nestjs/bull";
+import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
+import { APP_GUARD } from "@nestjs/core";
 import { AuthModule } from "./modules/auth/auth.module";
 import { StaffModule } from "./modules/staff/staff.module";
 import { OutletModule } from "./modules/outlet/outlet.module";
@@ -14,6 +16,7 @@ import { ForecastingModule } from "./modules/forecasting/forecasting.module";
 import { AllocationModule } from "./modules/allocation/allocation.module";
 import { NotificationModule } from "./modules/notification/notification.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
+import { RolesModule } from "./modules/roles/roles.module";
 import { DatabaseModule } from "./database/database.module";
 
 @Module({
@@ -21,6 +24,9 @@ import { DatabaseModule } from "./database/database.module";
     ConfigModule.forRoot({ isGlobal: true, envFilePath: "../../.env" }),
     EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
+    // Global IP rate limit (generous default so the SPA isn't throttled); the
+    // login route adds a much stricter per-IP limit (see auth.controller.ts).
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -43,6 +49,11 @@ import { DatabaseModule } from "./database/database.module";
     AllocationModule,
     NotificationModule,
     DashboardModule,
+    RolesModule,
+  ],
+  providers: [
+    // Apply rate limiting across the whole API.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

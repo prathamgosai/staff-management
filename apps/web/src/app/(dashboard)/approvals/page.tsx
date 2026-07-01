@@ -6,6 +6,7 @@ import { apiClient } from "@/lib/api-client";
 import { format } from "date-fns";
 import { UserCheck, UserX, Ticket, Loader2, RefreshCw, ShieldCheck, Bell } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
+import { isAdminRole } from "@workforceiq/shared";
 
 interface PendingUser {
   id: string;
@@ -20,7 +21,7 @@ interface PendingUser {
 
 export default function ApprovalsPage() {
   const qc = useQueryClient();
-  const isAdmin = useAuthStore((s) => s.user?.role === "super_admin");
+  const isAdmin = useAuthStore((s) => isAdminRole(s.user?.role));
   const [actingId, setActingId] = useState<string | null>(null);
   const [actingAction, setActingAction] = useState<"approve" | "reject" | null>(null);
 

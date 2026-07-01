@@ -18,7 +18,9 @@ Everything lives in the git-ignored `.services\` folder (binaries + data). The
 .\run-app.ps1
 ```
 
-This ensures Postgres + Redis are running, **frees ports 4000/3000 so you never get `EADDRINUSE`**, and launches the API and Web each in its own window. Safe to re-run anytime. When the Web window says `Ready`, open http://localhost:3000 and sign in with `admin@workforceiq.app` / `Admin@123`.
+This ensures Postgres + Redis are running, **frees ports 4000/3000 so you never get `EADDRINUSE`**, and launches the API and Web each in its own window. Safe to re-run anytime. When the Web window says `Ready`, open http://localhost:3000 and sign in as the seeded admin (`admin@workforceiq.app`).
+
+> **First login forces a password change.** The seeded admin ships with a bootstrap password that the app requires you to replace on first sign-in (the account is flagged `must_change_password`). For a fresh database, set/reset the bootstrap password yourself before going live — never rely on a shared default. See [Secrets & credentials](#secrets--credentials) below.
 
 ### Or start things manually
 ```powershell
@@ -58,6 +60,26 @@ reboot just run `.\start-services.ps1` again before `pnpm dev`.
 - **Old Docker setup**: still intact (containers stopped, volumes kept) if you ever
   want it back: `docker compose up -d postgres redis`. To reclaim that disk space
   later: `docker compose down -v`.
-- **Superuser**: the local Postgres superuser is `postgres` / `postgres`; the app
-  connects as `workforceiq_user` / `change_me_in_production` (matches `.env`).
-```
+- **Database credentials**: the app connects as the `workforceiq_user` role using
+  the password in `.env` (`DB_PASSWORD`). Don't hardcode it anywhere or paste it
+  into docs — see [Secrets & credentials](#secrets--credentials).
+
+## Secrets & credentials
+
+All secrets live in the git-ignored `.env` (never committed). `.env.example` holds
+placeholders only.
+
+- **Generate strong secrets** (run once, paste into `.env`):
+  ```powershell
+  node -e "console.log('JWT_SECRET=' + require('crypto').randomBytes(48).toString('base64url'))"
+  node -e "console.log('JWT_REFRESH_SECRET=' + require('crypto').randomBytes(48).toString('base64url'))"
+  node -e "console.log('DB_PASSWORD=' + require('crypto').randomBytes(24).toString('base64url'))"
+  ```
+- **Rotate the database password** (must match `.env` `DB_PASSWORD`):
+  ```sql
+  ALTER USER workforceiq_user PASSWORD '<new-strong-password>';
+  ```
+  Then restart the API so it reconnects with the new value.
+- **Admin password**: set by reseeding or via the super-admin “reset password” action.
+  First login always forces a change. There is no shared default password.
+

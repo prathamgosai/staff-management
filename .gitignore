@@ -60,3 +60,17 @@ env/
 
 # Local backing services (Postgres + Redis binaries & data) for running without Docker
 .services/
+
+# Real employee PII & credentials — NEVER commit (this repo is public).
+# Spreadsheets/exports of real staff data:
+*.csv
+*.xlsx
+*.xls
+# DB migrations that embed real staff emails, phones and password hashes:
+assets/db/004_staff_contacts.sql
+assets/db/004_staff_contacts_ROLLBACK.sql
+assets/db/005_staff_contacts_unmatched.sql
+assets/db/006_staff_exit_and_uncertain.sql
+assets/db/006_staff_exit_ROLLBACK.sql
+assets/db/007_staff_logins.sql
+assets/db/007_staff_logins_ROLLBACK.sql

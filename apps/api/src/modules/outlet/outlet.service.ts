@@ -1,14 +1,14 @@
-import { Injectable, NotFoundException, Inject } from "@nestjs/common";
+import { Injectable, NotFoundException, BadRequestException, Inject } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
-import type { Role } from "@workforceiq/shared";
+import { isAdminRole, type Role } from "@workforceiq/shared";
 
 @Injectable()
 export class OutletService {
   constructor(@Inject(DB_POOL) private readonly db: Pool) {}
 
   async findAll(tenantId: string, role: Role, outletIds: string[]) {
-    const isSuperAdmin = role === "super_admin" || role === "operations_head" || role === "hr_manager";
+    const isSuperAdmin = isAdminRole(role);
     const query = isSuperAdmin
       ? `SELECT o.*, b.name AS brand_name, b.logo_url AS brand_logo,
                COUNT(s.id) FILTER (WHERE s.employment_status = 'active') AS active_staff_count
@@ -79,20 +79,53 @@ export class OutletService {
   }
 
   async create(tenantId: string, dto: {
-    brandId: string; code: string; name: string; type: string;
+    brandId?: string; brandName?: string; code: string; name: string; type: string;
     address: Record<string, string>; contact: Record<string, string>;
     seatingCapacity?: number;
   }) {
-    const result = await this.db.query(
-      `INSERT INTO outlets (tenant_id, brand_id, code, name, type, address, contact, seating_capacity, is_active)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true) RETURNING id, code, name, type, is_active`,
-      [
-        tenantId, dto.brandId, dto.code.toUpperCase(), dto.name, dto.type,
-        JSON.stringify(dto.address), JSON.stringify(dto.contact),
-        dto.seatingCapacity ?? null,
-      ],
-    );
-    return { data: result.rows[0] };
+    const client = await (this.db as Pool & { connect(): Promise<{ query: Pool["query"]; release(): void }> }).connect();
+    try {
+      await client.query("BEGIN");
+
+      // Resolve the brand: use the chosen brandId, or create/reuse one from a
+      // typed-in brand name (so a new restaurant brand can be added inline).
+      let brandId = dto.brandId;
+      if (!brandId) {
+        const newName = (dto.brandName ?? "").trim();
+        if (!newName) throw new BadRequestException("A brand is required — pick one or enter a new brand name.");
+        const existing = await client.query(
+          "SELECT id FROM brands WHERE tenant_id = $1 AND lower(name) = lower($2) AND is_active = true LIMIT 1",
+          [tenantId, newName],
+        );
+        if (existing.rows[0]) {
+          brandId = existing.rows[0].id;
+        } else {
+          const ins = await client.query(
+            "INSERT INTO brands (tenant_id, name) VALUES ($1, $2) RETURNING id",
+            [tenantId, newName],
+          );
+          brandId = ins.rows[0].id;
+        }
+      }
+
+      const result = await client.query(
+        `INSERT INTO outlets (tenant_id, brand_id, code, name, type, address, contact, seating_capacity, is_active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true) RETURNING id, code, name, type, is_active`,
+        [
+          tenantId, brandId, dto.code.toUpperCase(), dto.name, dto.type,
+          JSON.stringify(dto.address), JSON.stringify(dto.contact),
+          dto.seatingCapacity ?? null,
+        ],
+      );
+
+      await client.query("COMMIT");
+      return { data: result.rows[0] };
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      (client as { release(): void }).release();
+    }
   }
 
   async getLaborCostSummary(outletId: string, startDate: string, endDate: string) {

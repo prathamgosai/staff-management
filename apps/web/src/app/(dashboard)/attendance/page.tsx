@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { format } from "date-fns";
-import { Plus, X, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { Plus, X, Clock, CheckCircle2, AlertCircle, Search, ChevronDown } from "lucide-react";
 
 interface AttendanceRecord {
   id: string; staff_name: string; employee_id: string;
@@ -12,7 +12,7 @@ interface AttendanceRecord {
   regular_hours: number; overtime_hours: number;
   late_minutes: number; status: string;
 }
-interface StaffRow { id: string; name: string; employee_id: string; }
+interface StaffRow { id: string; name: string; employeeId: string; }
 
 const STATUS_OPTIONS = [
   { value: "present",        label: "Present" },
@@ -33,6 +33,70 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const EMPTY_FORM = { staffId: "", clockIn: "", clockOut: "", status: "present", note: "" };
+
+/* Searchable staff dropdown used by the Mark Attendance modal. */
+function StaffPicker({ staff, value, onChange }: {
+  staff: StaffRow[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close when clicking outside the picker.
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  const selected = staff.find(s => s.id === value);
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? staff.filter(s => s.name?.toLowerCase().includes(q) || (s.employeeId ?? "").toLowerCase().includes(q))
+    : staff;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-2 border border-gray-300 rounded-xl px-3 py-2.5 text-sm bg-white text-left outline-none focus:ring-2 focus:ring-blue-500">
+        <span className={selected ? "text-gray-900 truncate" : "text-gray-400"}>
+          {selected ? `${selected.name}${selected.employeeId ? ` · #${selected.employeeId}` : ""}` : "Select staff member…"}
+        </span>
+        <ChevronDown size={16} className={`text-gray-400 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-gray-100">
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input autoFocus value={query} onChange={e => setQuery(e.target.value)}
+                placeholder="Search staff…"
+                className="w-full pl-8 pr-2 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+          <div className="max-h-56 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-4 text-center text-sm text-gray-400">No staff found</p>
+            ) : filtered.map(s => (
+              <button key={s.id} type="button"
+                onClick={() => { onChange(s.id); setOpen(false); setQuery(""); }}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center justify-between gap-2 ${s.id === value ? "bg-blue-50" : ""}`}>
+                <span className="font-medium text-gray-800 truncate">{s.name}</span>
+                {s.employeeId && <span className="text-xs text-gray-400 shrink-0">#{s.employeeId}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AttendancePage() {
   const today = format(new Date(), "yyyy-MM-dd");
@@ -235,15 +299,11 @@ export default function AttendancePage() {
               {/* Staff */}
               <div>
                 <label className="text-xs font-semibold text-gray-700 block mb-1.5">Staff Member <span className="text-red-500">*</span></label>
-                <select
+                <StaffPicker
+                  staff={staffList}
                   value={form.staffId}
-                  onChange={e => setForm(f => ({ ...f, staffId: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">Select staff…</option>
-                  {staffList.map(s => (
-                    <option key={s.id} value={s.id}>{s.name} (#{s.employee_id})</option>
-                  ))}
-                </select>
+                  onChange={id => setForm(f => ({ ...f, staffId: id }))}
+                />
               </div>
 
               {/* Status */}

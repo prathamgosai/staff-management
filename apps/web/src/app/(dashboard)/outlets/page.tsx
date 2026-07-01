@@ -10,6 +10,10 @@ import {
   MoreHorizontal, ArrowUpRight, ChevronRight, Trash2,
 } from "lucide-react";
 
+/* ─── constants ───────────────────────────────────────────────────────── */
+// Sentinel value for the "add a new brand" option in the Brand dropdown.
+const NEW_BRAND = "__new__";
+
 /* ─── types ──────────────────────────────────────────────────────────── */
 interface Brand { id: string; name: string; }
 interface OutletRow {
@@ -113,9 +117,10 @@ function FSelect({ label, error, children, ...props }: { label: string; error?: 
 function AddOutletModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
-    brandId: "", code: "", name: "", type: "dine_in",
+    brandId: "", newBrandName: "", code: "", name: "", type: "dine_in",
     city: "", state: "", phone: "", email: "", seatingCapacity: "",
   });
+  const addingNewBrand = form.brandId === NEW_BRAND;
   const [errors, setErrors] = useState<Record<string, string>>({});
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
@@ -126,20 +131,25 @@ function AddOutletModal({ open, onClose }: { open: boolean; onClose: () => void 
   });
 
   const mutation = useMutation({
-    mutationFn: (body: typeof form) =>
-      apiClient.post("/outlets", {
-        brandId: body.brandId,
+    mutationFn: (body: typeof form) => {
+      const isNew = body.brandId === NEW_BRAND;
+      return apiClient.post("/outlets", {
+        // Send a real brandId, or a typed-in brandName for a brand-new brand.
+        brandId: isNew ? undefined : body.brandId,
+        brandName: isNew ? body.newBrandName.trim() : undefined,
         code: body.code.toUpperCase(),
         name: body.name,
         type: body.type,
         address: { city: body.city, state: body.state, country: "IN" },
         contact: { phone: body.phone || undefined, email: body.email || undefined },
         seatingCapacity: body.seatingCapacity ? parseInt(body.seatingCapacity) : undefined,
-      }),
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["outlets"] });
+      qc.invalidateQueries({ queryKey: ["brands"] });
       onClose();
-      setForm({ brandId:"",code:"",name:"",type:"dine_in",city:"",state:"",phone:"",email:"",seatingCapacity:"" });
+      setForm({ brandId:"",newBrandName:"",code:"",name:"",type:"dine_in",city:"",state:"",phone:"",email:"",seatingCapacity:"" });
       setErrors({});
     },
   });
@@ -147,6 +157,7 @@ function AddOutletModal({ open, onClose }: { open: boolean; onClose: () => void 
   function validate() {
     const e: Record<string, string> = {};
     if (!form.brandId) e.brandId = "Select a brand";
+    else if (form.brandId === NEW_BRAND && !form.newBrandName.trim()) e.newBrandName = "Enter the new brand name";
     if (!form.code.trim()) e.code = "Outlet code is required";
     else if (!/^[A-Za-z0-9-]+$/.test(form.code)) e.code = "Only letters, numbers, and hyphens";
     if (!form.name.trim()) e.name = "Outlet name is required";
@@ -193,7 +204,12 @@ function AddOutletModal({ open, onClose }: { open: boolean; onClose: () => void 
           <FSelect label="Brand *" value={form.brandId} onChange={e => set("brandId", e.target.value)} error={errors.brandId}>
             <option value="">Select brand…</option>
             {brandData?.data?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            <option value={NEW_BRAND}>＋ Add a new brand…</option>
           </FSelect>
+          {addingNewBrand && (
+            <FInput label="New Brand Name *" placeholder="e.g. Spice Route" value={form.newBrandName}
+              onChange={e => set("newBrandName", e.target.value)} error={errors.newBrandName} autoFocus maxLength={60} />
+          )}
           <div className="grid grid-cols-2 gap-4">
             <FInput label="Outlet Code *" placeholder="e.g. CAP-PIL" value={form.code}
               onChange={e => set("code", e.target.value.toUpperCase())} error={errors.code} maxLength={12} />

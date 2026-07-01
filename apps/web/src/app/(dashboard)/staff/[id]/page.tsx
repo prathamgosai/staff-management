@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { fileToAvatarDataUrl } from "@/lib/image";
 import { useAuthStore } from "@/store/auth.store";
+import { isAdminRole } from "@workforceiq/shared";
 import Link from "next/link";
 import { useState, useRef } from "react";
 import {
@@ -324,7 +325,7 @@ export default function StaffDetailPage() {
   });
 
   const staff = data?.data;
-  const isAdmin = currentUser?.role === "super_admin";
+  const isAdmin = isAdminRole(currentUser?.role);
   const isSelf = !!staff && !!currentUser && staff.userId === currentUser.id;
   const canEditProfile = isAdmin || isSelf; // super admin edits anyone; others edit only their own profile
 

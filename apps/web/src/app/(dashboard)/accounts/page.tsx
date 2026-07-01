@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth.store";
+import { isAdminRole, canAssignRoles, ASSIGNABLE_ROLES, ROLE_META } from "@workforceiq/shared";
 import { format } from "date-fns";
 import {
-  KeyRound, Search, Loader2, X, Check, Copy, ShieldCheck, RefreshCw, Mail, Hash,
+  KeyRound, Search, Loader2, X, Check, Copy, ShieldCheck, RefreshCw, Mail, Hash, UserCog,
 } from "lucide-react";
 
 interface Account {
@@ -24,12 +25,11 @@ interface Account {
 
 const ROLE_CLS: Record<string, string> = {
   super_admin: "bg-red-100 text-red-700",
-  operations_head: "bg-purple-100 text-purple-700",
-  hr_manager: "bg-indigo-100 text-indigo-700",
-  outlet_manager: "bg-blue-100 text-blue-700",
-  department_head: "bg-cyan-100 text-cyan-700",
+  admin: "bg-purple-100 text-purple-700",
+  hr: "bg-indigo-100 text-indigo-700",
+  head_of_house: "bg-blue-100 text-blue-700",
+  chef: "bg-cyan-100 text-cyan-700",
   employee: "bg-gray-100 text-gray-600",
-  viewer: "bg-gray-100 text-gray-500",
 };
 
 function statusOf(a: Account): { label: string; cls: string } {
@@ -150,15 +150,33 @@ function ResetPasswordModal({ account, onClose }: { account: Account; onClose: (
 
 /* ─── Page ────────────────────────────────────────────────────────────── */
 export default function AccountsPage() {
-  const isAdmin = useAuthStore((s) => s.user?.role === "super_admin");
+  const myRole = useAuthStore((s) => s.user?.role ?? null);
+  const isAdmin = isAdminRole(myRole);
+  const canAssign = canAssignRoles(myRole); // only super_admin / HR may change roles
+  const isSuperAdmin = myRole === "super_admin"; // only a super admin may reset a super admin password
+  const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [resetting, setResetting] = useState<Account | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkRole, setBulkRole] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
 
   const { data, isLoading, refetch, isFetching } = useQuery<{ data: Account[] }>({
     queryKey: ["accounts"],
     queryFn: () => apiClient.get("/auth/accounts").then(r => r.data),
     staleTime: 30_000,
     enabled: isAdmin,
+  });
+
+  const changeRole = useMutation({
+    mutationFn: (vars: { userIds: string[]; role: string }) => apiClient.put("/auth/accounts/role", vars),
+    onSuccess: (res) => {
+      const n = (res.data?.data?.updated as number | undefined) ?? 0;
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      setSelectedIds(new Set());
+      setBulkRole("");
+      setNotice(`Updated access for ${n} account${n === 1 ? "" : "s"}.`);
+    },
   });
 
   if (!isAdmin) {
@@ -168,7 +186,7 @@ export default function AccountsPage() {
           <ShieldCheck size={26} strokeWidth={1.5} className="text-red-400" />
         </div>
         <p className="font-bold text-gray-700">Restricted area</p>
-        <p className="text-sm text-gray-400 mt-1">Only super admins can view staff accounts.</p>
+        <p className="text-sm text-gray-400 mt-1">Only administrators can view staff accounts.</p>
       </div>
     );
   }
@@ -177,6 +195,27 @@ export default function AccountsPage() {
   const rows = (data?.data ?? []).filter(a =>
     !q || a.email.toLowerCase().includes(q) || a.name.toLowerCase().includes(q) || (a.employee_id ?? "").toLowerCase().includes(q),
   );
+
+  // Super Admin accounts can't be reassigned, so they're never selectable.
+  const selectableRows = rows.filter(a => a.role !== "super_admin");
+  const allSelected = selectableRows.length > 0 && selectableRows.every(a => selectedIds.has(a.id));
+  const toggleAll = () => {
+    setNotice(null);
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (selectableRows.every(a => next.has(a.id))) selectableRows.forEach(a => next.delete(a.id));
+      else selectableRows.forEach(a => next.add(a.id));
+      return next;
+    });
+  };
+  const toggleOne = (id: string) => {
+    setNotice(null);
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   return (
     <>
@@ -191,7 +230,7 @@ export default function AccountsPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Staff Accounts</h1>
-              <p className="text-sm text-gray-500 mt-0.5">{data?.data?.length ?? 0} accounts · login IDs &amp; password resets</p>
+              <p className="text-sm text-gray-500 mt-0.5">{data?.data?.length ?? 0} accounts · login IDs, password resets{canAssign ? " &amp; access" : ""}</p>
             </div>
           </div>
           <button onClick={() => refetch()}
@@ -214,12 +253,49 @@ export default function AccountsPage() {
             className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" />
         </div>
 
+        {/* Success notice */}
+        {notice && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 text-sm text-emerald-700 flex items-center gap-2">
+            <Check size={15} className="shrink-0" /> {notice}
+          </div>
+        )}
+
+        {/* Bulk "change access" bar — only super_admin / HR see this */}
+        {canAssign && selectedIds.size > 0 && (
+          <div className="sticky top-2 z-10 flex items-center gap-3 flex-wrap bg-indigo-600 text-white rounded-xl px-4 py-3 shadow-lg">
+            <UserCog size={16} className="shrink-0" />
+            <span className="font-semibold text-sm">{selectedIds.size} selected</span>
+            <span className="text-indigo-200 text-sm hidden sm:inline">— set access to</span>
+            <select value={bulkRole} onChange={e => setBulkRole(e.target.value)}
+              className="text-sm rounded-lg px-2.5 py-1.5 text-gray-800 outline-none focus:ring-2 focus:ring-white">
+              <option value="">Choose account type…</option>
+              {ASSIGNABLE_ROLES.map(r => <option key={r} value={r}>{ROLE_META[r].label}</option>)}
+            </select>
+            <button onClick={() => changeRole.mutate({ userIds: [...selectedIds], role: bulkRole })}
+              disabled={!bulkRole || changeRole.isPending}
+              className="inline-flex items-center gap-1.5 bg-white text-indigo-700 hover:bg-indigo-50 text-sm font-semibold px-3.5 py-1.5 rounded-lg disabled:opacity-60 disabled:cursor-not-allowed transition">
+              {changeRole.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              Apply
+            </button>
+            <button onClick={() => { setSelectedIds(new Set()); setBulkRole(""); }}
+              className="text-indigo-100 hover:text-white text-sm">Clear</button>
+            {changeRole.isError && <span className="text-red-100 text-xs w-full">Could not update access. Please try again.</span>}
+          </div>
+        )}
+
         {/* Table */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
+                  {canAssign && (
+                    <th className="px-4 py-3.5 w-10">
+                      <input type="checkbox" checked={allSelected} onChange={toggleAll}
+                        aria-label="Select all"
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 align-middle" />
+                    </th>
+                  )}
                   {["Login ID", "Employee ID", "Role", "Status", "Last login", ""].map((h, i) => (
                     <th key={i} className={`px-4 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide ${i === 5 ? "text-right" : "text-left"}`}>{h}</th>
                   ))}
@@ -227,14 +303,24 @@ export default function AccountsPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {isLoading ? (
-                  <tr><td colSpan={6} className="py-16 text-center text-gray-400"><Loader2 size={24} className="animate-spin mx-auto" /></td></tr>
+                  <tr><td colSpan={canAssign ? 7 : 6} className="py-16 text-center text-gray-400"><Loader2 size={24} className="animate-spin mx-auto" /></td></tr>
                 ) : rows.length === 0 ? (
-                  <tr><td colSpan={6} className="py-16 text-center text-gray-400 text-sm">No accounts found</td></tr>
+                  <tr><td colSpan={canAssign ? 7 : 6} className="py-16 text-center text-gray-400 text-sm">No accounts found</td></tr>
                 ) : (
                   rows.map(a => {
                     const st = statusOf(a);
                     return (
-                      <tr key={a.id} className="hover:bg-blue-50/30 transition-colors">
+                      <tr key={a.id} className={`hover:bg-blue-50/30 transition-colors ${selectedIds.has(a.id) ? "bg-indigo-50/40" : ""}`}>
+                        {canAssign && (
+                          <td className="px-4 py-3.5">
+                            <input type="checkbox"
+                              checked={selectedIds.has(a.id)}
+                              disabled={a.role === "super_admin"}
+                              onChange={() => toggleOne(a.id)}
+                              aria-label={`Select ${a.email}`}
+                              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-30 align-middle" />
+                          </td>
+                        )}
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-2.5">
                             <Mail size={13} className="text-gray-300 shrink-0" />
@@ -261,10 +347,16 @@ export default function AccountsPage() {
                           {a.last_login_at ? format(new Date(a.last_login_at), "d MMM yyyy, HH:mm") : <span className="text-gray-300">never</span>}
                         </td>
                         <td className="px-4 py-3.5 text-right">
-                          <button onClick={() => setResetting(a)}
-                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-blue-200 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition">
-                            <KeyRound size={12} /> Reset password
-                          </button>
+                          {a.role === "super_admin" && !isSuperAdmin ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-gray-400" title="Only a Super Admin can reset a Super Admin password">
+                              <ShieldCheck size={12} /> Protected
+                            </span>
+                          ) : (
+                            <button onClick={() => setResetting(a)}
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-blue-200 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition">
+                              <KeyRound size={12} /> Reset password
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );

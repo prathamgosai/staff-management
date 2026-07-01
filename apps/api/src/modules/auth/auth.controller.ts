@@ -1,5 +1,6 @@
 import { Controller, Post, Put, Body, Get, UseGuards, Req, HttpCode, HttpStatus, Param } from "@nestjs/common";
 import { ApiTags, ApiBearerAuth, ApiOperation } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshTokenDto } from "./dto/refresh-token.dto";
@@ -7,6 +8,8 @@ import { ChangePasswordDto } from "./dto/change-password.dto";
 import { Public } from "../../common/decorators/public.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { PermissionsGuard } from "../../common/guards/permissions.guard";
+import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { ROLES, type AuthUser } from "@workforceiq/shared";
@@ -17,6 +20,8 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  // Brute-force protection: max 5 login attempts per minute per IP.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post("login")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Login with email and password" })
@@ -63,43 +68,57 @@ export class AuthController {
     return this.authService.changePassword(user.id, dto);
   }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(ROLES.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("accounts:manage")
   @Get("pending-registrations")
   @ApiBearerAuth()
-  @ApiOperation({ summary: "List staff accounts pending approval (super admin only)" })
+  @ApiOperation({ summary: "List staff accounts pending approval (requires accounts:manage)" })
   getPendingRegistrations() {
     return this.authService.getPendingRegistrations();
   }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(ROLES.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("accounts:manage")
   @Put("registrations/:id/review")
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Approve or reject a pending staff registration (super admin only)" })
+  @ApiOperation({ summary: "Approve or reject a pending staff registration (requires accounts:manage)" })
   reviewRegistration(@Param("id") id: string, @Body() body: { action: "approve" | "reject" }) {
     return this.authService.reviewRegistration(id, body.action);
   }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(ROLES.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("accounts:manage")
   @Get("accounts")
   @ApiBearerAuth()
-  @ApiOperation({ summary: "List all staff accounts — login ID, role, status (super admin only)" })
+  @ApiOperation({ summary: "List all staff accounts — login ID, role, status (requires accounts:manage)" })
   getAccounts(@CurrentUser() user: AuthUser) {
     return this.authService.getAllAccounts(user.tenantId);
   }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(ROLES.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("accounts:manage")
   @Post("accounts/:id/reset-password")
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Reset a staff member's password; returns a temp password if none supplied (super admin only)" })
+  @ApiOperation({ summary: "Reset a staff member's password; returns a temp password if none supplied (requires accounts:manage)" })
   resetPassword(
     @CurrentUser() user: AuthUser,
     @Param("id") id: string,
     @Body() body: { newPassword?: string },
   ) {
-    return this.authService.resetPassword(user.tenantId, id, body.newPassword);
+    return this.authService.resetPassword(user, id, body.newPassword);
+  }
+
+  // Changing an account's role is restricted to super_admin and HR only —
+  // deliberately NOT the accounts:manage permission (which Admin also holds).
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLES.SUPER_ADMIN, ROLES.HR)
+  @Put("accounts/role")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Change the account role for one or more staff (super admin / HR only)" })
+  changeAccountRoles(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { userIds: string[]; role: string },
+  ) {
+    return this.authService.changeRoles(user.tenantId, body?.userIds ?? [], body?.role);
   }
 }

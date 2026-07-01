@@ -8,52 +8,81 @@ import { useAuthStore } from "@/store/auth.store";
 import { apiClient } from "@/lib/api-client";
 import {
   LayoutDashboard, Users, Building2, Calendar, Clock,
-  CalendarOff, TrendingUp, ArrowLeftRight, BarChart3,
-  LogOut, Menu, X, ShieldCheck, KeyRound, type LucideIcon,
+  CalendarOff, ArrowLeftRight, BarChart3,
+  LogOut, Menu, X, ShieldCheck, KeyRound, UserCog, type LucideIcon,
 } from "lucide-react";
+import type { AuthUser } from "@workforceiq/shared";
 
-type NavItem = { href: string; label: string; icon: LucideIcon; badge?: boolean; adminOnly?: boolean };
+// `perm` gates a nav item behind an effective permission from the editable
+// role→permission matrix. super_admin always sees everything (see hasPermission).
+type NavItem = { href: string; label: string; icon: LucideIcon; badge?: boolean; perm?: string };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/staff",     label: "Staff",      icon: Users },
-  { href: "/outlets",   label: "Outlets",    icon: Building2 },
-  { href: "/scheduling",label: "Scheduling", icon: Calendar },
-  { href: "/attendance",label: "Attendance", icon: Clock },
-  { href: "/leave",     label: "Leave",      icon: CalendarOff },
-  { href: "/forecasting",label:"Forecasting",icon: TrendingUp },
-  { href: "/allocation",label: "Allocation", icon: ArrowLeftRight },
-  { href: "/reports",   label: "Reports",    icon: BarChart3 },
-  { href: "/accounts",  label: "Accounts",   icon: KeyRound, adminOnly: true },
-  { href: "/approvals", label: "Approvals",  icon: ShieldCheck, badge: true, adminOnly: true },
+  { href: "/dashboard",     label: "Dashboard",     icon: LayoutDashboard },
+  { href: "/staff",         label: "Staff",         icon: Users },
+  { href: "/outlets",       label: "Outlets",       icon: Building2 },
+  { href: "/scheduling",    label: "Scheduling",    icon: Calendar },
+  { href: "/attendance",    label: "Attendance",    icon: Clock },
+  { href: "/leave",         label: "Leave",         icon: CalendarOff },
+  { href: "/allocation",    label: "Allocation",    icon: ArrowLeftRight },
+  { href: "/reports",       label: "Reports",       icon: BarChart3 },
+  { href: "/accounts",      label: "Accounts",      icon: KeyRound,    perm: "accounts:manage" },
+  { href: "/account-types", label: "Account Types", icon: UserCog,     perm: "roles:manage" },
+  { href: "/approvals",     label: "Approvals",     icon: ShieldCheck, badge: true, perm: "accounts:manage" },
 ];
+
+// super_admin (or the "*" wildcard) always passes; otherwise the user must hold
+// the specific permission. Older cached sessions may lack `permissions` until the
+// /auth/me refresh below runs — the super_admin short-circuit keeps them working.
+function hasPermission(user: AuthUser, perm: string): boolean {
+  if (user.role === "super_admin") return true;
+  const perms = user.permissions ?? [];
+  return perms.includes("*") || perms.includes(perm);
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router    = useRouter();
   const pathname  = usePathname();
-  const { user, accessToken, logout } = useAuthStore();
+  const { user, accessToken, mustChangePassword, logout, setUser } = useAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
-    if (!accessToken) router.replace("/login");
-  }, [accessToken, router]);
+    if (!accessToken) { router.replace("/login"); return; }
+    // Accounts flagged for a forced reset can't use the app until they change it.
+    if (mustChangePassword) router.replace("/change-password");
+  }, [accessToken, mustChangePassword, router]);
 
-  const isSuperAdmin = user?.role === "super_admin";
+  // Pull the caller's current permissions from the server so nav visibility
+  // reflects any recent edits on the Account Types page (merge only permissions —
+  // the token-derived /auth/me user has no name).
+  useEffect(() => {
+    if (!accessToken) return;
+    apiClient.get("/auth/me")
+      .then((r) => {
+        const fresh = r.data?.data as AuthUser | undefined;
+        const current = useAuthStore.getState().user;
+        if (fresh?.permissions && current) setUser({ ...current, permissions: fresh.permissions });
+      })
+      .catch(() => { /* non-fatal: fall back to cached permissions */ });
+  }, [accessToken, setUser]);
 
-  // Poll pending registrations count for sidebar badge (super admin only — others get 403)
+  const canManageAccounts = !!user && hasPermission(user, "accounts:manage");
+
+  // Poll pending registrations count for sidebar badge (only for account managers — others get 403)
   const { data: pendingData } = useQuery<{ data: unknown[] }>({
     queryKey: ["pending-registrations"],
     queryFn: () => apiClient.get("/auth/pending-registrations").then(r => r.data),
     refetchInterval: 30_000,
     staleTime: 0,
-    enabled: !!accessToken && isSuperAdmin,
+    enabled: !!accessToken && canManageAccounts,
   });
   const pendingCount = pendingData?.data?.length ?? 0;
 
   if (!user) return null;
 
-  // Admin-only areas (Accounts, Approvals) are hidden from everyone else.
-  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || isSuperAdmin);
+  // Permission-gated areas (Accounts, Account Types, Approvals) are hidden from
+  // anyone whose account type doesn't grant the required permission.
+  const navItems = NAV_ITEMS.filter((item) => !item.perm || hasPermission(user, item.perm));
 
   const handleLogout = () => {
     logout();

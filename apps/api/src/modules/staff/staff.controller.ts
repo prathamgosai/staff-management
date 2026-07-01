@@ -12,7 +12,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
-import { ROLES, type AuthUser } from "@workforceiq/shared";
+import { ADMIN_ROLES, type AuthUser } from "@workforceiq/shared";
 
 @ApiTags("Staff")
 @ApiBearerAuth()
@@ -33,8 +33,8 @@ export class StaffController {
   }
 
   @Post()
-  @Roles(ROLES.SUPER_ADMIN)
-  @ApiOperation({ summary: "Create a new staff member (super admin only)" })
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: "Create a new staff member (admins only)" })
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateStaffDto) {
     return this.staffService.create(user.tenantId, dto);
   }
@@ -60,9 +60,9 @@ export class StaffController {
   }
 
   @Delete(":id")
-  @Roles(ROLES.SUPER_ADMIN)
+  @Roles(...ADMIN_ROLES)
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: "Deactivate a staff member (super admin only)" })
+  @ApiOperation({ summary: "Deactivate a staff member (admins only)" })
   remove(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
     return this.staffService.softDelete(user.tenantId, id);
   }

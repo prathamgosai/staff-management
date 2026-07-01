@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth.store";
+import { isAdminRole } from "@workforceiq/shared";
 import {
   Users, Building2, CalendarOff, Clock, ChevronDown,
   Wand2, TrendingUp, Shield, Loader2, ChevronRight, CheckCircle2,
@@ -104,7 +105,7 @@ export default function DashboardPage() {
   const [outletFilter, setOutletFilter]     = useState("");
   const [expandedOutlet, setExpandedOutlet] = useState<string | null>(null);
   const [editing, setEditing]               = useState<StaffRow | null>(null);
-  const isAdmin = useAuthStore((s) => s.user?.role === "super_admin");
+  const isAdmin = useAuthStore((s) => isAdminRole(s.user?.role));
 
   const { data: overviewRes, isLoading: ovLoading } = useQuery<{ data: OverviewData }>({
     queryKey: ["dashboard-overview"],

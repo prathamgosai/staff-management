@@ -9,6 +9,10 @@ export interface AuthUser {
   outletIds: UUID[];
   tenantId: UUID;
   avatarUrl?: string;
+  // Effective permission keys for this user's role (from the editable matrix).
+  // super_admin carries ["*"], meaning every permission. May be absent on
+  // older cached sessions until the user's next login / token refresh.
+  permissions?: string[];
 }
 
 export interface LoginCredentials {

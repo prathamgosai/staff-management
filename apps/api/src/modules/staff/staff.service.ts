@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, ForbiddenException, Inject } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
-import type { AuthUser } from "@workforceiq/shared";
+import { isAdminRole, type AuthUser } from "@workforceiq/shared";
 import type { CreateStaffDto } from "./dto/create-staff.dto";
 import type { UpdateStaffDto } from "./dto/update-staff.dto";
 import type { StaffQueryDto } from "./dto/staff-query.dto";
@@ -142,13 +142,13 @@ export class StaffService {
     return { data: this.mapRow(result.rows[0]) };
   }
 
-  /** super_admin can edit anyone; everyone else may edit only their own contact fields. */
+  /** Admins (super_admin / HR) can edit anyone; everyone else may edit only their own contact fields. */
   private assertCanEditProfile(
     user: AuthUser,
     target: { userId?: string | null },
     dto: UpdateStaffDto,
   ) {
-    if (user.role === "super_admin") return;
+    if (isAdminRole(user.role)) return;
     const isOwnProfile = !!target.userId && target.userId === user.id;
     if (!isOwnProfile) {
       throw new ForbiddenException("You can only edit your own profile.");

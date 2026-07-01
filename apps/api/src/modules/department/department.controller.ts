@@ -5,7 +5,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
-import { ROLES, type AuthUser } from "@workforceiq/shared";
+import { ADMIN_ROLES, type AuthUser } from "@workforceiq/shared";
 
 @ApiTags("Departments & Positions")
 @ApiBearerAuth()
@@ -20,13 +20,13 @@ export class DepartmentController {
   }
 
   @Post()
-  @Roles(ROLES.SUPER_ADMIN)
+  @Roles(...ADMIN_ROLES)
   createDepartment(@Body() body: { outletId: string; name: string }) {
     return this.svc.createDepartment(body.outletId, body.name);
   }
 
   @Delete(":id")
-  @Roles(ROLES.SUPER_ADMIN)
+  @Roles(...ADMIN_ROLES)
   @HttpCode(HttpStatus.NO_CONTENT)
   deleteDepartment(@Param("id", ParseUUIDPipe) id: string) {
     return this.svc.deleteDepartment(id);
@@ -38,7 +38,7 @@ export class DepartmentController {
   }
 
   @Post("/positions")
-  @Roles(ROLES.SUPER_ADMIN)
+  @Roles(...ADMIN_ROLES)
   createPosition(
     @CurrentUser() user: AuthUser,
     @Body() body: { name: string; level?: number; defaultHoursWeek?: number },

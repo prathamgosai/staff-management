@@ -37,9 +37,10 @@ export default function LoginPage() {
     try {
       const saved = localStorage.getItem(REMEMBER_KEY);
       if (saved) {
-        const { email, password } = JSON.parse(atob(saved));
+        // Only the identifier is remembered — never the password. Password
+        // autofill is handled by the browser's credential manager.
+        const { email } = JSON.parse(atob(saved));
         if (email) { setValue("email", email); setRememberMe(true); }
-        if (password) setValue("password", password);
       }
     } catch {
       localStorage.removeItem(REMEMBER_KEY);
@@ -55,25 +56,34 @@ export default function LoginPage() {
         ? data.email
         : `${data.email.toLowerCase()}@workforceiq.app`;
       const response = await apiClient.post("/auth/login", { email, password: data.password });
-      const { data: user, accessToken, refreshToken } = response.data;
+      const { data: user, accessToken, refreshToken, mustChangePassword } = response.data;
 
-      // Save or clear remembered credentials
+      // Remember only the Employee ID / email — never the password.
       if (rememberMe) {
-        localStorage.setItem(REMEMBER_KEY, btoa(JSON.stringify({ email: data.email, password: data.password })));
+        localStorage.setItem(REMEMBER_KEY, btoa(JSON.stringify({ email: data.email })));
       } else {
         localStorage.removeItem(REMEMBER_KEY);
       }
 
-      setAuth(user, accessToken, refreshToken);
-      router.push("/dashboard");
+      setAuth(user, accessToken, refreshToken, mustChangePassword);
+      // First-login / reset accounts must set a new password before continuing.
+      router.push(mustChangePassword ? "/change-password" : "/dashboard");
     } catch (err: unknown) {
-      const status  = (err as { response?: { status?: number } }).response?.status;
-      const message = (err as { response?: { data?: { message?: string } } }).response?.data?.message;
+      const status = (err as { response?: { status?: number } }).response?.status;
+      const raw = (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message;
+      const message = Array.isArray(raw) ? raw.join(" ") : raw;
       if (status === 403) {
         setIsPending(true);
         setError(message ?? "Your account is pending approval.");
+      } else if (status === 429) {
+        // Rate limited by the login throttler — don't imply the password is wrong,
+        // and don't leak the raw "ThrottlerException" string.
+        setIsPending(false);
+        setError("Too many sign-in attempts. Please wait about a minute and try again.");
+      } else if (status === 401) {
+        setError("Incorrect Employee ID / email or password.");
       } else {
-        setError(message ?? "Login failed. Please check your credentials.");
+        setError(message ?? "Login failed. Please try again.");
       }
     } finally {
       setIsLoading(false);
@@ -108,7 +118,8 @@ export default function LoginPage() {
                   type="text"
                   autoComplete="username"
                   placeholder="CP-001 or admin@workforceiq.app"
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-sm"
+                  aria-invalid={!!errors.email}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-base"
                 />
                 {errors.email && (
                   <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>
@@ -126,7 +137,8 @@ export default function LoginPage() {
                     type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
                     placeholder="Your password"
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-sm pr-10"
+                    aria-invalid={!!errors.password}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-base pr-10"
                   />
                   <button
                     type="button"
@@ -155,7 +167,7 @@ export default function LoginPage() {
 
               {/* Error */}
               {error && (
-                <div className={`rounded-xl p-3.5 text-sm ${
+                <div role="alert" aria-live="assertive" className={`rounded-xl p-3.5 text-sm ${
                   isPending
                     ? "bg-amber-50 border border-amber-200 text-amber-800"
                     : "bg-red-50 border border-red-200 text-red-700"
@@ -182,9 +194,6 @@ export default function LoginPage() {
               </p>
             </div>
 
-            <p className="text-center text-xs text-gray-400 mt-4">
-              Admin demo: admin@workforceiq.app / Admin@123
-            </p>
           </div>
         </div>
       </div>

@@ -27,7 +27,7 @@ export class OutletController {
   @Post()
   @ApiOperation({ summary: "Create a new outlet" })
   create(@CurrentUser() user: AuthUser, @Body() body: {
-    brandId: string; code: string; name: string; type: string;
+    brandId?: string; brandName?: string; code: string; name: string; type: string;
     address: Record<string, string>; contact: Record<string, string>;
     seatingCapacity?: number;
   }) {

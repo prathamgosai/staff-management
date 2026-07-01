@@ -138,6 +138,7 @@ CREATE TABLE users (
     outlet_ids      UUID[] DEFAULT '{}',
     avatar_url      TEXT,
     is_active       BOOLEAN DEFAULT TRUE,
+    must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
     last_login_at   TIMESTAMPTZ,
     password_reset_token  TEXT,
     password_reset_expiry TIMESTAMPTZ,

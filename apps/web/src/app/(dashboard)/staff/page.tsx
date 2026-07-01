@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth.store";
+import { isAdminRole } from "@workforceiq/shared";
 import Link from "next/link";
 import {
   Search, Plus, Filter, Users, ChevronLeft, ChevronRight,
@@ -364,7 +365,7 @@ export default function StaffPage() {
   const [showFilter, setShowFilter] = useState(false);
   const [filters, setFilters] = useState({ outletId: "", status: "", employmentType: "" });
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const isAdmin = useAuthStore((s) => s.user?.role === "super_admin");
+  const isAdmin = useAuthStore((s) => isAdminRole(s.user?.role));
   const qc = useQueryClient();
 
   const params: Record<string, string | number> = { page, limit: 20 };

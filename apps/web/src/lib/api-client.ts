@@ -17,18 +17,40 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+// Single-flight refresh: concurrent 401s share ONE /auth/refresh call, so the
+// single-use refresh token is rotated exactly once per expiry burst. Without
+// this, a second 401'd request would present an already-rotated token, get
+// rejected, and force a spurious logout.
+let refreshPromise: Promise<string> | null = null;
+
+function refreshAccessToken(): Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const { refreshToken, setAuth, user, mustChangePassword } = useAuthStore.getState();
+      if (!refreshToken || !user) throw new Error("No refresh token");
+      const { data } = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken });
+      // Carry the forced-change gate across rotation (the refresh response doesn't return it).
+      setAuth(user, data.accessToken, data.refreshToken, mustChangePassword);
+      return data.accessToken as string;
+    })().finally(() => { refreshPromise = null; });
+  }
+  return refreshPromise;
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const url: string = originalRequest?.url ?? "";
+    // Auth endpoints own their 401s: wrong-password / invalid-credentials / a
+    // failed refresh must reach the page as an error, NOT trigger a refresh+retry
+    // that logs the user out and bounces them to /login.
+    const isAuthRoute = url.includes("/auth/");
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry && !isAuthRoute) {
       originalRequest._retry = true;
       try {
-        const { refreshToken, setAuth, user } = useAuthStore.getState();
-        if (!refreshToken || !user) throw new Error("No refresh token");
-        const { data } = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken });
-        setAuth(user, data.accessToken, data.refreshToken);
-        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+        const accessToken = await refreshAccessToken();
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return apiClient(originalRequest);
       } catch {
         useAuthStore.getState().logout();
