@@ -69,10 +69,18 @@ export default function LoginPage() {
       // First-login / reset accounts must set a new password before continuing.
       router.push(mustChangePassword ? "/change-password" : "/dashboard");
     } catch (err: unknown) {
-      const status = (err as { response?: { status?: number } }).response?.status;
-      const raw = (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message;
+      const response = (err as { response?: { status?: number; data?: { message?: string | string[] } } }).response;
+      const status = response?.status;
+      const raw = response?.data?.message;
       const message = Array.isArray(raw) ? raw.join(" ") : raw;
-      if (status === 403) {
+      if (!response) {
+        // No HTTP response reached the browser at all — the API is unreachable or
+        // the browser blocked the response (CORS). Guide the user instead of
+        // implying the password is wrong.
+        setError(
+          "Can't reach the server. Check that the API is running on port 4000, and open the app at http://localhost:3000 (not 127.0.0.1 or a LAN IP).",
+        );
+      } else if (status === 403) {
         setIsPending(true);
         setError(message ?? "Your account is pending approval.");
       } else if (status === 429) {

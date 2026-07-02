@@ -20,8 +20,30 @@ async function bootstrap() {
 
   app.use(helmet());
   app.use(compression());
+
+  // CORS: allow the configured production origin(s) — APP_URL may be a
+  // comma-separated list — plus any localhost / 127.0.0.1 origin (any port) in
+  // development. A single hard-coded origin silently broke login whenever the
+  // app was opened as 127.0.0.1, a LAN alias, or an alternate port (3001 when
+  // 3000 was taken): the browser blocked the response and the SPA only saw a
+  // generic network error.
+  const allowedOrigins = config
+    .get<string>("APP_URL", "http://localhost:3000")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+  const isProduction = config.get("NODE_ENV") === "production";
+  const localhostOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
   app.enableCors({
-    origin: config.get("APP_URL", "http://localhost:3000"),
+    origin: (origin, callback) => {
+      // Non-browser clients (curl, mobile apps, server-to-server) send no Origin.
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (!isProduction && localhostOrigin.test(origin)) return callback(null, true);
+      // Deny quietly: omit CORS headers (the browser blocks the read) without
+      // throwing, which would surface as a noisy 500 on every cross-origin probe.
+      return callback(null, false);
+    },
     credentials: true,
   });
 
