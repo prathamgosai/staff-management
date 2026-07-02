@@ -12,7 +12,7 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 
 - **Repo:** `E:\staff management project 1`
 - **Type:** pnpm monorepo (Turborepo)
-- **Runs without Docker** on Windows via portable Postgres + Redis (see `RUN-WITHOUT-DOCKER.md`).
+- **Database hosted on Supabase** (Postgres via session pooler); Redis still required for Bull queues. See §6.
 
 ---
 
@@ -112,18 +112,22 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 
 ---
 
-## 6. How to run (no Docker)
+## 6. How to run
+
+Database is hosted on **Supabase** (project `ypgkyytgpszlfhosolec`), connected via the
+session-mode Supavisor pooler. Redis is still required for Bull queues (host it on
+Render Key Value / Upstash, or run a local Redis for dev).
 
 ```powershell
-.\start-services.ps1     # portable Postgres + Redis under .services/
+# Set DB_* (Supabase session pooler) + REDIS_* in .env, then:
 pnpm dev                 # API :4000, web :3000  (ML :8000 optional)
-.\stop-services.ps1
 ```
 
-- Services do **not** auto-start after reboot — re-run the start script.
-- Admin login: `admin@workforceiq.app` / `Admin@123`.
+- `.env` DB block points at the Supabase session pooler (`DB_SSL=true`,
+  `DB_USER=postgres.<project-ref>`); a commented LOCAL fallback block remains for offline dev.
+- Admin login: `admin@workforceiq.app` / `P@$$w0rd` (super_admin).
 - HR admin login (typed on web): `bookendshr.admin.com` / `hradmin123`.
-- Read the real DB password from `.env` (git-ignored; old `change_me_in_production` no longer works).
+- Read the real DB password from `.env` (git-ignored).
 
 ---
 
