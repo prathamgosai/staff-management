@@ -29,13 +29,21 @@ import { DatabaseModule } from "./database/database.module";
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
     BullModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        redis: {
-          host: config.get("REDIS_HOST", "localhost"),
-          port: config.get<number>("REDIS_PORT", 6379),
-          password: config.get("REDIS_PASSWORD"),
-        },
-      }),
+      useFactory: (config: ConfigService) => {
+        const host = config.get<string>("REDIS_HOST", "localhost");
+        // Managed Redis (e.g. Upstash) requires TLS. Enable it when REDIS_TLS=true
+        // or the host is an Upstash endpoint; local dev Redis stays plaintext.
+        const useTls =
+          config.get<string>("REDIS_TLS") === "true" || host.endsWith(".upstash.io");
+        return {
+          redis: {
+            host,
+            port: config.get<number>("REDIS_PORT", 6379),
+            password: config.get("REDIS_PASSWORD"),
+            ...(useTls ? { tls: { servername: host } } : {}),
+          },
+        };
+      },
     }),
     DatabaseModule,
     AuthModule,
