@@ -1,18 +1,41 @@
 # ─────────────────────────────────────────────────────────────
-# Render Blueprint — WorkforceIQ
-#   Database : Supabase  (external — session pooler)
-#   Redis    : Upstash or Render Key Value (external)
-#   Hosted here: NestJS API + Next.js Web
+# Render Blueprint — WorkforceIQ (all-in-Render, no external services)
+#   Database : Render-managed PostgreSQL 16   (free — expires after 30 days)
+#   Redis    : Render-managed Key Value        (free)
+#   Hosted   : NestJS API + Next.js Web
 #
-# Deploy: Render Dashboard → New → Blueprint → connect this repo.
-# Every `sync: false` var is filled in the Render dashboard (kept out of git).
+# Deploy: Render Dashboard → New → Blueprint → connect this repo → Apply.
+# DB/Redis are provisioned automatically and their connection vars are
+# wired in below — nothing to paste. The only manual vars are the two
+# cross-service URLs (sync: false), set after the first deploy.
+#
+# NOTE: keep every resource in the SAME region so the API reaches the DB
+# and Redis over Render's private network.
 # ─────────────────────────────────────────────────────────────
+
+databases:
+  - name: workforceiq-db
+    plan: free
+    region: singapore
+    postgresMajorVersion: "16"
+    databaseName: workforceiq
+    user: workforceiq_user
+
 services:
+  # ── Redis (Render Key Value) ───────────────────────────────
+  - type: keyvalue
+    name: workforceiq-redis
+    plan: free
+    region: singapore
+    ipAllowList: []              # empty = reachable only from within Render
+    maxmemoryPolicy: noeviction  # required by BullMQ (must not evict jobs)
+
   # ── NestJS API ─────────────────────────────────────────────
   - type: web
     name: workforceiq-api
     runtime: node
     plan: free
+    region: singapore
     branch: main
     buildCommand: corepack enable && pnpm install --prod=false && pnpm --filter @workforceiq/shared build && pnpm --filter @workforceiq/api build
     startCommand: pnpm --filter @workforceiq/api start
@@ -23,30 +46,44 @@ services:
         value: production
       - key: API_PREFIX
         value: api/v1
-      # ── Supabase (session pooler) — fill in dashboard ──
+      # ── Postgres (wired from the managed DB above) ──
       - key: DB_HOST
-        sync: false          # aws-0-<region>.pooler.supabase.com
+        fromDatabase:
+          name: workforceiq-db
+          property: host
       - key: DB_PORT
-        value: "5432"
+        fromDatabase:
+          name: workforceiq-db
+          property: port
       - key: DB_NAME
-        value: postgres
+        fromDatabase:
+          name: workforceiq-db
+          property: database
       - key: DB_USER
-        sync: false          # postgres.ypgkyytgpszlfhosolec
+        fromDatabase:
+          name: workforceiq-db
+          property: user
       - key: DB_PASSWORD
-        sync: false
+        fromDatabase:
+          name: workforceiq-db
+          property: password
       - key: DB_SSL
-        value: "true"
+        value: "true"            # Render PG supports SSL; rejectUnauthorized:false in app
       - key: DB_POOL_MAX
-        value: "12"          # free Supabase Nano has few backends — keep modest
-      # ── Redis (Upstash / Render Key Value) — fill in dashboard ──
+        value: "8"               # free Render Postgres has a low connection limit
+      # ── Redis (wired from the Key Value service above) ──
       - key: REDIS_HOST
-        sync: false
+        fromService:
+          type: keyvalue
+          name: workforceiq-redis
+          property: host
       - key: REDIS_PORT
-        value: "6379"
-      - key: REDIS_PASSWORD
-        sync: false
+        fromService:
+          type: keyvalue
+          name: workforceiq-redis
+          property: port
       - key: REDIS_TLS
-        value: "true"          # Upstash requires TLS
+        value: "false"           # internal Render Key Value is plaintext on the private network
       # ── Auth (Render generates strong secrets) ──
       - key: JWT_SECRET
         generateValue: true
@@ -58,13 +95,14 @@ services:
         value: 7d
       # ── CORS: set to the web service URL after first deploy ──
       - key: APP_URL
-        sync: false          # https://workforceiq-web.onrender.com
+        sync: false              # https://workforceiq-web.onrender.com
 
   # ── Next.js Web ────────────────────────────────────────────
   - type: web
     name: workforceiq-web
     runtime: node
     plan: free
+    region: singapore
     branch: main
     buildCommand: corepack enable && pnpm install --prod=false && pnpm --filter @workforceiq/shared build && pnpm --filter @workforceiq/web build
     startCommand: pnpm --filter @workforceiq/web start
@@ -74,8 +112,8 @@ services:
       # NEXT_PUBLIC_* are baked in at BUILD time — set them before the first build,
       # and re-deploy the web service if the API URL changes later.
       - key: NEXT_PUBLIC_API_URL
-        sync: false          # https://workforceiq-api.onrender.com/api/v1
+        sync: false              # https://workforceiq-api.onrender.com/api/v1
       - key: NEXT_PUBLIC_WS_URL
-        sync: false          # wss://workforceiq-api.onrender.com
+        sync: false              # wss://workforceiq-api.onrender.com
       - key: NEXT_PUBLIC_APP_NAME
         value: WorkforceIQ
