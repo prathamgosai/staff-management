@@ -18,7 +18,7 @@ export const DB_POOL = "DB_POOL";
           user: config.get("DB_USER", "workforceiq_user"),
           password: config.get("DB_PASSWORD"),
           ssl: config.get("DB_SSL") === "true" ? { rejectUnauthorized: false } : false,
-          max: 20,
+          max: config.get<number>("DB_POOL_MAX", 20),
           idleTimeoutMillis: 30000,
           connectionTimeoutMillis: 2000,
         });
