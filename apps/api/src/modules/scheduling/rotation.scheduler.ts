@@ -35,7 +35,7 @@ export class RotationScheduler implements OnApplicationBootstrap {
   /** Run on app start — generate current week's schedule for any outlet that doesn't have one yet */
   async onApplicationBootstrap() {
     // Defer so the rest of the app finishes booting. The API can start before
-    // Postgres is ready (e.g. `pnpm dev` before `.\start-services.ps1`), so this
+    // Postgres is ready (e.g. the DB host is briefly unreachable at boot), so this
     // retries until the DB is reachable instead of giving up after one attempt.
     setTimeout(() => this.generateMissingSchedulesWithRetry(), 5000);
   }
@@ -56,7 +56,7 @@ export class RotationScheduler implements OnApplicationBootstrap {
       }
       this.logger.error(
         `Startup schedule check aborted — DB unreachable after ${MAX_ATTEMPTS} attempts: ${formatError(e)}. ` +
-          "Start backing services (.\\start-services.ps1) and restart the API.",
+          "Check DB_HOST / DB_PASSWORD (and that the database is reachable), then restart the API.",
       );
       return;
     }
@@ -105,8 +105,8 @@ export class RotationScheduler implements OnApplicationBootstrap {
       }
     } catch (e) {
       // Never let a startup DB error become an unhandled rejection that crashes the process.
-      // Most common cause here: backing services (Postgres/Redis) not started — run
-      // `.\start-services.ps1` before `pnpm dev`. See formatError() above.
+      // Most common cause here: the database (or Redis) is unreachable — verify DB_* /
+      // REDIS_* env vars point at a running instance. See formatError() above.
       this.logger.error(`Startup schedule check failed: ${formatError(e)}`);
     }
   }
