@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { toast } from "@/components/ui/sonner";
 import {
   ArrowLeftRight, Plus, X, ChevronDown, Users,
   MapPin, ArrowRight, Loader2,
@@ -85,7 +86,7 @@ function RequestTransferModal({ open, onClose, onSuccess, outlets }: {
       endDate:       form.endDate || undefined,
       reason:        form.reason.trim() || undefined,
     }),
-    onSuccess: () => { onClose(); onSuccess(); },
+    onSuccess: () => { toast.success("Transfer requested."); onClose(); onSuccess(); },
   });
 
   function validate() {
@@ -362,7 +363,10 @@ export default function AllocationPage() {
   const reviewMutation = useMutation({
     mutationFn: ({ id, action }: { id: string; action: "approve" | "reject" }) =>
       apiClient.put(`/allocation/transfers/${id}/review`, { action }),
-    onSuccess: () => { refetch(); setReviewingId(null); },
+    onSuccess: (data, variables) => {
+      toast.success(variables.action === "approve" ? "Transfer approved." : "Transfer rejected.");
+      refetch(); setReviewingId(null);
+    },
   });
 
   return (

@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { toast } from "@/components/ui/sonner";
 import { fileToAvatarDataUrl } from "@/lib/image";
 import { useAuthStore } from "@/store/auth.store";
 import { isAdminRole } from "@workforceiq/shared";
@@ -79,6 +80,7 @@ function EditStatusModal({ staffId, current, onClose }: { staffId: string; curre
   const mutation = useMutation({
     mutationFn: () => apiClient.put(`/staff/${staffId}`, { employmentStatus: status }),
     onSuccess: () => {
+      toast.success("Status updated.");
       qc.invalidateQueries({ queryKey: ["staff-detail", staffId] });
       qc.invalidateQueries({ queryKey: ["staff"] });
       onClose();
@@ -133,6 +135,7 @@ function EditContactModal({ staffId, current, allowEmployeeId, onClose }: { staf
       return apiClient.put(`/staff/${staffId}`, payload);
     },
     onSuccess: () => {
+      toast.success("Contact details updated.");
       qc.invalidateQueries({ queryKey: ["staff-detail", staffId] });
       qc.invalidateQueries({ queryKey: ["staff"] });
       onClose();
@@ -240,6 +243,7 @@ function AvatarUploader({ staffId, name, avatarUrl, canEdit }: { staffId: string
   const mutation = useMutation({
     mutationFn: (newUrl: string) => apiClient.put(`/staff/${staffId}/avatar`, { avatarUrl: newUrl }),
     onSuccess: () => {
+      toast.success("Profile photo updated.");
       qc.invalidateQueries({ queryKey: ["staff-detail", staffId] });
       qc.invalidateQueries({ queryKey: ["staff"] });
       setError(null);

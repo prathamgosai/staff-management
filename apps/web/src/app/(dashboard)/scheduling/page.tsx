@@ -8,6 +8,8 @@ import {
   ChevronDown, Info, RefreshCw,
 } from "lucide-react";
 import { format, addWeeks, subWeeks, startOfWeek } from "date-fns";
+import { toast } from "@/components/ui/sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /* ─── types ──────────────────────────────────────────────────────────── */
 interface StaffInShift {
@@ -105,6 +107,7 @@ export default function SchedulingPage() {
       // Push the generated roster straight into the cache — no timing race,
       // no fixed-delay refetch that could miss the commit and hang.
       queryClient.setQueryData(rosterKey, { data: roster });
+      toast.success("Roster generated for this week.");
     },
   });
 
@@ -155,9 +158,10 @@ export default function SchedulingPage() {
       ));
       return changed.length;
     },
-    onSuccess: () => {
+    onSuccess: (changedCount) => {
       queryClient.invalidateQueries({ queryKey: ["shift-templates", selectedOutletId] });
       queryClient.invalidateQueries({ queryKey: rosterKey });
+      toast.success(changedCount === 1 ? "Shift time updated." : "Shift times updated.");
     },
   });
 
@@ -180,6 +184,7 @@ export default function SchedulingPage() {
     onSuccess: (moved) => {
       // Push the returned roster straight into the cache for an instant update.
       if (Array.isArray(moved)) queryClient.setQueryData(rosterKey, { data: moved });
+      toast.success("Staff moved to the new shift.");
     },
     // Reconcile with authoritative server state (guards against a stale cache if
     // two rows are moved in quick succession).
@@ -379,9 +384,30 @@ export default function SchedulingPage() {
           <p className="text-sm text-muted-foreground mt-1">Schedules are auto-generated every Monday</p>
         </div>
       ) : isLoading ? (
-        <div className="bg-card rounded-2xl border border-border p-12 text-center">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">Loading roster for {selectedOutletName}…</p>
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="rounded-2xl border border-border bg-card overflow-hidden">
+              <div className="flex items-center gap-4 px-5 py-4">
+                <Skeleton className="h-9 w-20 rounded-xl" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-28" />
+                </div>
+                <Skeleton className="h-5 w-8" />
+              </div>
+              <div className="border-t border-border px-5 py-4 space-y-3">
+                {Array.from({ length: 4 }).map((_, j) => (
+                  <div key={j} className="flex items-center gap-3">
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <div className="flex-1 space-y-1.5">
+                      <Skeleton className="h-3.5 w-36" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       ) : roster.length === 0 ? (
         <div className="bg-card rounded-2xl border border-border p-12 text-center">

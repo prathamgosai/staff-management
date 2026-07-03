@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { toast } from "@/components/ui/sonner";
 import { format } from "date-fns";
 import { UserCheck, UserX, Ticket, Loader2, RefreshCw, ShieldCheck, Bell } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
@@ -37,7 +38,8 @@ export default function ApprovalsPage() {
   const mutation = useMutation({
     mutationFn: ({ id, action }: { id: string; action: "approve" | "reject" }) =>
       apiClient.put(`/auth/registrations/${id}/review`, { action }),
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      toast.success(variables.action === "approve" ? "Registration approved." : "Registration rejected.");
       qc.invalidateQueries({ queryKey: ["pending-registrations"] });
       setActingId(null);
       setActingAction(null);

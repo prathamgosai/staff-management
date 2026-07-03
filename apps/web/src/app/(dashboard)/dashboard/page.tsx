@@ -12,6 +12,9 @@ import {
 } from "lucide-react";
 import { format, startOfWeek } from "date-fns";
 import Link from "next/link";
+import { toast } from "@/components/ui/sonner";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface OverviewData { totalOutlets: number; activeStaff: number; staffOnLeaveToday: number; presentToday: number; }
 interface TodaySnapshot { staffOnShift: number; pendingLeave: number; pendingApprovals: number; }
@@ -51,6 +54,7 @@ function EditDesignationModal({ staff, onClose }: { staff: StaffRow; onClose: ()
       qc.invalidateQueries({ queryKey: ["dashboard-hierarchy"] });
       qc.invalidateQueries({ queryKey: ["staff"] });
       qc.invalidateQueries({ queryKey: ["staff-detail", staff.id] });
+      toast.success("Designation updated.");
       onClose();
     },
     onError: (error) => {
@@ -119,7 +123,7 @@ export default function DashboardPage() {
     refetchInterval: 30_000,
   });
 
-  const { data: outletBreakRes } = useQuery<{ data: OutletRow[] }>({
+  const { data: outletBreakRes, isLoading: breakdownLoading } = useQuery<{ data: OutletRow[] }>({
     queryKey: ["dashboard-outlet-breakdown"],
     queryFn: () => apiClient.get("/dashboard/outlet-breakdown").then(r => r.data),
     staleTime: 60_000,
@@ -181,9 +185,11 @@ export default function DashboardPage() {
           <div key={label} className="bg-card rounded-2xl border border-border p-5 flex items-center gap-4 shadow-sm">
             <div className={`${color} text-white rounded-xl p-3 shrink-0`}><Icon size={20} /></div>
             <div>
-              <p className="text-2xl font-black text-foreground">
-                {ovLoading ? <Loader2 size={18} className="animate-spin text-muted-foreground/60 inline" /> : (value ?? "—")}
-              </p>
+              {ovLoading ? (
+                <Skeleton className="h-8 w-12 mb-1" />
+              ) : (
+                <p className="text-2xl font-black text-foreground">{value ?? "—"}</p>
+              )}
               <p className="text-xs font-semibold text-foreground">{label}</p>
               <p className="text-xs text-muted-foreground">{sub}</p>
             </div>
@@ -229,6 +235,35 @@ export default function DashboardPage() {
       {/* Outlet cards */}
       <div>
         <h2 className="text-sm font-bold text-foreground uppercase tracking-wide mb-3">Restaurants — Staff Breakdown</h2>
+        {breakdownLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                  <Skeleton className="h-7 w-8" />
+                </div>
+                <Skeleton className="h-3 w-40" />
+              </div>
+            ))}
+          </div>
+        ) : outlets.length === 0 ? (
+          <div className="bg-card rounded-2xl border border-border shadow-sm">
+            <EmptyState
+              icon={Building2}
+              title="No outlets yet"
+              description="Add your first restaurant to see its staff breakdown here."
+              action={
+                <Link href="/outlets" className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-semibold px-4 py-2 rounded-xl transition">
+                  <Building2 size={14} /> Go to Outlets
+                </Link>
+              }
+            />
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {outlets.map(o => (
             <div key={o.outlet_id} className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
@@ -252,6 +287,7 @@ export default function DashboardPage() {
             </div>
           ))}
         </div>
+        )}
       </div>
 
       {/* Staff directory */}

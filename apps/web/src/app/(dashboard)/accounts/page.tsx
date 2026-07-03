@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { toast } from "@/components/ui/sonner";
 import { useAuthStore } from "@/store/auth.store";
 import { isAdminRole, canAssignRoles, ASSIGNABLE_ROLES, ROLE_META } from "@workforceiq/shared";
 import { format } from "date-fns";
@@ -55,6 +56,7 @@ function ResetPasswordModal({ account, onClose }: { account: Account; onClose: (
       const temp = (res.data?.data?.tempPassword as string | undefined) ?? null;
       setTempPwd(temp);
       setDone(true);
+      toast.success("Temporary password generated.");
       qc.invalidateQueries({ queryKey: ["accounts"] });
     },
     onError: (error) => {
@@ -176,6 +178,7 @@ export default function AccountsPage() {
       setSelectedIds(new Set());
       setBulkRole("");
       setNotice(`Updated access for ${n} account${n === 1 ? "" : "s"}.`);
+      toast.success("Account access updated.");
     },
   });
 

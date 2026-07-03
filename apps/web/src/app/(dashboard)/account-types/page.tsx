@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { toast } from "@/components/ui/sonner";
 import { useAuthStore } from "@/store/auth.store";
 import {
   UserCog, ShieldCheck, Loader2, Save, RotateCcw, Check, Users, Lock, AlertCircle,
@@ -87,6 +88,7 @@ export default function AccountTypesPage() {
   const save = useMutation({
     mutationFn: () => apiClient.put(`/roles/${selected}/permissions`, { permissions: draft }),
     onSuccess: () => {
+      toast.success("Permissions saved.");
       const role = selected;
       qc.invalidateQueries({ queryKey: ["roles"] });
       if (role) setDrafts((d) => { const n = { ...d }; delete n[role]; return n; });
