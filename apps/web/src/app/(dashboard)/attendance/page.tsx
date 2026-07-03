@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { toast } from "@/components/ui/sonner";
 import { format } from "date-fns";
 import { Plus, X, Clock, CheckCircle2, AlertCircle, Search, ChevronDown } from "lucide-react";
 
@@ -155,6 +156,7 @@ export default function AttendancePage() {
       setShowModal(false);
       setForm(EMPTY_FORM);
       setFormError("");
+      toast.success("Attendance saved.");
     },
     onError: (e: { response?: { data?: { message?: string } } }) => {
       setFormError(e.response?.data?.message ?? "Failed to save attendance.");

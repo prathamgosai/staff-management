@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { toast } from "@/components/ui/sonner";
 import Link from "next/link";
 import {
   Building2, Users, MapPin, Plus, X, ChevronDown,
@@ -146,6 +147,7 @@ function AddOutletModal({ open, onClose }: { open: boolean; onClose: () => void 
       });
     },
     onSuccess: () => {
+      toast.success("Outlet created.");
       qc.invalidateQueries({ queryKey: ["outlets"] });
       qc.invalidateQueries({ queryKey: ["brands"] });
       onClose();
@@ -441,6 +443,7 @@ function OutletAccordion({ outlet, expanded, onToggle, onDelete }: {
   const deleteMutation = useMutation({
     mutationFn: () => apiClient.delete(`/outlets/${outlet.id}`),
     onSuccess: () => {
+      toast.success("Outlet deleted.");
       qc.invalidateQueries({ queryKey: ["outlets"] });
       onDelete();
     },

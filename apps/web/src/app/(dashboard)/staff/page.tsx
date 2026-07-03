@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth.store";
 import { isAdminRole } from "@workforceiq/shared";
+import { toast } from "@/components/ui/sonner";
 import Link from "next/link";
 import {
   Search, Plus, Filter, Users, ChevronLeft, ChevronRight,
@@ -138,6 +139,7 @@ function AddStaffModal({ open, onClose }: { open: boolean; onClose: () => void }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["staff"] });
+      toast.success("Staff member added.");
       onClose();
       setForm({ name:"",phone:"",email:"",primaryOutletId:"",departmentId:"",positionId:"",employmentType:"full_time",joinDate:new Date().toISOString().slice(0,10) });
       setErrors({});
@@ -379,6 +381,7 @@ export default function StaffPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["staff"] });
       setConfirmDeleteId(null);
+      toast.success("Staff member deleted.");
     },
   });
 

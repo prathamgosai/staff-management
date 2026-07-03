@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { toast } from "@/components/ui/sonner";
 import { Plus, X, ChevronDown, Loader2, Check, Calendar, User } from "lucide-react";
 import { format } from "date-fns";
 
@@ -74,6 +75,7 @@ function ApplyLeaveModal({ open, onClose, onSuccess }: { open: boolean; onClose:
     onSuccess: () => {
       onClose();
       onSuccess();
+      toast.success("Leave request submitted.");
     },
   });
 
@@ -278,9 +280,10 @@ export default function LeavePage() {
   const reviewMutation = useMutation({
     mutationFn: ({ id, action }: { id: string; action: "approve" | "reject" }) =>
       apiClient.put(`/leave/requests/${id}/review`, { action }),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       refetchLeave();
       setReviewingId(null);
+      toast.success(variables.action === "approve" ? "Leave request approved." : "Leave request rejected.");
     },
   });
 

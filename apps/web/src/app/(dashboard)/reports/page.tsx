@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { format, subDays } from "date-fns";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, Users } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default function ReportsPage() {
   const [selectedOutletId, setSelectedOutletId] = useState("");
@@ -16,14 +18,14 @@ export default function ReportsPage() {
     queryFn: () => apiClient.get("/outlets").then((r) => r.data),
   });
 
-  const { data: kpis } = useQuery({
+  const { data: kpis, isLoading: kpisLoading } = useQuery({
     queryKey: ["outlet-kpis", selectedOutletId, startDate, endDate],
     queryFn: () =>
       apiClient.get("/dashboard/outlet-kpis", { params: { outletId: selectedOutletId, startDate, endDate } }).then((r) => r.data),
     enabled: !!selectedOutletId,
   });
 
-  const { data: staffPerf } = useQuery({
+  const { data: staffPerf, isLoading: perfLoading } = useQuery({
     queryKey: ["staff-performance", selectedOutletId, startDate, endDate],
     queryFn: () =>
       apiClient.get("/dashboard/staff-performance", { params: { outletId: selectedOutletId, startDate, endDate } }).then((r) => r.data),
@@ -69,7 +71,11 @@ export default function ReportsPage() {
             ].map(({ label, value }) => (
               <div key={label} className="bg-card rounded-xl border border-border p-5">
                 <p className="text-sm text-muted-foreground mb-1">{label}</p>
-                <p className="text-2xl font-bold text-foreground">{value}</p>
+                {kpisLoading ? (
+                  <Skeleton className="h-8 w-20" />
+                ) : (
+                  <p className="text-2xl font-bold text-foreground">{value}</p>
+                )}
               </div>
             ))}
           </div>
@@ -91,7 +97,28 @@ export default function ReportsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {staffPerf?.data?.map((s: { id: string; name: string; employee_id: string; position_name: string; present_days: number; late_days: number; overtime_hours: number; attendance_rate: number }) => (
+                {perfLoading ? (
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <tr key={i}>
+                      <td className="px-4 py-3"><Skeleton className="h-4 w-40" /></td>
+                      <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
+                      {Array.from({ length: 4 }).map((_, j) => (
+                        <td key={j} className="px-4 py-3"><Skeleton className="mx-auto h-4 w-10" /></td>
+                      ))}
+                    </tr>
+                  ))
+                ) : (staffPerf?.data?.length ?? 0) === 0 ? (
+                  <tr>
+                    <td colSpan={6}>
+                      <EmptyState
+                        icon={Users}
+                        title="No performance data"
+                        description="No attendance was recorded for this outlet in the selected date range. Try widening the dates."
+                      />
+                    </td>
+                  </tr>
+                ) : (
+                  staffPerf?.data?.map((s: { id: string; name: string; employee_id: string; position_name: string; present_days: number; late_days: number; overtime_hours: number; attendance_rate: number }) => (
                   <tr key={s.id} className="hover:bg-muted">
                     <td className="px-4 py-3 font-medium text-foreground">
                       {s.name} <span className="text-xs text-muted-foreground">#{s.employee_id}</span>
@@ -106,7 +133,8 @@ export default function ReportsPage() {
                       </span>
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
