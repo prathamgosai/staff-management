@@ -3,6 +3,7 @@ import { Cron, CronExpression } from "@nestjs/schedule";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import { SchedulingService } from "./scheduling.service";
+import { getMondayStr } from "../../common/utils/week.util";
 
 const TENANT_ID = "00000000-0000-0000-0000-000000000001";
 const SYSTEM_USER_ID = "50000000-0000-0000-0000-000000000001"; // admin user
@@ -67,12 +68,12 @@ export class RotationScheduler implements OnApplicationBootstrap {
   @Cron("5 0 * * 1", { name: "weekly-rotation", timeZone: "Asia/Kolkata" })
   async runWeeklyRotation() {
     this.logger.log("⏰ Weekly rotation cron started");
-    await this.generateForWeek(this.getMondayStr(new Date()));
+    await this.generateForWeek(getMondayStr(new Date()));
   }
 
   /** Also generate for THIS week on startup so the dashboard shows data immediately */
   private async generateMissingSchedules() {
-    const thisMonday = this.getMondayStr(new Date());
+    const thisMonday = getMondayStr(new Date());
     this.logger.log(`🔄 Checking schedules for week of ${thisMonday}…`);
 
     try {
@@ -126,20 +127,5 @@ export class RotationScheduler implements OnApplicationBootstrap {
       }
     }
     this.logger.log(`✅ Weekly rotation complete: ${ok}/${outlets.rows.length} outlets scheduled for ${mondayStr}`);
-  }
-
-  private getMondayStr(date: Date): string {
-    const d = new Date(date);
-    const day = d.getDay(); // 0=Sun, 1=Mon
-    const diff = day === 0 ? -6 : 1 - day;
-    d.setDate(d.getDate() + diff);
-    // Format from LOCAL components. toISOString() would convert to UTC and, for
-    // any run between 00:00–05:30 IST (the weekly cron fires at 00:05), shift the
-    // result back to Sunday — a date the web app (which uses the local Monday)
-    // never queries. Keep this aligned with the client's startOfWeek(Mon).
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${dd}`;
   }
 }

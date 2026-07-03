@@ -17,6 +17,7 @@ import { AllocationModule } from "./modules/allocation/allocation.module";
 import { NotificationModule } from "./modules/notification/notification.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { RolesModule } from "./modules/roles/roles.module";
+import { MeModule } from "./modules/me/me.module";
 import { DatabaseModule } from "./database/database.module";
 
 @Module({
@@ -50,6 +51,7 @@ import { DatabaseModule } from "./database/database.module";
     NotificationModule,
     DashboardModule,
     RolesModule,
+    MeModule,
   ],
   providers: [
     // Apply rate limiting across the whole API.

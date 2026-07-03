@@ -1,0 +1,69 @@
+import {
+  Controller, Get, Patch, Post, Delete, Body, Param, Query,
+  UseGuards, ParseUUIDPipe, HttpCode, HttpStatus,
+} from "@nestjs/common";
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from "@nestjs/swagger";
+import { MeService } from "./me.service";
+import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { CurrentUser } from "../../common/decorators/current-user.decorator";
+import { UpdateProfileDto } from "./dto/update-profile.dto";
+import { CreateLeaveRequestDto } from "./dto/create-leave-request.dto";
+import type { AuthUser } from "@workforceiq/shared";
+
+/**
+ * Self-service endpoints for the authenticated user. Auth-only (any valid JWT),
+ * NO special permission — every handler scopes to req.user.id inside MeService.
+ * Nothing here trusts a client-supplied staffId / outletId.
+ */
+@ApiTags("Me (self-service)")
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Controller("me")
+export class MeController {
+  constructor(private readonly meService: MeService) {}
+
+  @Get()
+  @ApiOperation({ summary: "Own profile (safe fields only)" })
+  getProfile(@CurrentUser() user: AuthUser) {
+    return this.meService.getProfile(user);
+  }
+
+  @Patch("profile")
+  @ApiOperation({ summary: "Update own phone, emergency contact and photo only" })
+  updateProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
+    return this.meService.updateProfile(user, dto);
+  }
+
+  @Get("shifts")
+  @ApiOperation({ summary: "Own shifts for a week (defaults to the current week)" })
+  @ApiQuery({ name: "week", required: false, example: "2026-07-06" })
+  getShifts(@CurrentUser() user: AuthUser, @Query("week") week?: string) {
+    return this.meService.getShifts(user, week);
+  }
+
+  @Get("attendance")
+  @ApiOperation({ summary: "Own attendance for a month + summary (defaults to current month)" })
+  @ApiQuery({ name: "month", required: false, example: "2026-07" })
+  getAttendance(@CurrentUser() user: AuthUser, @Query("month") month?: string) {
+    return this.meService.getAttendance(user, month);
+  }
+
+  @Get("leave")
+  @ApiOperation({ summary: "Own leave balance, requests and available leave types" })
+  getLeave(@CurrentUser() user: AuthUser) {
+    return this.meService.getLeave(user);
+  }
+
+  @Post("leave-requests")
+  @ApiOperation({ summary: "Submit a leave request for yourself" })
+  createLeaveRequest(@CurrentUser() user: AuthUser, @Body() dto: CreateLeaveRequestDto) {
+    return this.meService.createLeaveRequest(user, dto);
+  }
+
+  @Delete("leave-requests/:id")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Cancel your own leave request (only while pending)" })
+  cancelLeaveRequest(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
+    return this.meService.cancelLeaveRequest(user, id);
+  }
+}
