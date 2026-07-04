@@ -20,8 +20,12 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
-  // Brute-force protection: max 5 login attempts per minute per IP.
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  // Brute-force protection. Behind the web app's same-origin /api proxy, every
+  // login shares one source IP (the web server), so this bucket is effectively
+  // global — set high enough for a whole team to sign in within a minute, but
+  // low enough to throttle a password-guessing bot hitting the API directly.
+  // Tune without a code change via the LOGIN_RATE_LIMIT env var.
+  @Throttle({ default: { limit: Number(process.env.LOGIN_RATE_LIMIT) || 20, ttl: 60_000 } })
   @Post("login")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Login with email and password" })
