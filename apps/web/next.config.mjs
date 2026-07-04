@@ -17,6 +17,13 @@ const nextConfig = {
   // not block production builds on Render, which run `next build`.
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
+  // Send the root to the dashboard at the ROUTING layer. A render-time
+  // redirect() in a page (app/page.tsx) can throw a 500 in production under
+  // Next 14.2's trace instrumentation on some Node runtimes (observed on
+  // Render), so the root must NOT be a rendered redirect page.
+  async redirects() {
+    return [{ source: "/", destination: "/dashboard", permanent: false }];
+  },
 };
 
 export default nextConfig;
