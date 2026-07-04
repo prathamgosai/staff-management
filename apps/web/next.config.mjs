@@ -24,6 +24,17 @@ const nextConfig = {
   async redirects() {
     return [{ source: "/", destination: "/dashboard", permanent: false }];
   },
+  // Proxy every /api/* call through THIS server to the backend, so the browser
+  // only ever talks to its own origin (no CORS) and there's no build-time
+  // NEXT_PUBLIC API URL to misconfigure. Point it elsewhere with API_ORIGIN.
+  async rewrites() {
+    const apiOrigin =
+      process.env.API_ORIGIN ||
+      (process.env.NODE_ENV === "production"
+        ? "https://bookends-shiftly.onrender.com"
+        : "http://localhost:4000");
+    return [{ source: "/api/:path*", destination: `${apiOrigin}/api/:path*` }];
+  },
 };
 
 export default nextConfig;

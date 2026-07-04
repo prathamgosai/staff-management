@@ -1,7 +1,10 @@
 import axios from "axios";
 import { useAuthStore } from "@/store/auth.store";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+// Same-origin path. A Next.js rewrite (next.config.mjs) proxies /api/* to the
+// backend, so the browser never makes a cross-origin call — no CORS, and no
+// build-time NEXT_PUBLIC API URL to get wrong.
+const BASE_URL = "/api/v1";
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,

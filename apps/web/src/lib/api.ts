@@ -1,7 +1,7 @@
 import axios from "axios";
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
+// Same-origin path proxied to the backend by a Next.js rewrite (next.config.mjs).
+const BASE_URL = "/api/v1";
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
