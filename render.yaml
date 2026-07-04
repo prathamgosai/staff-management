@@ -1,25 +1,21 @@
 # ─────────────────────────────────────────────────────────────
-# Render Blueprint — WorkforceIQ (all-in-Render, no external services)
-#   Database : Render-managed PostgreSQL 16   (free — expires after 30 days)
-#   Redis    : Render-managed Key Value        (free)
-#   Hosted   : NestJS API + Next.js Web
+# Render Blueprint — WorkforceIQ
+#   Database : Supabase (YOUR project — Sydney, ap-southeast-2) · external
+#   Redis    : Render-managed Key Value (free)
+#   Hosted   : NestJS API + Next.js Web (Render web services)
 #
 # Deploy: Render Dashboard → New → Blueprint → connect this repo → Apply.
-# DB/Redis are provisioned automatically and their connection vars are
-# wired in below — nothing to paste. The only manual vars are the two
-# cross-service URLs (sync: false), set after the first deploy.
+# Redis is provisioned automatically. You MUST set these by hand (sync:false)
+# in the Render dashboard after creating the blueprint:
+#   • workforceiq-api → DB_PASSWORD          = your Supabase DB password
+#   • workforceiq-api → APP_URL              = https://workforceiq-web.onrender.com   (after 1st web deploy)
+#   • workforceiq-web → NEXT_PUBLIC_API_URL  = https://workforceiq-api.onrender.com/api/v1
+#   • workforceiq-web → NEXT_PUBLIC_WS_URL   = wss://workforceiq-api.onrender.com
 #
-# NOTE: keep every resource in the SAME region so the API reaches the DB
-# and Redis over Render's private network.
+# NOTE: the DB (Supabase) is in Sydney while these services are Singapore —
+# cross-region latency is fine, just not co-located. Keep Render services in
+# one region so the API↔Redis hop stays on Render's private network.
 # ─────────────────────────────────────────────────────────────
-
-databases:
-  - name: workforceiq-db
-    plan: free
-    region: singapore
-    postgresMajorVersion: "16"
-    databaseName: workforceiq
-    user: workforceiq_user
 
 services:
   # ── Redis (Render Key Value) ───────────────────────────────
@@ -46,31 +42,24 @@ services:
         value: production
       - key: API_PREFIX
         value: api/v1
-      # ── Postgres (wired from the managed DB above) ──
+      # ── Postgres — YOUR Supabase project (Sydney, session pooler) ──
+      # DB_PASSWORD is a secret (sync:false) — paste it in the Render dashboard;
+      # never hard-code it here (this file is committed). Get host + password
+      # from Supabase → Connect → "Session pooler".
       - key: DB_HOST
-        fromDatabase:
-          name: workforceiq-db
-          property: host
+        value: aws-1-ap-southeast-2.pooler.supabase.com
       - key: DB_PORT
-        fromDatabase:
-          name: workforceiq-db
-          property: port
+        value: "5432"
       - key: DB_NAME
-        fromDatabase:
-          name: workforceiq-db
-          property: database
+        value: postgres
       - key: DB_USER
-        fromDatabase:
-          name: workforceiq-db
-          property: user
+        value: postgres.ypgkyytgpszlfhosolec
       - key: DB_PASSWORD
-        fromDatabase:
-          name: workforceiq-db
-          property: password
+        sync: false              # ← set in Render dashboard = your Supabase DB password
       - key: DB_SSL
-        value: "true"            # Render PG supports SSL; rejectUnauthorized:false in app
+        value: "true"            # Supabase requires SSL (app uses rejectUnauthorized:false)
       - key: DB_POOL_MAX
-        value: "8"               # free Render Postgres has a low connection limit
+        value: "8"               # keep modest on Supabase free tier + session pooler
       # ── Redis (wired from the Key Value service above) ──
       - key: REDIS_HOST
         fromService:

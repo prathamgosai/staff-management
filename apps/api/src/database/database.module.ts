@@ -20,7 +20,9 @@ export const DB_POOL = "DB_POOL";
           ssl: config.get("DB_SSL") === "true" ? { rejectUnauthorized: false } : false,
           max: config.get<number>("DB_POOL_MAX", 20),
           idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 2000,
+          // Generous enough for a remote managed DB (e.g. Supabase pooler) where
+          // TLS + cross-region latency can exceed a local socket's few ms.
+          connectionTimeoutMillis: config.get<number>("DB_CONNECT_TIMEOUT_MS", 15000),
         });
         pool.on("error", (err) => console.error("Unexpected PG pool error", err));
         return pool;
