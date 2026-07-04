@@ -189,3 +189,63 @@
     box-shadow: 0 12px 32px -8px hsl(0 0% 0% / 0.6), 0 2px 8px -2px hsl(0 0% 0% / 0.4);
   }
 }
+
+/* ============================================================================
+   Sidebar evening night-sky (decorative). Purely ornamental — sits behind the
+   nav (pointer-events: none). Colours are fixed art, not theme tokens, because
+   the sidebar rail is dark in BOTH light and dark app themes.
+   ========================================================================== */
+@keyframes wiq-twinkle {
+  0%, 100% { opacity: 0.2;  transform: scale(0.75); }
+  50%      { opacity: 0.95; transform: scale(1.15); }
+}
+@keyframes wiq-moon-glow {
+  0%, 100% { box-shadow: 0 0 18px 5px hsl(48 95% 85% / 0.30), 0 0 42px 12px hsl(45 80% 78% / 0.16); }
+  50%      { box-shadow: 0 0 24px 8px hsl(48 95% 85% / 0.42), 0 0 56px 18px hsl(45 80% 78% / 0.22); }
+}
+@keyframes wiq-shoot {
+  0%       { transform: translate3d(0, 0, 0) rotate(28deg); opacity: 0; }
+  3%       { opacity: 1; }
+  16%      { transform: translate3d(180px, 96px, 0) rotate(28deg); opacity: 0; }
+  100%     { transform: translate3d(180px, 96px, 0) rotate(28deg); opacity: 0; }
+}
+
+.sidebar-sky {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* Dusk → deep-night wash layered over the sidebar's own dark rail. */
+  background:
+    radial-gradient(130% 55% at 85% -12%, hsl(250 55% 40% / 0.45), transparent 62%),
+    radial-gradient(90% 40% at 15% 8%, hsl(220 60% 45% / 0.18), transparent 60%),
+    linear-gradient(to bottom, hsl(244 45% 20% / 0.55), hsl(232 40% 7% / 0.7));
+}
+.sidebar-star {
+  position: absolute;
+  border-radius: 9999px;
+  background: hsl(210 40% 99%);
+  box-shadow: 0 0 4px 1px hsl(210 60% 95% / 0.5);
+  animation: wiq-twinkle var(--twinkle-dur, 3.6s) ease-in-out infinite;
+  animation-delay: var(--twinkle-delay, 0s);
+}
+.sidebar-moon {
+  position: absolute;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 34% 32%, hsl(48 100% 97%), hsl(45 55% 82%) 78%);
+  animation: wiq-moon-glow 6.5s ease-in-out infinite;
+}
+.sidebar-shoot {
+  position: absolute;
+  height: 2px;
+  width: 74px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, transparent, hsl(0 0% 100% / 0.85));
+  filter: drop-shadow(0 0 4px hsl(0 0% 100% / 0.5));
+  animation: wiq-shoot 9s ease-in-out infinite;
+  animation-delay: 3s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-star, .sidebar-moon, .sidebar-shoot { animation: none; }
+  .sidebar-shoot { opacity: 0; }
+}

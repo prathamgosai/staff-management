@@ -12,6 +12,7 @@ import { cn, getInitials } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { SidebarSky } from "./sidebar-sky";
 
 function isActive(pathname: string, href: string): boolean {
   return pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
@@ -138,24 +139,27 @@ export function DesktopSidebar() {
   return (
     <aside
       className={cn(
-        "hidden shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out md:flex",
+        "relative hidden shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out md:flex",
         collapsed ? "w-[4.5rem]" : "w-64",
       )}
     >
-      <div className={cn("flex h-16 items-center border-b border-sidebar-border px-4", collapsed ? "justify-center" : "justify-between")}>
-        {!collapsed && <Logo collapsed={false} />}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggle}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
-        >
-          {collapsed ? <PanelLeftOpen className="size-[18px]" /> : <PanelLeftClose className="size-[18px]" />}
-        </Button>
+      <SidebarSky collapsed={collapsed} />
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+        <div className={cn("flex h-16 items-center border-b border-sidebar-border px-4", collapsed ? "justify-center" : "justify-between")}>
+          {!collapsed && <Logo collapsed={false} />}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggle}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
+          >
+            {collapsed ? <PanelLeftOpen className="size-[18px]" /> : <PanelLeftClose className="size-[18px]" />}
+          </Button>
+        </div>
+        <SidebarBody collapsed={collapsed} />
+        <UserChip collapsed={collapsed} />
       </div>
-      <SidebarBody collapsed={collapsed} />
-      <UserChip collapsed={collapsed} />
     </aside>
   );
 }
@@ -163,12 +167,15 @@ export function DesktopSidebar() {
 /** Mobile sheet body — always expanded; closes the sheet on navigation. */
 export function MobileSidebar({ onNavigate }: { onNavigate: () => void }) {
   return (
-    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
-      <div className="flex h-16 items-center border-b border-sidebar-border px-4">
-        <Logo collapsed={false} />
+    <div className="relative flex h-full flex-col overflow-hidden bg-sidebar text-sidebar-foreground">
+      <SidebarSky />
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+        <div className="flex h-16 items-center border-b border-sidebar-border px-4">
+          <Logo collapsed={false} />
+        </div>
+        <SidebarBody collapsed={false} onNavigate={onNavigate} />
+        <UserChip collapsed={false} />
       </div>
-      <SidebarBody collapsed={false} onNavigate={onNavigate} />
-      <UserChip collapsed={false} />
     </div>
   );
 }
