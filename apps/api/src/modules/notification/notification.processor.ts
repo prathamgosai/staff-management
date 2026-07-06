@@ -6,7 +6,8 @@ import { DB_POOL } from "../../database/database.module";
 import { formatError } from "../../common/utils/format-error";
 import { WhatsAppProvider } from "./providers/whatsapp.provider";
 import { EmailProvider } from "./providers/email.provider";
-import { NOTIFICATIONS_QUEUE, DISPATCH_JOB, WA_TEMPLATE_LANG } from "./notification.constants";
+import { NotificationService } from "./notification.service";
+import { NOTIFICATIONS_QUEUE, DISPATCH_JOB, REMINDER_CRON_JOB, WA_TEMPLATE_LANG } from "./notification.constants";
 
 interface DispatchData {
   tenantId: string;
@@ -34,7 +35,18 @@ export class NotificationProcessor {
     @Inject(DB_POOL) private readonly db: Pool,
     private readonly whatsapp: WhatsAppProvider,
     private readonly email: EmailProvider,
+    private readonly notificationService: NotificationService,
   ) {}
+
+  /** Nightly repeatable: enqueue SHIFT_REMINDER for everyone rostered tomorrow. */
+  @Process(REMINDER_CRON_JOB)
+  async handleReminderCron(): Promise<void> {
+    try {
+      await this.notificationService.sendTomorrowReminders();
+    } catch (e) {
+      this.logger.error(`shift-reminder cron failed: ${formatError(e)}`);
+    }
+  }
 
   @Process(DISPATCH_JOB)
   async handleDispatch(job: Job<DispatchData>): Promise<void> {

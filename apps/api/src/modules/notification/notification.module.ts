@@ -5,13 +5,14 @@ import { NotificationService } from "./notification.service";
 import { WhatsAppProvider } from "./providers/whatsapp.provider";
 import { EmailProvider } from "./providers/email.provider";
 import { NotificationProcessor } from "./notification.processor";
+import { ReminderScheduler } from "./notification.reminder";
 
 @Module({
   imports: [
     BullModule.registerQueue({ name: "notifications" }),
   ],
   controllers: [NotificationController],
-  providers: [NotificationService, WhatsAppProvider, EmailProvider, NotificationProcessor],
+  providers: [NotificationService, WhatsAppProvider, EmailProvider, NotificationProcessor, ReminderScheduler],
   exports: [NotificationService],
 })
 export class NotificationModule {}

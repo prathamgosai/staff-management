@@ -6,6 +6,7 @@ import { DB_POOL } from "../../database/database.module";
 import { formatError } from "../../common/utils/format-error";
 import { NotificationEvent } from "@workforceiq/shared";
 import type { NotificationPayloadMap, AuthUser } from "@workforceiq/shared";
+import { toLocalDateStr } from "../../common/utils/week.util";
 import { renderMessage, type RecipientKind } from "./notification.messages";
 import { DISPATCH_JOB, DISPATCH_JOB_OPTS, NOTIFICATIONS_QUEUE } from "./notification.constants";
 
@@ -270,6 +271,60 @@ export class NotificationService {
   private async outletName(outletId: string): Promise<string | undefined> {
     const res = await this.db.query("SELECT name FROM outlets WHERE id = $1", [outletId]);
     return res.rows[0]?.name;
+  }
+
+  // ── Nightly shift reminders ──────────────────────────────────────────────────
+
+  /**
+   * Enqueue SHIFT_REMINDER for every staff member with a PUBLISHED shift tomorrow.
+   * Idempotent: a (user, shift) that already has a shift_reminder notification is
+   * skipped, so a re-run / restart never double-sends. Returns counts for logging.
+   */
+  async sendTomorrowReminders(): Promise<{ sent: number; skipped: number }> {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const tomorrow = toLocalDateStr(d);
+
+    const rows = await this.db.query(
+      `SELECT s.id AS staff_id, s.user_id, ss.id AS shift_id, ss.date,
+              ss.start_time, ss.end_time, ss.outlet_id, o.tenant_id
+       FROM shift_assignments sa
+       JOIN schedule_shifts ss ON ss.id = sa.shift_id
+       JOIN schedules sc ON sc.id = ss.schedule_id AND sc.status = 'published'
+       JOIN staff s ON s.id = sa.staff_id
+       JOIN outlets o ON o.id = ss.outlet_id
+       WHERE ss.date = $1 AND sa.status <> 'cancelled'`,
+      [tomorrow],
+    );
+
+    let sent = 0;
+    let skipped = 0;
+    for (const r of rows.rows) {
+      // Idempotency guard — meaningful for staff with a login (in-app row keyed by user).
+      if (r.user_id) {
+        const dup = await this.db.query(
+          `SELECT 1 FROM notifications
+           WHERE user_id = $1 AND type = $2 AND data->>'shiftId' = $3 LIMIT 1`,
+          [r.user_id, NotificationEvent.SHIFT_REMINDER, r.shift_id],
+        );
+        if (dup.rows[0]) {
+          skipped++;
+          continue;
+        }
+      }
+      await this.emit(NotificationEvent.SHIFT_REMINDER, {
+        tenantId: r.tenant_id,
+        outletId: r.outlet_id,
+        staffId: r.staff_id,
+        shiftId: r.shift_id,
+        shiftDate: toLocalDateStr(r.date),
+        startTime: (r.start_time ?? "").slice(0, 5),
+        endTime: (r.end_time ?? "").slice(0, 5),
+      });
+      sent++;
+    }
+    this.logger.log(`Shift reminders for ${tomorrow}: ${sent} sent, ${skipped} already notified`);
+    return { sent, skipped };
   }
 
   // ── Own-data reads (JWT + own only) ──────────────────────────────────────────
