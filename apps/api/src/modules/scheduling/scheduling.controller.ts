@@ -42,7 +42,8 @@ export class SchedulingController {
   }
 
   @Post("schedules/:id/publish")
-  @ApiOperation({ summary: "Publish a draft schedule" })
+  @RequirePermission("schedule:publish")
+  @ApiOperation({ summary: "Publish a draft schedule (notifies rostered staff + head)" })
   publish(
     @CurrentUser() user: AuthUser,
     @Param("id", ParseUUIDPipe) id: string,

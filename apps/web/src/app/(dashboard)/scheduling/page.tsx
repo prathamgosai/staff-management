@@ -5,11 +5,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import {
   ChevronLeft, ChevronRight, Clock, Users, Building2,
-  ChevronDown, Info, RefreshCw,
+  ChevronDown, Info, RefreshCw, Send, CheckCircle2,
 } from "lucide-react";
 import { format, addWeeks, subWeeks, startOfWeek } from "date-fns";
 import { toast } from "@/components/ui/sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuthStore } from "@/store/auth.store";
+import { hasPermission } from "@/lib/permissions";
 
 /* ─── types ──────────────────────────────────────────────────────────── */
 interface StaffInShift {
@@ -88,6 +90,32 @@ export default function SchedulingPage() {
     staleTime: 0,
   });
 
+  // Publish state: the schedule record carries the draft/published status + its id.
+  const user = useAuthStore((s) => s.user);
+  const scheduleKey = ["schedule-record", selectedOutletId, weekStartDate];
+  const { data: scheduleRes } = useQuery<{ data: { id: string; status: string } | null }>({
+    queryKey: scheduleKey,
+    queryFn: () => apiClient.get("/scheduling/schedules", {
+      params: { outletId: selectedOutletId, weekStartDate },
+    }).then(r => r.data),
+    enabled: !!selectedOutletId,
+    staleTime: 0,
+  });
+  const scheduleId = scheduleRes?.data?.id ?? null;
+  const isPublished = scheduleRes?.data?.status === "published";
+  const canPublish = hasPermission(user, "schedule:publish");
+
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      if (!scheduleId) throw new Error("No schedule to publish");
+      await apiClient.post(`/scheduling/schedules/${scheduleId}/publish`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: scheduleKey });
+      toast.success("Roster published — staff have been notified.");
+    },
+  });
+
   const generateMutation = useMutation({
     mutationFn: async () => {
       const res = await apiClient.post("/scheduling/schedules/generate", {
@@ -107,6 +135,8 @@ export default function SchedulingPage() {
       // Push the generated roster straight into the cache — no timing race,
       // no fixed-delay refetch that could miss the commit and hang.
       queryClient.setQueryData(rosterKey, { data: roster });
+      // Regenerating reverts the week to draft — refresh the publish badge/button.
+      queryClient.invalidateQueries({ queryKey: scheduleKey });
       toast.success("Roster generated for this week.");
     },
   });
@@ -222,7 +252,20 @@ export default function SchedulingPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Weekly Shift Roster</h1>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-2xl font-bold text-foreground">Weekly Shift Roster</h1>
+            {selectedOutletId && scheduleId && (
+              isPublished ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-success/15 text-success px-2.5 py-1 text-xs font-semibold">
+                  <CheckCircle2 size={13} /> Published
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 text-warning px-2.5 py-1 text-xs font-semibold">
+                  Draft
+                </span>
+              )
+            )}
+          </div>
           <p className="text-sm text-muted-foreground mt-0.5">
             Auto-generated every Monday · Head Chef &amp; HOD can view all assignments
           </p>
@@ -292,11 +335,20 @@ export default function SchedulingPage() {
             </button>
           ))}
           {roster.length > 0 && (
-            <button onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}
-              className="ml-auto inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 transition">
-              <RefreshCw size={12} className={generateMutation.isPending ? "animate-spin" : ""} />
-              {generateMutation.isPending ? "Regenerating…" : "Regenerate"}
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              {canPublish && !isPublished && (
+                <button onClick={() => publishMutation.mutate()} disabled={publishMutation.isPending || !scheduleId}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 transition">
+                  <Send size={12} className={publishMutation.isPending ? "animate-pulse" : ""} />
+                  {publishMutation.isPending ? "Publishing…" : "Publish week"}
+                </button>
+              )}
+              <button onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 transition">
+                <RefreshCw size={12} className={generateMutation.isPending ? "animate-spin" : ""} />
+                {generateMutation.isPending ? "Regenerating…" : "Regenerate"}
+              </button>
+            </div>
           )}
           {roster.length > 0 && generateMutation.isError && (
             <span className="text-xs text-red-500 w-full">

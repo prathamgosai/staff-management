@@ -56,6 +56,9 @@ export interface ShiftChangedPayload {
   endTime: TimeString;
   shiftName?: string;
   changedBy?: UUID; // user id
+  // Set on a bulk template-retime that touches many staff, so the outlet head is
+  // notified per-staff only for single moves — not spammed once per affected staff.
+  suppressHead?: boolean;
 }
 
 export interface ShiftReminderPayload {
