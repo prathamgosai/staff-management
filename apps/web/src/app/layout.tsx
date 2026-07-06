@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { ServiceWorkerRegister } from "@/components/pwa/sw-register";
+import { InstallHint } from "@/components/pwa/install-hint";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen overflow-x-hidden bg-background font-sans text-foreground antialiased">
         <Providers>{children}</Providers>
         <ServiceWorkerRegister />
+        <InstallHint />
       </body>
     </html>
   );
