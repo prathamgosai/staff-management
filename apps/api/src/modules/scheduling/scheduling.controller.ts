@@ -8,6 +8,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
+import { assertOutletAllowed, resolveOutletFilter } from "../../common/auth/outlet-scope";
 import type { AuthUser } from "@workforceiq/shared";
 
 @ApiTags("Scheduling")
@@ -26,6 +27,7 @@ export class SchedulingController {
     @Query("outletId") outletId: string,
     @Query("weekStartDate") weekStartDate: string,
   ) {
+    assertOutletAllowed(user, outletId);
     return this.schedulingService.getSchedule(user.tenantId, outletId, weekStartDate);
   }
 
@@ -35,6 +37,7 @@ export class SchedulingController {
     @CurrentUser() user: AuthUser,
     @Body() body: { outletId: string; weekStartDate: string },
   ) {
+    assertOutletAllowed(user, body.outletId);
     return this.schedulingService.triggerAutoGenerate(user.tenantId, body.outletId, body.weekStartDate, user.id);
   }
 
@@ -49,11 +52,12 @@ export class SchedulingController {
 
   @Get("shifts")
   getShifts(
+    @CurrentUser() user: AuthUser,
     @Query("scheduleId") scheduleId: string,
     @Query("outletId") outletId: string,
     @Query("date") date: string,
   ) {
-    return this.schedulingService.getShifts(scheduleId, outletId, date);
+    return this.schedulingService.getShifts(resolveOutletFilter(user, outletId), scheduleId, date);
   }
 
   @Get("today")
@@ -63,29 +67,32 @@ export class SchedulingController {
     @Query("outletId") outletId: string,
     @Query("departmentId") departmentId: string,
   ) {
-    return this.schedulingService.getTodayShifts(user.tenantId, outletId, departmentId);
+    return this.schedulingService.getTodayShifts(user.tenantId, resolveOutletFilter(user, outletId), departmentId);
   }
 
   @Post("shifts/:shiftId/assign")
   @ApiOperation({ summary: "Assign staff to a shift" })
   assignStaff(
+    @CurrentUser() user: AuthUser,
     @Param("shiftId", ParseUUIDPipe) shiftId: string,
     @Body() body: { staffIds: string[] },
   ) {
-    return this.schedulingService.assignStaff(shiftId, body.staffIds);
+    return this.schedulingService.assignStaff(user, shiftId, body.staffIds);
   }
 
   @Delete("shifts/:shiftId/assign/:staffId")
   @HttpCode(HttpStatus.NO_CONTENT)
   removeAssignment(
+    @CurrentUser() user: AuthUser,
     @Param("shiftId", ParseUUIDPipe) shiftId: string,
     @Param("staffId", ParseUUIDPipe) staffId: string,
   ) {
-    return this.schedulingService.removeAssignment(shiftId, staffId);
+    return this.schedulingService.removeAssignment(user, shiftId, staffId);
   }
 
   @Get("shift-templates")
   getTemplates(@CurrentUser() user: AuthUser, @Query("outletId") outletId: string) {
+    assertOutletAllowed(user, outletId);
     return this.schedulingService.getShiftTemplates(outletId);
   }
 
@@ -106,15 +113,18 @@ export class SchedulingController {
     @CurrentUser() user: AuthUser,
     @Body() body: { outletId: string; staffId: string; templateId: string; weekStartDate: string },
   ) {
+    assertOutletAllowed(user, body.outletId);
     return this.schedulingService.moveStaffToShift(user.tenantId, user.id, body);
   }
 
   @Get("coverage-summary")
   @ApiOperation({ summary: "Weekly coverage % and gap analysis" })
   coverageSummary(
+    @CurrentUser() user: AuthUser,
     @Query("outletId") outletId: string,
     @Query("weekStartDate") weekStartDate: string,
   ) {
+    assertOutletAllowed(user, outletId);
     return this.schedulingService.getCoverageSummary(outletId, weekStartDate);
   }
 
@@ -125,6 +135,7 @@ export class SchedulingController {
     @Query("outletId") outletId: string,
     @Query("weekStartDate") weekStartDate: string,
   ) {
+    assertOutletAllowed(user, outletId);
     return this.schedulingService.getWeeklyRoster(user.tenantId, outletId, weekStartDate);
   }
 

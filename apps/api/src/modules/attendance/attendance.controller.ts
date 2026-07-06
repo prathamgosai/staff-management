@@ -3,6 +3,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from "@nestjs/swagger";
 import { AttendanceService } from "./attendance.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
+import { resolveOutletFilter } from "../../common/auth/outlet-scope";
 import type { AuthUser } from "@workforceiq/shared";
 
 @ApiTags("Attendance")
@@ -22,27 +23,28 @@ export class AttendanceController {
     @Query("endDate") endDate: string,
     @Query("staffId") staffId: string,
   ) {
-    return this.attendanceService.findAll({ tenantId: user.tenantId, outletId, date, startDate, endDate, staffId });
+    return this.attendanceService.findAll({ tenantId: user.tenantId, outletFilter: resolveOutletFilter(user, outletId), date, startDate, endDate, staffId });
   }
 
   @Post("clock-in")
   @ApiOperation({ summary: "Record staff clock-in" })
-  clockIn(@Body() body: { staffId: string; outletId: string; shiftId?: string; method: string; gpsLat?: number; gpsLng?: number }) {
-    return this.attendanceService.clockIn(body);
+  clockIn(@CurrentUser() user: AuthUser, @Body() body: { staffId: string; outletId: string; shiftId?: string; method: string; gpsLat?: number; gpsLng?: number }) {
+    return this.attendanceService.clockIn(user, body);
   }
 
   @Post("clock-out")
   @ApiOperation({ summary: "Record staff clock-out" })
-  clockOut(@Body() body: { attendanceId: string; method: string; gpsLat?: number; gpsLng?: number }) {
-    return this.attendanceService.clockOut(body);
+  clockOut(@CurrentUser() user: AuthUser, @Body() body: { attendanceId: string; method: string; gpsLat?: number; gpsLng?: number }) {
+    return this.attendanceService.clockOut(user, body);
   }
 
   @Post("manual-entry")
   @ApiOperation({ summary: "Manually add an attendance record for a specific date" })
   manualEntry(
+    @CurrentUser() user: AuthUser,
     @Body() body: { staffId: string; outletId: string; date: string; clockIn: string; clockOut?: string; status: string; note?: string },
   ) {
-    return this.attendanceService.manualEntry(body);
+    return this.attendanceService.manualEntry(user, body);
   }
 
   @Post("corrections")
@@ -51,7 +53,7 @@ export class AttendanceController {
     @CurrentUser() user: AuthUser,
     @Body() body: { attendanceId: string; correctedClockIn?: string; correctedClockOut?: string; reason: string },
   ) {
-    return this.attendanceService.requestCorrection(user.id, body);
+    return this.attendanceService.requestCorrection(user, body);
   }
 
   @Put("corrections/:id/review")
@@ -60,12 +62,12 @@ export class AttendanceController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() body: { action: "approve" | "reject" },
   ) {
-    return this.attendanceService.reviewCorrection(id, user.id, body.action);
+    return this.attendanceService.reviewCorrection(user, id, body.action);
   }
 
   @Get("live-status")
   @ApiOperation({ summary: "Live clock-in status for an outlet (who is in/out right now)" })
-  liveStatus(@Query("outletId") outletId: string) {
-    return this.attendanceService.getLiveStatus(outletId);
+  liveStatus(@CurrentUser() user: AuthUser, @Query("outletId") outletId: string) {
+    return this.attendanceService.getLiveStatus(user, outletId);
   }
 }

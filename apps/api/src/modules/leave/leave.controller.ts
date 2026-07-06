@@ -3,6 +3,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from "@nestjs/swagger";
 import { LeaveService } from "./leave.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
+import { resolveOutletFilter } from "../../common/auth/outlet-scope";
 import type { AuthUser } from "@workforceiq/shared";
 
 @ApiTags("Leave")
@@ -22,7 +23,7 @@ export class LeaveController {
     @Query("startDate") startDate: string,
     @Query("endDate") endDate: string,
   ) {
-    return this.leaveService.getRequests({ tenantId: user.tenantId, outletId, status, staffId, startDate, endDate });
+    return this.leaveService.getRequests({ tenantId: user.tenantId, outletFilter: resolveOutletFilter(user, outletId), status, staffId, startDate, endDate });
   }
 
   @Post("requests")
@@ -31,7 +32,7 @@ export class LeaveController {
     @CurrentUser() user: AuthUser,
     @Body() body: { staffId: string; leaveTypeId: string; startDate: string; endDate: string; halfDayOption?: string; reason?: string },
   ) {
-    return this.leaveService.applyLeave(body);
+    return this.leaveService.applyLeave(body, user);
   }
 
   @Put("requests/:id/review")
@@ -41,23 +42,24 @@ export class LeaveController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() body: { action: "approve" | "reject"; notes?: string },
   ) {
-    return this.leaveService.reviewLeave(id, user.id, body);
+    return this.leaveService.reviewLeave(user, id, body);
   }
 
   @Get("balances/:staffId")
   @ApiOperation({ summary: "Get leave balances for a staff member" })
-  getBalances(@Param("staffId", ParseUUIDPipe) staffId: string) {
-    return this.leaveService.getBalances(staffId);
+  getBalances(@CurrentUser() user: AuthUser, @Param("staffId", ParseUUIDPipe) staffId: string) {
+    return this.leaveService.getBalances(staffId, user);
   }
 
   @Get("calendar")
   @ApiOperation({ summary: "Leave calendar view for an outlet" })
   calendar(
+    @CurrentUser() user: AuthUser,
     @Query("outletId") outletId: string,
     @Query("startDate") startDate: string,
     @Query("endDate") endDate: string,
   ) {
-    return this.leaveService.getCalendar(outletId, startDate, endDate);
+    return this.leaveService.getCalendar(user, outletId, startDate, endDate);
   }
 
   @Get("types")

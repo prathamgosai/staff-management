@@ -12,6 +12,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
+import { allowedOutletIds, resolveOutletFilter, assertOutletAllowed } from "../../common/auth/outlet-scope";
 import { ADMIN_ROLES, type AuthUser } from "@workforceiq/shared";
 
 @ApiTags("Staff")
@@ -24,18 +25,19 @@ export class StaffController {
   @Get()
   @ApiOperation({ summary: "List all staff (paginated, filterable)" })
   findAll(@CurrentUser() user: AuthUser, @Query() query: StaffQueryDto) {
-    return this.staffService.findAll(user.tenantId, query);
+    return this.staffService.findAll(user.tenantId, query, resolveOutletFilter(user, query.outletId));
   }
 
   @Get(":id")
   findOne(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
-    return this.staffService.findOne(user.tenantId, id);
+    return this.staffService.findOne(user.tenantId, id, allowedOutletIds(user));
   }
 
   @Post()
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: "Create a new staff member (admins only)" })
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateStaffDto) {
+    assertOutletAllowed(user, dto.primaryOutletId);
     return this.staffService.create(user.tenantId, dto);
   }
 
@@ -70,24 +72,26 @@ export class StaffController {
   @Get(":id/attendance-summary")
   @ApiOperation({ summary: "Get attendance summary for a staff member" })
   attendanceSummary(
+    @CurrentUser() user: AuthUser,
     @Param("id", ParseUUIDPipe) id: string,
     @Query("startDate") startDate: string,
     @Query("endDate") endDate: string,
   ) {
-    return this.staffService.getAttendanceSummary(id, startDate, endDate);
+    return this.staffService.getAttendanceSummary(user, id, startDate, endDate);
   }
 
   @Get(":id/leave-balances")
-  leaveBalances(@Param("id", ParseUUIDPipe) id: string) {
-    return this.staffService.getLeaveBalances(id);
+  leaveBalances(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
+    return this.staffService.getLeaveBalances(user, id);
   }
 
   @Get(":id/schedule")
   @ApiOperation({ summary: "Get upcoming schedule for a staff member" })
   schedule(
+    @CurrentUser() user: AuthUser,
     @Param("id", ParseUUIDPipe) id: string,
     @Query("weekStartDate") weekStartDate: string,
   ) {
-    return this.staffService.getSchedule(id, weekStartDate);
+    return this.staffService.getSchedule(user, id, weekStartDate);
   }
 }

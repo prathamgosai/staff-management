@@ -101,7 +101,7 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 
 ## 5. Known gaps / open items
 
-- **RBAC data-scoping mostly NOT enforced** — only `outlet.findAll()` filters by `user.outletIds`; staff/attendance/leave/scheduling accept a client-supplied `outletId` with no server authorization. No department scoping (`users` has no `department_id`).
+- **RBAC data-scoping — server-side outlet scoping now enforced** (Task 0) across staff/attendance/leave/scheduling via `common/auth/outlet-scope.ts`: super_admin/admin/hr → all tenant outlets; head_of_house/chef/employee → their own outlet(s); an out-of-scope client `outletId` is rejected (403) and unscoped list reads are filtered to the caller's outlets. Also closed several cross-tenant leaks (endpoints that previously had no `tenant_id` filter). Residual: scheduling uses controller-level outlet guards rather than a deep per-query tenant rewrite (safe while single-tenant); no department scoping (`users` has no `department_id`).
 - **Seed schema is stale** — `001_schema.sql` lacks columns the app later added (e.g. `users.pending_approval`, `ticket_number`, `must_change_password`). Treat the live DB (pg_dump) as source of truth, not the seed files.
 - **API has no hot-reload** — plain `ts-node`; any backend change needs a manual restart, and a type error anywhere blocks startup. Keep `tsc --noEmit` clean.
 - **Resigned staff still listed** — `staff.findAll` hides only `terminated`, not `resigned`.
