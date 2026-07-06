@@ -169,7 +169,7 @@ function AddStaffModal({ open, onClose }: { open: boolean; onClose: () => void }
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-card rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
         {/* Header */}
@@ -310,7 +310,7 @@ function FilterDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card w-80 h-full shadow-2xl flex flex-col">
+      <div className="relative bg-card w-80 max-w-[85vw] h-full shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h2 className="font-bold text-foreground">Filter Staff</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition">

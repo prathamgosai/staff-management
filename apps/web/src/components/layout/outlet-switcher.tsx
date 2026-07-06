@@ -56,16 +56,18 @@ export function OutletSwitcher() {
           role="combobox"
           aria-expanded={open}
           aria-label="Switch outlet"
-          className="h-9 max-w-[15rem] justify-between gap-2 font-normal"
+          // Icon-only on phones so it never pushes the top-bar controls off a
+          // 320px screen; expands to the full labelled switcher from sm up.
+          className="h-9 w-9 shrink-0 justify-center gap-2 px-0 font-normal sm:w-auto sm:max-w-[15rem] sm:justify-between sm:px-3"
         >
           <Building2 className="size-4 shrink-0 text-muted-foreground" />
-          <span className="flex min-w-0 flex-col items-start leading-none">
+          <span className="hidden min-w-0 flex-col items-start leading-none sm:flex">
             <span className="truncate text-sm font-medium">{selected ? selected.name : "All outlets"}</span>
             {selected?.brand_name && (
               <span className="truncate text-xs text-muted-foreground">{selected.brand_name}</span>
             )}
           </span>
-          <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-foreground" />
+          <ChevronsUpDown className="ml-auto hidden size-4 shrink-0 text-muted-foreground sm:block" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-64 p-0" align="start">

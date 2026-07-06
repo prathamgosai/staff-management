@@ -85,7 +85,8 @@ export default function ReportsPage() {
             <div className="px-5 py-4 border-b border-border">
               <h2 className="font-semibold text-foreground">Staff Performance</h2>
             </div>
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr className="bg-muted border-b border-border">
                   <th className="text-left px-4 py-3 font-medium text-foreground">Staff</th>
@@ -137,6 +138,7 @@ export default function ReportsPage() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </>
       )}
