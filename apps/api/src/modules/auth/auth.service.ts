@@ -6,10 +6,11 @@ import * as bcrypt from "bcrypt";
 import { randomInt, createHash, randomUUID } from "crypto";
 import { DB_POOL } from "../../database/database.module";
 import type { AuthUser, AuthTokens, TokenPayload } from "@workforceiq/shared";
-import { ASSIGNABLE_ROLES } from "@workforceiq/shared";
+import { ASSIGNABLE_ROLES, NotificationEvent } from "@workforceiq/shared";
 import type { LoginDto } from "./dto/login.dto";
 import type { ChangePasswordDto } from "./dto/change-password.dto";
 import { RolesService } from "../roles/roles.service";
+import { NotificationService } from "../notification/notification.service";
 
 const TENANT_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -35,6 +36,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
     private readonly rolesService: RolesService,
+    private readonly notifications: NotificationService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<AuthUser | null> {
@@ -114,11 +116,22 @@ export class AuthService {
     const hash = await bcrypt.hash(body.password, 12);
     const ticket = generateTicket();
 
-    await this.db.query(
+    const inserted = await this.db.query(
       `INSERT INTO users (tenant_id, email, name, password_hash, role, outlet_ids, is_active, pending_approval, ticket_number)
-       VALUES ($1, $2, $3, $4, 'employee'::user_role, '{}', false, true, $5)`,
+       VALUES ($1, $2, $3, $4, 'employee'::user_role, '{}', false, true, $5)
+       RETURNING id`,
       [TENANT_ID, email, name, hash, ticket],
     );
+
+    // Alert the approvers (hr / admin / super_admin) that a new account needs
+    // review. Fire-and-forget so a notification hiccup never fails registration.
+    void this.notifications.emit(NotificationEvent.ACCOUNT_PENDING_APPROVAL, {
+      tenantId: TENANT_ID,
+      pendingUserId: inserted.rows[0].id as string,
+      name,
+      email,
+      ticketNumber: ticket,
+    });
 
     return {
       message: "Registration submitted successfully. Your Head Chef will review and approve your account.",

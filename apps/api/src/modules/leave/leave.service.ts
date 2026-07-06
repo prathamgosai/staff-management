@@ -1,12 +1,21 @@
-import { Injectable, Inject, BadRequestException } from "@nestjs/common";
+import { Injectable, Inject, BadRequestException, Logger } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import { assertOutletAllowed, assertStaffInScope } from "../../common/auth/outlet-scope";
+import { NotificationEvent } from "@workforceiq/shared";
 import type { AuthUser } from "@workforceiq/shared";
+import { NotificationService } from "../notification/notification.service";
+import { toLocalDateStr } from "../../common/utils/week.util";
+import { formatError } from "../../common/utils/format-error";
 
 @Injectable()
 export class LeaveService {
-  constructor(@Inject(DB_POOL) private readonly db: Pool) {}
+  private readonly logger = new Logger(LeaveService.name);
+
+  constructor(
+    @Inject(DB_POOL) private readonly db: Pool,
+    private readonly notifications: NotificationService,
+  ) {}
 
   async getRequests(filters: { tenantId: string; outletFilter?: string[] | null; status?: string; staffId?: string; startDate?: string; endDate?: string }) {
     const { tenantId, outletFilter, status, staffId, startDate, endDate } = filters;
@@ -66,7 +75,12 @@ export class LeaveService {
       [body.staffId, body.leaveTypeId, totalDays],
     );
 
-    return { data: result.rows[0] };
+    const leaveReq = result.rows[0];
+    // Notify approvers + confirm to the requester. Fire-and-forget: a notification
+    // failure must never fail or slow the leave submission.
+    void this.notifyLeaveRequested(leaveReq.id, body);
+
+    return { data: leaveReq };
   }
 
   async reviewLeave(user: AuthUser, id: string, body: { action: "approve" | "reject"; notes?: string }) {
@@ -95,6 +109,9 @@ export class LeaveService {
         [leave.staff_id, leave.leave_type_id, leave.total_days],
       );
     }
+
+    // Tell the requester the decision (+ the outlet head for coverage planning).
+    void this.notifyLeaveDecided(id, leave.staff_id, newStatus, leave, user.id);
 
     return { data: { id, status: newStatus } };
   }
@@ -135,5 +152,61 @@ export class LeaveService {
       [tenantId],
     );
     return { data: result.rows };
+  }
+
+  /** Resolve the requester's tenant/outlet/name, then fan out LEAVE_REQUESTED. */
+  private async notifyLeaveRequested(
+    leaveRequestId: string,
+    body: { staffId: string; startDate: string; endDate: string },
+  ): Promise<void> {
+    try {
+      const si = await this.db.query(
+        "SELECT tenant_id, current_outlet_id, name FROM staff WHERE id = $1",
+        [body.staffId],
+      );
+      const s = si.rows[0];
+      if (!s) return;
+      await this.notifications.emit(NotificationEvent.LEAVE_REQUESTED, {
+        tenantId: s.tenant_id,
+        outletId: s.current_outlet_id,
+        leaveRequestId,
+        staffId: body.staffId,
+        requesterName: s.name,
+        startDate: body.startDate,
+        endDate: body.endDate,
+      });
+    } catch (e) {
+      this.logger.error(`notifyLeaveRequested failed: ${formatError(e)}`);
+    }
+  }
+
+  /** Resolve the requester's tenant/outlet, then fan out LEAVE_DECIDED. */
+  private async notifyLeaveDecided(
+    leaveRequestId: string,
+    staffId: string,
+    decision: string,
+    leave: { start_date: Date | string; end_date: Date | string },
+    decidedBy: string,
+  ): Promise<void> {
+    try {
+      const si = await this.db.query(
+        "SELECT tenant_id, current_outlet_id FROM staff WHERE id = $1",
+        [staffId],
+      );
+      const s = si.rows[0];
+      if (!s) return;
+      await this.notifications.emit(NotificationEvent.LEAVE_DECIDED, {
+        tenantId: s.tenant_id,
+        outletId: s.current_outlet_id,
+        leaveRequestId,
+        staffId,
+        decision: decision === "approved" ? "approved" : "rejected",
+        startDate: toLocalDateStr(leave.start_date),
+        endDate: toLocalDateStr(leave.end_date),
+        decidedBy,
+      });
+    } catch (e) {
+      this.logger.error(`notifyLeaveDecided failed: ${formatError(e)}`);
+    }
   }
 }

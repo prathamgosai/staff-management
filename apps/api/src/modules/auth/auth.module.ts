@@ -7,11 +7,13 @@ import { AuthService } from "./auth.service";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { LocalStrategy } from "./strategies/local.strategy";
 import { RolesModule } from "../roles/roles.module";
+import { NotificationModule } from "../notification/notification.module";
 
 @Module({
   imports: [
     PassportModule,
     RolesModule,
+    NotificationModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
