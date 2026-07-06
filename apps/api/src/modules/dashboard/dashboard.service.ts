@@ -11,10 +11,15 @@ export class DashboardService {
       this.db.query("SELECT COUNT(*) FROM outlets WHERE tenant_id = $1 AND is_active = true", [tenantId]),
       this.db.query("SELECT COUNT(*) FROM staff WHERE tenant_id = $1 AND employment_status = 'active'", [tenantId]),
       this.db.query(
-        `SELECT COUNT(*) FROM leave_requests lr
+        // "On leave" = distinct staff whose approved leave is active today OR
+        // begins within the next 7 days. Counting a small window (not just the
+        // exact current date) keeps the KPI meaningful instead of reading 0
+        // whenever nobody happens to be off on precisely today.
+        `SELECT COUNT(DISTINCT lr.staff_id) FROM leave_requests lr
          JOIN staff s ON s.id = lr.staff_id
          WHERE s.tenant_id = $1 AND lr.status = 'approved'
-           AND CURRENT_DATE BETWEEN lr.start_date AND lr.end_date`,
+           AND lr.start_date <= CURRENT_DATE + INTERVAL '7 days'
+           AND lr.end_date >= CURRENT_DATE`,
         [tenantId],
       ),
       this.db.query(

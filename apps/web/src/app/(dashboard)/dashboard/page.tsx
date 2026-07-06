@@ -65,7 +65,7 @@ function EditDesignationModal({ staff, onClose }: { staff: StaffRow; onClose: ()
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-card rounded-2xl shadow-2xl w-96 max-w-[calc(100vw-2rem)] mx-4 p-6">
         <div className="flex items-center justify-between mb-1">
@@ -175,25 +175,32 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Active Outlets",    value: overview?.totalOutlets,       icon: Building2,  color: "bg-blue-500",    sub: "all operational" },
-          { label: "Total Staff",       value: overview?.activeStaff,        icon: Users,      color: "bg-emerald-500", sub: "across all outlets" },
-          { label: "On Leave Today",    value: overview?.staffOnLeaveToday,  icon: CalendarOff,color: "bg-amber-500",   sub: "approved leaves" },
-          { label: "On Shift Today",    value: snapshot?.staffOnShift,       icon: Clock,      color: "bg-purple-500",  sub: "scheduled today" },
-        ].map(({ label, value, icon: Icon, color, sub }) => (
-          <div key={label} className="bg-card rounded-2xl border border-border p-5 flex items-center gap-4 shadow-sm">
+          { label: "Active Outlets",    value: overview?.totalOutlets,       icon: Building2,  color: "bg-blue-500",    sub: "all operational",     href: "/outlets" },
+          { label: "Total Staff",       value: overview?.activeStaff,        icon: Users,      color: "bg-emerald-500", sub: "across all outlets",  href: "/staff" },
+          { label: "On Leave",          value: overview?.staffOnLeaveToday,  icon: CalendarOff,color: "bg-amber-500",   sub: "today & next 7 days", href: "/leave", empty: "None" },
+          { label: "On Shift Today",    value: snapshot?.staffOnShift,       icon: Clock,      color: "bg-purple-500",  sub: "scheduled today",     href: "/scheduling" },
+        ].map(({ label, value, icon: Icon, color, sub, href, empty }) => (
+          <Link
+            key={label}
+            href={href}
+            className="group bg-card rounded-2xl border border-border p-4 sm:p-5 flex items-center gap-4 shadow-sm transition hover:border-primary/40 hover:shadow-md"
+          >
             <div className={`${color} text-white rounded-xl p-3 shrink-0`}><Icon size={20} /></div>
-            <div>
+            <div className="min-w-0">
               {ovLoading ? (
                 <Skeleton className="h-8 w-12 mb-1" />
               ) : (
-                <p className="text-2xl font-black text-foreground">{value ?? "—"}</p>
+                <p className="text-2xl font-black text-foreground">{value === 0 && empty ? empty : (value ?? "—")}</p>
               )}
-              <p className="text-xs font-semibold text-foreground">{label}</p>
+              <p className="text-xs font-semibold text-foreground flex items-center gap-1">
+                {label}
+                <ChevronRight size={12} className="text-muted-foreground opacity-0 -translate-x-1 transition group-hover:opacity-100 group-hover:translate-x-0" />
+              </p>
               <p className="text-xs text-muted-foreground">{sub}</p>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
 
