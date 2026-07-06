@@ -7,9 +7,16 @@ interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
   mustChangePassword: boolean;
+  /**
+   * True once zustand has rehydrated this store from localStorage. Auth redirects
+   * MUST wait for this — otherwise a page reload sees the still-default null token
+   * for a tick and wrongly bounces a signed-in user to /login.
+   */
+  hasHydrated: boolean;
   setAuth: (user: AuthUser, accessToken: string, refreshToken: string, mustChangePassword?: boolean) => void;
   setUser: (user: AuthUser) => void;
   clearMustChangePassword: () => void;
+  setHasHydrated: (v: boolean) => void;
   logout: () => void;
 }
 
@@ -20,6 +27,7 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       mustChangePassword: false,
+      hasHydrated: false,
       setAuth: (user, accessToken, refreshToken, mustChangePassword) =>
         set((s) => ({
           user, accessToken, refreshToken,
@@ -30,6 +38,7 @@ export const useAuthStore = create<AuthState>()(
       // keeps permissions current on sessions cached before permissions existed.
       setUser: (user) => set({ user }),
       clearMustChangePassword: () => set({ mustChangePassword: false }),
+      setHasHydrated: (v) => set({ hasHydrated: v }),
       logout: () => set({ user: null, accessToken: null, refreshToken: null, mustChangePassword: false }),
     }),
     {
@@ -40,6 +49,9 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
         mustChangePassword: state.mustChangePassword,
       }),
+      // Flip hasHydrated once localStorage has been read back in. Fires even when
+      // nothing was stored, so first-time visitors resolve too (and never hang).
+      onRehydrateStorage: () => (state) => state?.setHasHydrated(true),
     },
   ),
 );

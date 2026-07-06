@@ -19,7 +19,7 @@ function apiMessage(err: unknown): string | undefined {
 
 export default function ChangePasswordPage() {
   const router = useRouter();
-  const { accessToken, mustChangePassword, clearMustChangePassword, logout, user, setAuth } = useAuthStore();
+  const { accessToken, mustChangePassword, clearMustChangePassword, logout, user, setAuth, hasHydrated } = useAuthStore();
 
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -28,10 +28,11 @@ export default function ChangePasswordPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Must be signed in to reach this screen.
+  // Must be signed in to reach this screen — but wait for the persisted session
+  // to rehydrate first, so a reload here doesn't bounce to /login prematurely.
   useEffect(() => {
-    if (!accessToken) router.replace("/login");
-  }, [accessToken, router]);
+    if (hasHydrated && !accessToken) router.replace("/login");
+  }, [hasHydrated, accessToken, router]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
