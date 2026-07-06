@@ -143,14 +143,18 @@ export class NotificationService {
             extras: { shiftDate: p.shiftDate, startTime: p.startTime, endTime: p.endTime, shiftName: p.shiftName, outletName },
           });
         }
-        for (const h of heads) {
-          if (h.id === p.changedBy) continue;
-          targets.push({
-            userId: h.id,
-            staffId: null,
-            kind: "shift_head",
-            extras: { shiftDate: p.shiftDate, startTime: p.startTime, endTime: p.endTime, staffName: staff?.name },
-          });
+        // A bulk template retime sets suppressHead so the head isn't pinged once per
+        // affected staff; a single move leaves it unset so the head is notified.
+        if (!p.suppressHead) {
+          for (const h of heads) {
+            if (h.id === p.changedBy) continue;
+            targets.push({
+              userId: h.id,
+              staffId: null,
+              kind: "shift_head",
+              extras: { shiftDate: p.shiftDate, startTime: p.startTime, endTime: p.endTime, staffName: staff?.name },
+            });
+          }
         }
         return targets;
       }

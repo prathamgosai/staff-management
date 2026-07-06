@@ -1,10 +1,14 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException } from "@nestjs/common";
+import { Injectable, Inject, Logger, NotFoundException, BadRequestException, ForbiddenException } from "@nestjs/common";
 import { InjectQueue } from "@nestjs/bull";
 import { Queue } from "bull";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import { assertOutletAllowed } from "../../common/auth/outlet-scope";
+import { NotificationEvent } from "@workforceiq/shared";
 import type { AuthUser } from "@workforceiq/shared";
+import { NotificationService } from "../notification/notification.service";
+import { toLocalDateStr } from "../../common/utils/week.util";
+import { formatError } from "../../common/utils/format-error";
 
 // Week number from a fixed epoch for consistent rotation
 function weekIndex(dateStr: string): number {
@@ -15,9 +19,12 @@ function weekIndex(dateStr: string): number {
 
 @Injectable()
 export class SchedulingService {
+  private readonly logger = new Logger(SchedulingService.name);
+
   constructor(
     @Inject(DB_POOL) private readonly db: Pool,
     @InjectQueue("auto-schedule") private readonly scheduleQueue: Queue,
+    private readonly notifications: NotificationService,
   ) {}
 
   async getSchedule(tenantId: string, outletId: string, weekStartDate: string) {
@@ -249,13 +256,15 @@ export class SchedulingService {
   async publishSchedule(user: AuthUser, scheduleId: string) {
     // Scope by the schedule's outlet — a manager may only publish their own.
     const found = await this.db.query(
-      `SELECT sc.id, sc.outlet_id
+      `SELECT sc.id, sc.outlet_id, sc.week_start_date
        FROM schedules sc JOIN outlets o ON o.id = sc.outlet_id
        WHERE sc.id = $1 AND o.tenant_id = $2`,
       [scheduleId, user.tenantId],
     );
     if (!found.rows[0]) throw new NotFoundException("Schedule not found");
-    assertOutletAllowed(user, found.rows[0].outlet_id);
+    const outletId = found.rows[0].outlet_id as string;
+    assertOutletAllowed(user, outletId);
+    const weekKey = toLocalDateStr(found.rows[0].week_start_date);
 
     const result = await this.db.query(
       `UPDATE schedules SET status = 'published', published_at = NOW(), published_by = $2
@@ -263,7 +272,41 @@ export class SchedulingService {
       [scheduleId, user.id],
     );
     if (!result.rows[0]) throw new NotFoundException("Schedule not found");
+
+    // Record the publication (unique per outlet+week). This is BOTH the draft->published
+    // gate for SHIFT_CHANGED and the idempotency key so a re-publish doesn't re-alert.
+    await this.db.query(
+      `INSERT INTO roster_publications (tenant_id, outlet_id, week_key, published_by)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (tenant_id, outlet_id, week_key)
+       DO UPDATE SET published_at = NOW(), published_by = EXCLUDED.published_by`,
+      [user.tenantId, outletId, weekKey, user.id],
+    );
+
+    // Fan out ROSTER_PUBLISHED: each rostered staff gets one week summary, the head an
+    // outlet summary. Fire-and-forget so publishing stays fast even against a remote DB.
+    void this.notifications.emit(NotificationEvent.ROSTER_PUBLISHED, {
+      tenantId: user.tenantId,
+      outletId,
+      weekKey,
+      scheduleId,
+      publishedBy: user.id,
+    });
+
     return { data: result.rows[0] };
+  }
+
+  /**
+   * Is this outlet's week CURRENTLY published? Gates SHIFT_CHANGED so draft weeks stay
+   * silent. Keyed off schedules.status (not roster_publications) so a regenerate — which
+   * reverts the week to draft — also silences edits until it's re-published.
+   */
+  private async isWeekPublished(outletId: string, weekKey: string): Promise<boolean> {
+    const r = await this.db.query(
+      "SELECT 1 FROM schedules WHERE outlet_id = $1 AND week_start_date = $2 AND status = 'published'",
+      [outletId, weekKey],
+    );
+    return r.rows.length > 0;
   }
 
   async getShifts(outletFilter: string[] | null, scheduleId?: string, date?: string) {
@@ -383,7 +426,8 @@ export class SchedulingService {
     if (!tmpl.rows[0]) throw new NotFoundException("Shift template not found");
     if (tmpl.rows[0].tenant_id !== user.tenantId) throw new ForbiddenException("This shift template belongs to another tenant");
     // Scope by outlet — a manager may only edit templates for their own outlets.
-    assertOutletAllowed(user, tmpl.rows[0].outlet_id);
+    const outletId = tmpl.rows[0].outlet_id as string;
+    assertOutletAllowed(user, outletId);
 
     const start = (body.startTime ?? "").slice(0, 5);
     const end = (body.endTime ?? "").slice(0, 5);
@@ -421,7 +465,53 @@ export class SchedulingService {
       updatedShifts = res.rowCount ?? 0;
     }
 
+    // Notify affected staff if the edited week is already published. A retime touches
+    // many staff, so suppress the per-staff head ping (the head made the edit); only the
+    // "from" week is alerted, keeping volume bounded.
+    if (body.fromWeekStartDate && (await this.isWeekPublished(outletId, body.fromWeekStartDate))) {
+      void this.notifyTemplateRetimed(user, outletId, templateId, body.fromWeekStartDate, start, end, newName);
+    }
+
     return { data: { id: templateId, name: newName, startTime: start, endTime: end, isOvernight, breakMinutes, updatedShifts } };
+  }
+
+  /** Alert staff assigned to a retimed template for the given (published) week. */
+  private async notifyTemplateRetimed(
+    user: AuthUser,
+    outletId: string,
+    templateId: string,
+    weekKey: string,
+    start: string,
+    end: string,
+    shiftName: string,
+  ): Promise<void> {
+    try {
+      const affected = await this.db.query(
+        `SELECT DISTINCT sa.staff_id
+         FROM shift_assignments sa
+         JOIN schedule_shifts ss ON ss.id = sa.shift_id
+         WHERE ss.template_id = $1 AND ss.outlet_id = $2
+           AND ss.date >= $3 AND ss.date < ($3::date + INTERVAL '7 days')
+           AND sa.status <> 'cancelled'`,
+        [templateId, outletId, weekKey],
+      );
+      for (const row of affected.rows) {
+        void this.notifications.emit(NotificationEvent.SHIFT_CHANGED, {
+          tenantId: user.tenantId,
+          outletId,
+          staffId: row.staff_id,
+          weekKey,
+          shiftDate: weekKey,
+          startTime: start,
+          endTime: end,
+          shiftName,
+          changedBy: user.id,
+          suppressHead: true,
+        });
+      }
+    } catch (e) {
+      this.logger.warn(`notifyTemplateRetimed failed: ${formatError(e)}`);
+    }
   }
 
   /**
@@ -448,7 +538,7 @@ export class SchedulingService {
 
     // Target shift must be an active template of this outlet (and same tenant).
     const tmpl = await this.db.query(
-      `SELECT st.id, st.name, o.tenant_id
+      `SELECT st.id, st.name, st.start_time, st.end_time, o.tenant_id
        FROM shift_templates st JOIN outlets o ON o.id = st.outlet_id
        WHERE st.id = $1 AND st.outlet_id = $2 AND st.is_active = true`,
       [templateId, outletId],
@@ -508,6 +598,22 @@ export class SchedulingService {
       }
 
       await client.query("COMMIT");
+
+      // If this week is already published, tell the moved staff (and the outlet head)
+      // their new timing. Draft weeks stay silent. Fire-and-forget so the move stays fast.
+      if (await this.isWeekPublished(outletId, weekStartDate)) {
+        void this.notifications.emit(NotificationEvent.SHIFT_CHANGED, {
+          tenantId,
+          outletId,
+          staffId,
+          weekKey: weekStartDate,
+          shiftDate: weekStartDate,
+          startTime: (tmpl.rows[0].start_time ?? "").slice(0, 5),
+          endTime: (tmpl.rows[0].end_time ?? "").slice(0, 5),
+          shiftName: tmpl.rows[0].name,
+          changedBy: userId,
+        });
+      }
 
       // Return the refreshed roster so the client can render immediately.
       const roster = await this.getWeeklyRoster(tenantId, outletId, weekStartDate);
