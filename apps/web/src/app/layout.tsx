@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { ServiceWorkerRegister } from "@/components/pwa/sw-register";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -10,15 +11,40 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "WorkforceIQ — Restaurant Workforce Management",
+  title: "BookendsShiftly — Restaurant Workforce Management",
   description: "AI-powered workforce planning and operations management for multi-outlet restaurant groups",
+  applicationName: "BookendsShiftly",
+  // Lets iOS/Android treat an installed instance as a standalone app.
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "BookendsShiftly" },
+  formatDetection: { telephone: false },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+};
+
+// Next 14 wants viewport/themeColor in their own export, not in metadata.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  // Let content extend under the notch; paired with env(safe-area-inset-*) in CSS.
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b1020" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning className={inter.variable}>
-      <body className="min-h-screen bg-background font-sans text-foreground antialiased">
+      <body className="min-h-screen overflow-x-hidden bg-background font-sans text-foreground antialiased">
         <Providers>{children}</Providers>
+        <ServiceWorkerRegister />
       </body>
     </html>
   );
