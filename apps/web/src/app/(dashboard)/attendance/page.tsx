@@ -228,7 +228,8 @@ export default function AttendancePage() {
 
       {/* Table */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[720px]">
           <thead>
             <tr className="bg-muted border-b border-border">
               <th className="text-left px-4 py-3 font-medium text-foreground">Staff</th>
@@ -279,6 +280,7 @@ export default function AttendancePage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Mark Attendance Modal */}
