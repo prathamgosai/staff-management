@@ -6,6 +6,7 @@ export * from "./types/attendance";
 export * from "./types/leave";
 export * from "./types/forecasting";
 export * from "./types/notification";
+export * from "./types/notification-events";
 export * from "./types/auth";
 export * from "./constants/roles";
 export * from "./constants/enums";
