@@ -10,19 +10,22 @@ import { Topbar } from "@/components/layout/topbar";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { user, accessToken, mustChangePassword, setUser } = useAuthStore();
+  const { user, accessToken, mustChangePassword, setUser, hasHydrated } = useAuthStore();
 
   useEffect(() => {
+    // Wait until the persisted session has loaded from localStorage; otherwise a
+    // reload momentarily sees a null token and wrongly bounces us to /login.
+    if (!hasHydrated) return;
     if (!accessToken) { router.replace("/login"); return; }
     // Accounts flagged for a forced reset can't use the app until they change it.
     if (mustChangePassword) router.replace("/change-password");
-  }, [accessToken, mustChangePassword, router]);
+  }, [hasHydrated, accessToken, mustChangePassword, router]);
 
   // Pull the caller's current permissions from the server so nav visibility
   // reflects any recent edits on the Account Types page (merge only permissions —
   // the token-derived /auth/me user has no name).
   useEffect(() => {
-    if (!accessToken) return;
+    if (!hasHydrated || !accessToken) return;
     apiClient.get("/auth/me")
       .then((r) => {
         const fresh = r.data?.data as AuthUser | undefined;
@@ -30,9 +33,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (fresh?.permissions && current) setUser({ ...current, permissions: fresh.permissions });
       })
       .catch(() => { /* non-fatal: fall back to cached permissions */ });
-  }, [accessToken, setUser]);
+  }, [hasHydrated, accessToken, setUser]);
 
-  if (!user) return null;
+  // Until the store has rehydrated we can't tell signed-in from signed-out, so
+  // render nothing (matches the server output) rather than flashing the app.
+  if (!hasHydrated || !user) return null;
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
