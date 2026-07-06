@@ -1,0 +1,9 @@
+{
+  "appId": "app.bookendsshiftly",
+  "appName": "BookendsShiftly",
+  "webDir": "public",
+  "server": {
+    "url": "https://bookends-shiftly.onrender.com",
+    "cleartext": false
+  }
+}
