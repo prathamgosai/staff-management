@@ -246,11 +246,21 @@ export class SchedulingService {
     return { data: { generated: result.data, roster: roster.data } };
   }
 
-  async publishSchedule(tenantId: string, scheduleId: string, userId: string) {
+  async publishSchedule(user: AuthUser, scheduleId: string) {
+    // Scope by the schedule's outlet — a manager may only publish their own.
+    const found = await this.db.query(
+      `SELECT sc.id, sc.outlet_id
+       FROM schedules sc JOIN outlets o ON o.id = sc.outlet_id
+       WHERE sc.id = $1 AND o.tenant_id = $2`,
+      [scheduleId, user.tenantId],
+    );
+    if (!found.rows[0]) throw new NotFoundException("Schedule not found");
+    assertOutletAllowed(user, found.rows[0].outlet_id);
+
     const result = await this.db.query(
       `UPDATE schedules SET status = 'published', published_at = NOW(), published_by = $2
        WHERE id = $1 RETURNING *`,
-      [scheduleId, userId],
+      [scheduleId, user.id],
     );
     if (!result.rows[0]) throw new NotFoundException("Schedule not found");
     return { data: result.rows[0] };
@@ -360,7 +370,7 @@ export class SchedulingService {
    * onward so the change is visible immediately. Past weeks stay as a record.
    */
   async updateShiftTemplate(
-    tenantId: string,
+    user: AuthUser,
     templateId: string,
     body: { startTime: string; endTime: string; breakMinutes?: number; fromWeekStartDate?: string },
   ) {
@@ -371,7 +381,9 @@ export class SchedulingService {
       [templateId],
     );
     if (!tmpl.rows[0]) throw new NotFoundException("Shift template not found");
-    if (tmpl.rows[0].tenant_id !== tenantId) throw new ForbiddenException("This shift template belongs to another tenant");
+    if (tmpl.rows[0].tenant_id !== user.tenantId) throw new ForbiddenException("This shift template belongs to another tenant");
+    // Scope by outlet — a manager may only edit templates for their own outlets.
+    assertOutletAllowed(user, tmpl.rows[0].outlet_id);
 
     const start = (body.startTime ?? "").slice(0, 5);
     const end = (body.endTime ?? "").slice(0, 5);
