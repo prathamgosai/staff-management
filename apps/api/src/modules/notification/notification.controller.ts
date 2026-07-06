@@ -1,10 +1,15 @@
-import { Controller, Get, Post, Body, Query, UseGuards } from "@nestjs/common";
-import { ApiTags, ApiBearerAuth } from "@nestjs/swagger";
+import { Controller, Get, Patch, Post, Put, Body, Param, Query, UseGuards, ParseUUIDPipe, HttpCode, HttpStatus } from "@nestjs/common";
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from "@nestjs/swagger";
 import { NotificationService } from "./notification.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "@workforceiq/shared";
 
+/**
+ * The in-app notification centre + per-user channel preferences. Auth-only (any
+ * valid JWT), NO special permission — every handler scopes strictly to
+ * req.user.id inside the service. Nothing here trusts a client-supplied id.
+ */
 @ApiTags("Notifications")
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -12,28 +17,45 @@ import type { AuthUser } from "@workforceiq/shared";
 export class NotificationController {
   constructor(private readonly notificationService: NotificationService) {}
 
-  @Post("send")
-  send(
-    @CurrentUser() user: AuthUser,
-    @Body() body: { recipientIds: string[]; eventType: string; channels: string[]; variables: Record<string, string> },
-  ) {
-    return this.notificationService.send({ tenantId: user.tenantId, ...body });
+  @Get()
+  @ApiOperation({ summary: "List my notifications (paginated, newest first)" })
+  @ApiQuery({ name: "page", required: false, example: 1 })
+  @ApiQuery({ name: "limit", required: false, example: 20 })
+  list(@CurrentUser() user: AuthUser, @Query("page") page?: string, @Query("limit") limit?: string) {
+    return this.notificationService.listOwn(user, Number(page) || 1, Number(limit) || 20);
   }
 
-  @Get("logs")
-  getLogs(@CurrentUser() user: AuthUser, @Query("recipientId") recipientId?: string) {
-    return this.notificationService.getLogs(user.tenantId, recipientId);
+  @Get("unread-count")
+  @ApiOperation({ summary: "Count of my unread notifications (for the bell badge)" })
+  unreadCount(@CurrentUser() user: AuthUser) {
+    return this.notificationService.unreadCount(user);
   }
 
   @Get("preferences")
-  getPreferences(@Query("staffId") staffId: string) {
-    return this.notificationService.getPreferences(staffId);
+  @ApiOperation({ summary: "My per-channel notification preferences" })
+  getPreferences(@CurrentUser() user: AuthUser) {
+    return this.notificationService.getPreferences(user);
   }
 
-  @Post("preferences")
-  upsertPreference(
-    @Body() body: { staffId: string; channel: string; eventType: string; enabled: boolean },
+  @Put("preferences")
+  @ApiOperation({ summary: "Update my per-channel notification preferences" })
+  updatePreferences(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { inAppEnabled?: boolean; whatsappEnabled?: boolean; emailEnabled?: boolean },
   ) {
-    return this.notificationService.upsertPreference(body.staffId, body.channel, body.eventType, body.enabled);
+    return this.notificationService.updatePreferences(user, body);
+  }
+
+  @Patch(":id/read")
+  @ApiOperation({ summary: "Mark one of my notifications as read" })
+  markRead(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
+    return this.notificationService.markRead(user, id);
+  }
+
+  @Post("read-all")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Mark all my notifications as read" })
+  markAllRead(@CurrentUser() user: AuthUser) {
+    return this.notificationService.markAllRead(user);
   }
 }
