@@ -1,18 +1,21 @@
 import { Injectable, Inject, BadRequestException } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
+import { assertOutletAllowed, assertStaffInScope } from "../../common/auth/outlet-scope";
+import type { AuthUser } from "@workforceiq/shared";
 
 @Injectable()
 export class LeaveService {
   constructor(@Inject(DB_POOL) private readonly db: Pool) {}
 
-  async getRequests(filters: { tenantId: string; outletId?: string; status?: string; staffId?: string; startDate?: string; endDate?: string }) {
-    const { tenantId, outletId, status, staffId, startDate, endDate } = filters;
+  async getRequests(filters: { tenantId: string; outletFilter?: string[] | null; status?: string; staffId?: string; startDate?: string; endDate?: string }) {
+    const { tenantId, outletFilter, status, staffId, startDate, endDate } = filters;
     const conditions = ["s.tenant_id = $1"];
     const params: unknown[] = [tenantId];
     let i = 2;
 
-    if (outletId) { conditions.push(`s.current_outlet_id = $${i++}`); params.push(outletId); }
+    // Server-derived outlet scope — null/undefined = every outlet in the tenant.
+    conditions.push(`($${i}::uuid[] IS NULL OR s.current_outlet_id = ANY($${i}))`); params.push(outletFilter ?? null); i++;
     if (status) { conditions.push(`lr.status = $${i++}`); params.push(status); }
     if (staffId) { conditions.push(`lr.staff_id = $${i++}`); params.push(staffId); }
     if (startDate && endDate) {
@@ -33,7 +36,8 @@ export class LeaveService {
     return { data: result.rows };
   }
 
-  async applyLeave(body: { staffId: string; leaveTypeId: string; startDate: string; endDate: string; halfDayOption?: string; reason?: string }) {
+  async applyLeave(body: { staffId: string; leaveTypeId: string; startDate: string; endDate: string; halfDayOption?: string; reason?: string }, scopeUser?: AuthUser) {
+    if (scopeUser) await assertStaffInScope(this.db, scopeUser, body.staffId);
     const start = new Date(body.startDate);
     const end = new Date(body.endDate);
     const totalDays = (end.getTime() - start.getTime()) / 86400000 + 1;
@@ -65,10 +69,12 @@ export class LeaveService {
     return { data: result.rows[0] };
   }
 
-  async reviewLeave(id: string, reviewerId: string, body: { action: "approve" | "reject"; notes?: string }) {
+  async reviewLeave(user: AuthUser, id: string, body: { action: "approve" | "reject"; notes?: string }) {
     const req = await this.db.query("SELECT * FROM leave_requests WHERE id = $1", [id]);
     if (!req.rows[0]) throw new BadRequestException("Leave request not found");
     const leave = req.rows[0];
+    await assertStaffInScope(this.db, user, leave.staff_id);
+    const reviewerId = user.id;
 
     const newStatus = body.action === "approve" ? "approved" : "rejected";
     await this.db.query(
@@ -93,7 +99,8 @@ export class LeaveService {
     return { data: { id, status: newStatus } };
   }
 
-  async getBalances(staffId: string) {
+  async getBalances(staffId: string, scopeUser?: AuthUser) {
+    if (scopeUser) await assertStaffInScope(this.db, scopeUser, staffId);
     const result = await this.db.query(
       `SELECT lb.*, lt.name, lt.type, lt.annual_entitlement,
               lb.entitlement - lb.taken AS balance
@@ -105,18 +112,19 @@ export class LeaveService {
     return { data: result.rows };
   }
 
-  async getCalendar(outletId: string, startDate: string, endDate: string) {
+  async getCalendar(user: AuthUser, outletId: string, startDate: string, endDate: string) {
+    assertOutletAllowed(user, outletId);
     const result = await this.db.query(
       `SELECT lr.staff_id, s.name AS staff_name, lr.start_date, lr.end_date,
               lt.type AS leave_type, lr.status
        FROM leave_requests lr
        JOIN staff s ON s.id = lr.staff_id
        JOIN leave_type_configs lt ON lt.id = lr.leave_type_id
-       WHERE s.current_outlet_id = $1
+       WHERE s.current_outlet_id = $1 AND s.tenant_id = $4
          AND lr.status IN ('approved','pending')
          AND lr.start_date <= $3 AND lr.end_date >= $2
        ORDER BY lr.start_date`,
-      [outletId, startDate, endDate],
+      [outletId, startDate, endDate, user.tenantId],
     );
     return { data: result.rows };
   }

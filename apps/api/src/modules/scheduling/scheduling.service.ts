@@ -3,6 +3,8 @@ import { InjectQueue } from "@nestjs/bull";
 import { Queue } from "bull";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
+import { assertOutletAllowed } from "../../common/auth/outlet-scope";
+import type { AuthUser } from "@workforceiq/shared";
 
 // Week number from a fixed epoch for consistent rotation
 function weekIndex(dateStr: string): number {
@@ -254,12 +256,12 @@ export class SchedulingService {
     return { data: result.rows[0] };
   }
 
-  async getShifts(scheduleId?: string, outletId?: string, date?: string) {
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-    let i = 1;
+  async getShifts(outletFilter: string[] | null, scheduleId?: string, date?: string) {
+    // Server-derived outlet scope — null = every outlet in the tenant (admins).
+    const conditions: string[] = ["($1::uuid[] IS NULL OR ss.outlet_id = ANY($1))"];
+    const params: unknown[] = [outletFilter];
+    let i = 2;
     if (scheduleId) { conditions.push(`ss.schedule_id = $${i++}`); params.push(scheduleId); }
-    if (outletId)   { conditions.push(`ss.outlet_id = $${i++}`);   params.push(outletId); }
     if (date)       { conditions.push(`ss.date = $${i++}`);         params.push(date); }
 
     const result = await this.db.query(
@@ -275,13 +277,13 @@ export class SchedulingService {
     return { data: result.rows };
   }
 
-  async getTodayShifts(tenantId: string, outletId?: string, departmentId?: string) {
+  async getTodayShifts(tenantId: string, outletFilter: string[] | null, departmentId?: string) {
     const _now = new Date();
     const today = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
-    const conditions = ["ss.date = $1"];
-    const params: unknown[] = [today];
-    let i = 2;
-    if (outletId)     { conditions.push(`ss.outlet_id = $${i++}`);     params.push(outletId); }
+    // Server-derived outlet scope — null = every outlet in the tenant (admins).
+    const conditions = ["ss.date = $1", "($2::uuid[] IS NULL OR ss.outlet_id = ANY($2))"];
+    const params: unknown[] = [today, outletFilter];
+    let i = 3;
     if (departmentId) { conditions.push(`sa.department_id = $${i++}`); params.push(departmentId); }
 
     const result = await this.db.query(
@@ -310,7 +312,15 @@ export class SchedulingService {
     return { data: result.rows };
   }
 
-  async assignStaff(shiftId: string, staffIds: string[]) {
+  /** 404s unless the shift belongs to an outlet the caller may access. */
+  private async assertShiftInScope(user: AuthUser, shiftId: string): Promise<void> {
+    const res = await this.db.query("SELECT outlet_id FROM schedule_shifts WHERE id = $1", [shiftId]);
+    if (!res.rows[0]) throw new NotFoundException("Shift not found");
+    assertOutletAllowed(user, res.rows[0].outlet_id);
+  }
+
+  async assignStaff(user: AuthUser, shiftId: string, staffIds: string[]) {
+    await this.assertShiftInScope(user, shiftId);
     const inserted = [];
     for (const staffId of staffIds) {
       const result = await this.db.query(
@@ -325,7 +335,8 @@ export class SchedulingService {
     return { data: inserted };
   }
 
-  async removeAssignment(shiftId: string, staffId: string): Promise<void> {
+  async removeAssignment(user: AuthUser, shiftId: string, staffId: string): Promise<void> {
+    await this.assertShiftInScope(user, shiftId);
     await this.db.query(
       "UPDATE shift_assignments SET status = 'cancelled' WHERE shift_id = $1 AND staff_id = $2",
       [shiftId, staffId],

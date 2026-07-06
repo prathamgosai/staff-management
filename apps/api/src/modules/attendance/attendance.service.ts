@@ -1,18 +1,21 @@
-import { Injectable, Inject, ConflictException } from "@nestjs/common";
+import { Injectable, Inject, ConflictException, NotFoundException } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
+import { allowedOutletIds, assertOutletAllowed } from "../../common/auth/outlet-scope";
+import type { AuthUser } from "@workforceiq/shared";
 
 @Injectable()
 export class AttendanceService {
   constructor(@Inject(DB_POOL) private readonly db: Pool) {}
 
-  async findAll(filters: { tenantId: string; outletId?: string; date?: string; startDate?: string; endDate?: string; staffId?: string }) {
-    const { tenantId, outletId, date, startDate, endDate, staffId } = filters;
+  async findAll(filters: { tenantId: string; outletFilter: string[] | null; date?: string; startDate?: string; endDate?: string; staffId?: string }) {
+    const { tenantId, outletFilter, date, startDate, endDate, staffId } = filters;
     const conditions = ["s.tenant_id = $1"];
     const params: unknown[] = [tenantId];
     let i = 2;
 
-    if (outletId) { conditions.push(`ar.outlet_id = $${i++}`); params.push(outletId); }
+    // Server-derived outlet scope — null = every outlet in the tenant (admins).
+    conditions.push(`($${i}::uuid[] IS NULL OR ar.outlet_id = ANY($${i}))`); params.push(outletFilter); i++;
     if (date) { conditions.push(`ar.date = $${i++}`); params.push(date); }
     if (startDate && endDate) {
       conditions.push(`ar.date BETWEEN $${i++} AND $${i++}`);
@@ -32,7 +35,8 @@ export class AttendanceService {
     return { data: result.rows };
   }
 
-  async clockIn(body: { staffId: string; outletId: string; shiftId?: string; method: string; gpsLat?: number; gpsLng?: number }) {
+  async clockIn(user: AuthUser, body: { staffId: string; outletId: string; shiftId?: string; method: string; gpsLat?: number; gpsLng?: number }) {
+    assertOutletAllowed(user, body.outletId);
     const today = new Date().toISOString().split("T")[0];
     const existing = await this.db.query(
       "SELECT id FROM attendance_records WHERE staff_id = $1 AND date = $2 AND clock_out IS NULL",
@@ -49,7 +53,8 @@ export class AttendanceService {
     return { data: result.rows[0] };
   }
 
-  async clockOut(body: { attendanceId: string; method: string; gpsLat?: number; gpsLng?: number }) {
+  async clockOut(user: AuthUser, body: { attendanceId: string; method: string; gpsLat?: number; gpsLng?: number }) {
+    await this.assertAttendanceInScope(user, body.attendanceId);
     const record = await this.db.query(
       "SELECT * FROM attendance_records WHERE id = $1 AND clock_out IS NULL",
       [body.attendanceId],
@@ -73,10 +78,11 @@ export class AttendanceService {
     return { data: result.rows[0] };
   }
 
-  async manualEntry(body: {
+  async manualEntry(user: AuthUser, body: {
     staffId: string; outletId: string; date: string;
     clockIn: string; clockOut?: string; status: string; note?: string;
   }) {
+    assertOutletAllowed(user, body.outletId);
     const { staffId, outletId, date, clockIn, clockOut, status, note } = body;
 
     const existing = await this.db.query(
@@ -103,16 +109,19 @@ export class AttendanceService {
     return { data: result.rows[0] };
   }
 
-  async requestCorrection(userId: string, body: { attendanceId: string; correctedClockIn?: string; correctedClockOut?: string; reason: string }) {
+  async requestCorrection(user: AuthUser, body: { attendanceId: string; correctedClockIn?: string; correctedClockOut?: string; reason: string }) {
+    await this.assertAttendanceInScope(user, body.attendanceId);
     const result = await this.db.query(
       `INSERT INTO attendance_corrections (attendance_id, requested_by, corrected_clock_in, corrected_clock_out, reason)
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [body.attendanceId, userId, body.correctedClockIn ?? null, body.correctedClockOut ?? null, body.reason],
+      [body.attendanceId, user.id, body.correctedClockIn ?? null, body.correctedClockOut ?? null, body.reason],
     );
     return { data: result.rows[0] };
   }
 
-  async reviewCorrection(id: string, reviewerId: string, action: "approve" | "reject") {
+  async reviewCorrection(user: AuthUser, id: string, action: "approve" | "reject") {
+    await this.assertCorrectionInScope(user, id);
+    const reviewerId = user.id;
     if (action === "approve") {
       const correction = await this.db.query("SELECT * FROM attendance_corrections WHERE id = $1", [id]);
       const c = correction.rows[0];
@@ -130,17 +139,45 @@ export class AttendanceService {
     return { data: result.rows[0] };
   }
 
-  async getLiveStatus(outletId: string) {
+  async getLiveStatus(user: AuthUser, outletId: string) {
+    assertOutletAllowed(user, outletId);
     const result = await this.db.query(
       `SELECT ar.id, ar.staff_id, ar.clock_in, s.name, s.employee_id, s.avatar_url,
               p.name AS position_name
        FROM attendance_records ar
        JOIN staff s ON s.id = ar.staff_id
        LEFT JOIN positions p ON p.id = s.position_id
-       WHERE ar.outlet_id = $1 AND ar.date = CURRENT_DATE AND ar.clock_out IS NULL
+       WHERE ar.outlet_id = $1 AND s.tenant_id = $2 AND ar.date = CURRENT_DATE AND ar.clock_out IS NULL
        ORDER BY ar.clock_in`,
-      [outletId],
+      [outletId, user.tenantId],
     );
     return { data: result.rows };
+  }
+
+  /** 404s unless the attendance record is in the caller's tenant AND allowed outlet. */
+  private async assertAttendanceInScope(user: AuthUser, attendanceId: string): Promise<void> {
+    const outletFilter = allowedOutletIds(user);
+    const res = await this.db.query(
+      `SELECT 1 FROM attendance_records ar
+         JOIN staff s ON s.id = ar.staff_id
+        WHERE ar.id = $1 AND s.tenant_id = $2
+          AND ($3::uuid[] IS NULL OR ar.outlet_id = ANY($3))`,
+      [attendanceId, user.tenantId, outletFilter],
+    );
+    if (!res.rows[0]) throw new NotFoundException("Attendance record not found");
+  }
+
+  /** 404s unless the correction's underlying record is in the caller's scope. */
+  private async assertCorrectionInScope(user: AuthUser, correctionId: string): Promise<void> {
+    const outletFilter = allowedOutletIds(user);
+    const res = await this.db.query(
+      `SELECT 1 FROM attendance_corrections c
+         JOIN attendance_records ar ON ar.id = c.attendance_id
+         JOIN staff s ON s.id = ar.staff_id
+        WHERE c.id = $1 AND s.tenant_id = $2
+          AND ($3::uuid[] IS NULL OR ar.outlet_id = ANY($3))`,
+      [correctionId, user.tenantId, outletFilter],
+    );
+    if (!res.rows[0]) throw new NotFoundException("Correction not found");
   }
 }

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException, ForbiddenException, I
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import { isAdminRole, type AuthUser } from "@workforceiq/shared";
+import { allowedOutletIds } from "../../common/auth/outlet-scope";
 import type { CreateStaffDto } from "./dto/create-staff.dto";
 import type { UpdateStaffDto } from "./dto/update-staff.dto";
 import type { StaffQueryDto } from "./dto/staff-query.dto";
@@ -13,8 +14,8 @@ const SELF_EDITABLE_FIELDS = new Set(["phone", "email", "whatsapp"]);
 export class StaffService {
   constructor(@Inject(DB_POOL) private readonly db: Pool) {}
 
-  async findAll(tenantId: string, query: StaffQueryDto) {
-    const { page = 1, limit = 20, search, outletId, status, departmentId, positionId } = query;
+  async findAll(tenantId: string, query: StaffQueryDto, outletFilter: string[] | null) {
+    const { page = 1, limit = 20, search, status, departmentId, positionId } = query;
     const offset = (page - 1) * limit;
     const conditions: string[] = ["s.tenant_id = $1", "s.employment_status != 'terminated'"];
     const params: unknown[] = [tenantId];
@@ -25,7 +26,10 @@ export class StaffService {
       params.push(`%${search}%`);
       i++;
     }
-    if (outletId) { conditions.push(`s.current_outlet_id = $${i++}`); params.push(outletId); }
+    // Server-derived outlet scope — null = every outlet in the tenant (admins).
+    conditions.push(`($${i}::uuid[] IS NULL OR s.current_outlet_id = ANY($${i}))`);
+    params.push(outletFilter);
+    i++;
     if (status) { conditions.push(`s.employment_status = $${i++}`); params.push(status); }
     if (departmentId) { conditions.push(`s.department_id = $${i++}`); params.push(departmentId); }
     if (positionId) { conditions.push(`s.position_id = $${i++}`); params.push(positionId); }
@@ -61,7 +65,7 @@ export class StaffService {
     };
   }
 
-  async findOne(tenantId: string, id: string) {
+  async findOne(tenantId: string, id: string, outletFilter: string[] | null = null) {
     const result = await this.db.query(
       `SELECT s.*, d.name AS department_name, p.name AS position_name,
               o.name AS outlet_name, o.code AS outlet_code
@@ -69,8 +73,9 @@ export class StaffService {
        LEFT JOIN departments d ON d.id = s.department_id
        LEFT JOIN positions p ON p.id = s.position_id
        LEFT JOIN outlets o ON o.id = s.current_outlet_id
-       WHERE s.id = $1 AND s.tenant_id = $2`,
-      [id, tenantId],
+       WHERE s.id = $1 AND s.tenant_id = $2
+         AND ($3::uuid[] IS NULL OR s.current_outlet_id = ANY($3))`,
+      [id, tenantId, outletFilter],
     );
     if (!result.rows[0]) throw new NotFoundException(`Staff ${id} not found`);
     return { data: this.mapRow(result.rows[0]) };
@@ -170,7 +175,20 @@ export class StaffService {
     );
   }
 
-  async getAttendanceSummary(staffId: string, startDate: string, endDate: string) {
+  /** 404s unless `staffId` is in the caller's tenant AND an outlet they may see. */
+  private async assertStaffInScope(user: AuthUser, staffId: string): Promise<void> {
+    const outletFilter = allowedOutletIds(user);
+    const res = await this.db.query(
+      `SELECT 1 FROM staff
+        WHERE id = $1 AND tenant_id = $2
+          AND ($3::uuid[] IS NULL OR current_outlet_id = ANY($3))`,
+      [staffId, user.tenantId, outletFilter],
+    );
+    if (!res.rows[0]) throw new NotFoundException(`Staff ${staffId} not found`);
+  }
+
+  async getAttendanceSummary(user: AuthUser, staffId: string, startDate: string, endDate: string) {
+    await this.assertStaffInScope(user, staffId);
     const result = await this.db.query(
       `SELECT
          COUNT(*) FILTER (WHERE status = 'present') AS present_days,
@@ -186,7 +204,8 @@ export class StaffService {
     return { data: result.rows[0] };
   }
 
-  async getLeaveBalances(staffId: string) {
+  async getLeaveBalances(user: AuthUser, staffId: string) {
+    await this.assertStaffInScope(user, staffId);
     const result = await this.db.query(
       `SELECT lb.*, lt.name AS leave_type_name, lt.type
        FROM leave_balances lb
@@ -198,7 +217,8 @@ export class StaffService {
     return { data: result.rows };
   }
 
-  async getSchedule(staffId: string, weekStartDate: string) {
+  async getSchedule(user: AuthUser, staffId: string, weekStartDate: string) {
+    await this.assertStaffInScope(user, staffId);
     const result = await this.db.query(
       `SELECT ss.*, sa.status AS assignment_status, s.name AS outlet_name
        FROM shift_assignments sa
