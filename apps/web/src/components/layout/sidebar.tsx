@@ -12,7 +12,6 @@ import { cn, getInitials } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { SidebarSky } from "./sidebar-sky";
 
 function isActive(pathname: string, href: string): boolean {
   return pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
@@ -22,12 +21,11 @@ function Logo({ collapsed }: { collapsed: boolean }) {
   return (
     <Link href="/dashboard" className="flex items-center gap-2.5 overflow-hidden">
       <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary text-base font-black text-primary-foreground shadow-card">
-        W
+        B
       </span>
       {!collapsed && (
         <span className="min-w-0">
-          <span className="block truncate text-sm font-bold leading-tight text-sidebar-foreground">WorkforceIQ</span>
-          <span className="block truncate text-xs text-sidebar-muted">Restaurant Management</span>
+          <span className="block truncate text-sm font-bold leading-tight text-sidebar-foreground">BookendsShiftly</span>
         </span>
       )}
     </Link>
@@ -143,7 +141,6 @@ export function DesktopSidebar() {
         collapsed ? "w-[4.5rem]" : "w-64",
       )}
     >
-      <SidebarSky collapsed={collapsed} />
       <div className="relative z-10 flex min-h-0 flex-1 flex-col">
         <div className={cn("flex h-16 items-center border-b border-sidebar-border px-4", collapsed ? "justify-center" : "justify-between")}>
           {!collapsed && <Logo collapsed={false} />}
@@ -168,7 +165,6 @@ export function DesktopSidebar() {
 export function MobileSidebar({ onNavigate }: { onNavigate: () => void }) {
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-sidebar text-sidebar-foreground">
-      <SidebarSky />
       <div className="relative z-10 flex min-h-0 flex-1 flex-col">
         <div className="flex h-16 items-center border-b border-sidebar-border px-4">
           <Logo collapsed={false} />

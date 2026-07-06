@@ -57,14 +57,14 @@
     --input: 220 13% 88%;
     --ring: 243 75% 58%;
 
-    /* Sidebar (theme-aware) */
-    --sidebar: 224 30% 13%;              /* dark rail in light mode for brand contrast */
+    /* Sidebar (theme-aware) — simple dark blue rail */
+    --sidebar: 224 44% 13%;
     --sidebar-foreground: 214 20% 78%;
     --sidebar-muted: 216 16% 56%;
     --sidebar-accent: 243 75% 58%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 220 18% 22%;
-    --sidebar-hover: 220 22% 18%;
+    --sidebar-border: 223 32% 22%;
+    --sidebar-hover: 223 36% 19%;
 
     /* Chart palette */
     --chart-1: 243 75% 58%;
@@ -117,13 +117,13 @@
     --input: 220 10% 22%;
     --ring: 243 72% 66%;
 
-    --sidebar: 228 13% 8%;
+    --sidebar: 224 46% 11%;
     --sidebar-foreground: 214 18% 74%;
     --sidebar-muted: 216 12% 52%;
     --sidebar-accent: 243 72% 62%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 220 10% 16%;
-    --sidebar-hover: 222 12% 14%;
+    --sidebar-border: 222 30% 18%;
+    --sidebar-hover: 222 34% 16%;
 
     --chart-1: 243 75% 66%;
     --chart-2: 142 58% 52%;
@@ -190,62 +190,3 @@
   }
 }
 
-/* ============================================================================
-   Sidebar evening night-sky (decorative). Purely ornamental — sits behind the
-   nav (pointer-events: none). Colours are fixed art, not theme tokens, because
-   the sidebar rail is dark in BOTH light and dark app themes.
-   ========================================================================== */
-@keyframes wiq-twinkle {
-  0%, 100% { opacity: 0.2;  transform: scale(0.75); }
-  50%      { opacity: 0.95; transform: scale(1.15); }
-}
-@keyframes wiq-moon-glow {
-  0%, 100% { box-shadow: 0 0 18px 5px hsl(48 95% 85% / 0.30), 0 0 42px 12px hsl(45 80% 78% / 0.16); }
-  50%      { box-shadow: 0 0 24px 8px hsl(48 95% 85% / 0.42), 0 0 56px 18px hsl(45 80% 78% / 0.22); }
-}
-@keyframes wiq-shoot {
-  0%       { transform: translate3d(0, 0, 0) rotate(28deg); opacity: 0; }
-  3%       { opacity: 1; }
-  16%      { transform: translate3d(180px, 96px, 0) rotate(28deg); opacity: 0; }
-  100%     { transform: translate3d(180px, 96px, 0) rotate(28deg); opacity: 0; }
-}
-
-.sidebar-sky {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  /* Dusk → deep-night wash layered over the sidebar's own dark rail. */
-  background:
-    radial-gradient(130% 55% at 85% -12%, hsl(250 55% 40% / 0.45), transparent 62%),
-    radial-gradient(90% 40% at 15% 8%, hsl(220 60% 45% / 0.18), transparent 60%),
-    linear-gradient(to bottom, hsl(244 45% 20% / 0.55), hsl(232 40% 7% / 0.7));
-}
-.sidebar-star {
-  position: absolute;
-  border-radius: 9999px;
-  background: hsl(210 40% 99%);
-  box-shadow: 0 0 4px 1px hsl(210 60% 95% / 0.5);
-  animation: wiq-twinkle var(--twinkle-dur, 3.6s) ease-in-out infinite;
-  animation-delay: var(--twinkle-delay, 0s);
-}
-.sidebar-moon {
-  position: absolute;
-  border-radius: 9999px;
-  background: radial-gradient(circle at 34% 32%, hsl(48 100% 97%), hsl(45 55% 82%) 78%);
-  animation: wiq-moon-glow 6.5s ease-in-out infinite;
-}
-.sidebar-shoot {
-  position: absolute;
-  height: 2px;
-  width: 74px;
-  border-radius: 9999px;
-  background: linear-gradient(90deg, transparent, hsl(0 0% 100% / 0.85));
-  filter: drop-shadow(0 0 4px hsl(0 0% 100% / 0.5));
-  animation: wiq-shoot 9s ease-in-out infinite;
-  animation-delay: 3s;
-}
-@media (prefers-reduced-motion: reduce) {
-  .sidebar-star, .sidebar-moon, .sidebar-shoot { animation: none; }
-  .sidebar-shoot { opacity: 0; }
-}

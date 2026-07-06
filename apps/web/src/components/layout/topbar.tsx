@@ -23,7 +23,7 @@ function pageTitle(pathname: string): string {
   const match = ALL_NAV_ITEMS.find(
     (i) => pathname === i.href || (i.href !== "/dashboard" && pathname.startsWith(i.href)),
   );
-  return match?.label ?? "WorkforceIQ";
+  return match?.label ?? "BookendsShiftly";
 }
 
 export function Topbar() {
@@ -74,7 +74,7 @@ export function Topbar() {
 
       <OutletSwitcher />
 
-      <div className="ml-auto flex items-center gap-1.5">
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
         {/* Search */}
         <Button
           variant="outline"

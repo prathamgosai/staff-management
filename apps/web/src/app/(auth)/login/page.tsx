@@ -105,9 +105,9 @@ export default function LoginPage() {
           {/* Top band */}
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-8 text-white text-center">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-card/20 mb-3">
-              <span className="text-2xl font-black">W</span>
+              <span className="text-2xl font-black">B</span>
             </div>
-            <h1 className="text-2xl font-bold">WorkforceIQ</h1>
+            <h1 className="text-2xl font-bold">BookendsShiftly</h1>
             <p className="text-blue-100 text-sm mt-1">Restaurant Workforce Management</p>
           </div>
 
