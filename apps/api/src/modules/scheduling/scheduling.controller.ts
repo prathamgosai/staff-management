@@ -47,7 +47,7 @@ export class SchedulingController {
     @CurrentUser() user: AuthUser,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.schedulingService.publishSchedule(user.tenantId, id, user.id);
+    return this.schedulingService.publishSchedule(user, id);
   }
 
   @Get("shifts")
@@ -103,7 +103,7 @@ export class SchedulingController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() body: { startTime: string; endTime: string; breakMinutes?: number; fromWeekStartDate?: string },
   ) {
-    return this.schedulingService.updateShiftTemplate(user.tenantId, id, body);
+    return this.schedulingService.updateShiftTemplate(user, id, body);
   }
 
   @Post("assignments/move")
