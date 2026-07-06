@@ -20,6 +20,10 @@ export const DB_POOL = "DB_POOL";
           ssl: config.get("DB_SSL") === "true" ? { rejectUnauthorized: false } : false,
           max: config.get<number>("DB_POOL_MAX", 20),
           idleTimeoutMillis: 30000,
+          // Keep idle sockets alive so a NAT/firewall between here and the remote
+          // pooler doesn't silently drop them — otherwise the next request pays a
+          // full TLS reconnect to the (distant) database before it can even query.
+          keepAlive: true,
           // Generous enough for a remote managed DB (e.g. Supabase pooler) where
           // TLS + cross-region latency can exceed a local socket's few ms.
           connectionTimeoutMillis: config.get<number>("DB_CONNECT_TIMEOUT_MS", 15000),

@@ -38,6 +38,20 @@ export class AuthService {
   ) {}
 
   async validateUser(email: string, password: string): Promise<AuthUser | null> {
+    const auth = await this.authenticate(email, password);
+    return auth?.user ?? null;
+  }
+
+  /**
+   * Core credential check shared by LocalStrategy (via validateUser) and login().
+   * It returns must_change_password read from the SAME row it already fetched, so
+   * login() never needs a second round-trip for that flag — a real saving when the
+   * database is remote (each Supabase round-trip is ~300ms+).
+   */
+  private async authenticate(
+    email: string,
+    password: string,
+  ): Promise<{ user: AuthUser; mustChangePassword: boolean } | null> {
     const result = await this.db.query(
       "SELECT * FROM users WHERE email = $1",
       [email.toLowerCase()],
@@ -54,18 +68,26 @@ export class AuthService {
 
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return null;
-    await this.db.query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [user.id]);
-    return this.mapUserRow(user);
+    // Fire-and-forget: last_login_at is a non-critical audit field, so we don't
+    // make the caller wait a full round-trip for it before login returns.
+    this.db
+      .query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [user.id])
+      .catch((err) => console.error("Failed to update last_login_at", err));
+    return { user: this.mapUserRow(user), mustChangePassword: user.must_change_password === true };
   }
 
   async login(dto: LoginDto): Promise<{ data: AuthUser; mustChangePassword: boolean } & AuthTokens> {
-    const user = await this.validateUser(dto.email, dto.password);
-    if (!user) throw new UnauthorizedException("Invalid credentials");
+    const auth = await this.authenticate(dto.email, dto.password);
+    if (!auth) throw new UnauthorizedException("Invalid credentials");
+    const { user, mustChangePassword } = auth;
     const tokens = await this.generateTokens(user);
-    await this.persistRefreshToken(user.id, tokens.refreshToken);
-    const mustChangePassword = await this.getMustChangePassword(user.id);
-    // Stamp effective permissions so the SPA can gate its UI right after login.
-    const permissions = await this.rolesService.getPermissionsForRole(user.tenantId, user.role);
+    // Persisting the refresh token and resolving the role's permissions are
+    // independent — run them concurrently so login pays one round-trip, not two.
+    // (permissions is stamped so the SPA can gate its UI right after login.)
+    const [, permissions] = await Promise.all([
+      this.persistRefreshToken(user.id, tokens.refreshToken),
+      this.rolesService.getPermissionsForRole(user.tenantId, user.role),
+    ]);
     return { data: { ...user, permissions }, mustChangePassword, ...tokens };
   }
 
@@ -306,11 +328,6 @@ export class AuthService {
 
   private hashToken(token: string): string {
     return createHash("sha256").update(token).digest("hex");
-  }
-
-  private async getMustChangePassword(userId: string): Promise<boolean> {
-    const r = await this.db.query("SELECT must_change_password FROM users WHERE id = $1", [userId]);
-    return r.rows[0]?.must_change_password === true;
   }
 
   private async generateTokens(user: AuthUser): Promise<AuthTokens> {
