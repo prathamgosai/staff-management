@@ -2,9 +2,9 @@
 
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Menu, Search, Bell, LogOut, KeyRound, UserRound } from "lucide-react";
+import { Menu, Search, LogOut, KeyRound } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
-import { usePendingApprovals } from "@/hooks/use-pending-approvals";
+import { NotificationBell } from "./notification-bell";
 import { ALL_NAV_ITEMS } from "./nav";
 import { OutletSwitcher } from "./outlet-switcher";
 import { CommandMenu } from "./command-menu";
@@ -31,7 +31,6 @@ export function Topbar() {
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
-  const pending = usePendingApprovals();
 
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [searchOpen, setSearchOpen] = React.useState(false);
@@ -93,35 +92,7 @@ export function Topbar() {
         </Button>
 
         {/* Notifications */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
-              <Bell className="size-5" />
-              {pending > 0 && (
-                <span className="absolute right-1.5 top-1.5 grid size-4 place-items-center rounded-full bg-danger text-[9px] font-bold text-danger-foreground ring-2 ring-surface">
-                  {pending > 9 ? "9+" : pending}
-                </span>
-              )}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72">
-            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {pending > 0 ? (
-              <DropdownMenuItem className="gap-2" onClick={() => router.push("/approvals")}>
-                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-warning/15 text-warning">
-                  <UserRound className="size-4" />
-                </span>
-                <span className="flex flex-col">
-                  <span className="text-sm font-medium">{pending} pending approval{pending === 1 ? "" : "s"}</span>
-                  <span className="text-xs text-muted-foreground">Staff registrations awaiting review</span>
-                </span>
-              </DropdownMenuItem>
-            ) : (
-              <div className="px-2 py-6 text-center text-sm text-muted-foreground">You&apos;re all caught up.</div>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <NotificationBell />
 
         <ThemeToggle />
 
