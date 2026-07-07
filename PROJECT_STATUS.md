@@ -73,6 +73,7 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 | 23 | _(Task 3)_ | Mobile nav — bottom tab bar (Home/Roster/Attendance/Leave/Profile, safe-area, ≥44px) below md + day-first roster (today default, day chips, swipe); desktop table unchanged; new `/profile` page |
 | 24 | _(Task 4)_ | Cold-start resilience — persist key read queries to localStorage (versioned buster, cleared on logout), "Waking the server…" banner on >4s fetches, SW cache `v3`; page loads already use skeletons |
 | 25 | _(Task 5)_ | Magic-link "My Week" — HS256 token (dedicated `MAGIC_LINK_SECRET`), `GET /public/my-week/:token` (no auth, 20/min/IP, uniform 404, staff+tenant from the signed token only), `/w/[token]` read-only page (noindex), ROSTER_PUBLISHED WhatsApp link for login-less staff (degrades to the existing template) |
+| 26 | _(Task 6)_ | Print-ready roster (A4 portrait, black-on-white `@media print`) + default staff list hides resigned as well as terminated (explicit status still shows them) + return-to-rotation un-pin (`DELETE /scheduling/overrides/:staffId`, `schedule:write`, outlet-scoped) |
 
 ### Feature areas delivered
 
@@ -135,10 +136,8 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 - **`pnpm lint` is unconfigured repo-wide** — no ESLint config exists in any package (pre-existing), so `pnpm lint` errors before running. `pnpm typecheck` + `pnpm build` are the working quality gates.
 - **Seed schema is stale** — `001_schema.sql` lacks columns the app later added (e.g. `users.pending_approval`, `ticket_number`, `must_change_password`). Treat the live DB (pg_dump) as source of truth, not the seed files.
 - **API has no hot-reload** — plain `ts-node`; any backend change needs a manual restart, and a type error anywhere blocks startup. Keep `tsc --noEmit` clean.
-- **Resigned staff still listed** — `staff.findAll` hides only `terminated`, not `resigned`.
 - **`packages/shared` exports gotcha** — `exports.require` points to `dist/index.cjs` which tsup doesn't emit (harmless in dev, would break a prod `nest build`).
 - **Response shape** — hand-returned `{ data: T }`, no global interceptor (matches existing convention, not the idealized briefing).
-- **Per-staff move has no "return to rotation"** un-pin affordance yet (a move is permanent).
 - **Forecasting Phase 2** (Prophet/XGBoost) is stubbed only.
 
 ---

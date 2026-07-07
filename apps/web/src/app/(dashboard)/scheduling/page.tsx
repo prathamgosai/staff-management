@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import {
   ChevronLeft, ChevronRight, Clock, Users, Building2,
-  ChevronDown, Info, RefreshCw, Send, CheckCircle2,
+  ChevronDown, Info, RefreshCw, Send, CheckCircle2, RotateCcw, Printer,
 } from "lucide-react";
 import { format, addWeeks, subWeeks, startOfWeek } from "date-fns";
 import { toast } from "@/components/ui/sonner";
@@ -242,6 +242,23 @@ export default function SchedulingPage() {
   const moveError = (moveStaff.error as { response?: { data?: { message?: string } } } | null)
     ?.response?.data?.message;
 
+  // Manual shift pins — used to show a "return to rotation" affordance on pinned staff.
+  const { data: overridesRes } = useQuery<{ data: { staffId: string; templateId: string }[] }>({
+    queryKey: ["overrides", selectedOutletId],
+    queryFn: () => apiClient.get("/scheduling/overrides", { params: { outletId: selectedOutletId } }).then(r => r.data),
+    enabled: !!selectedOutletId,
+  });
+  const pinnedIds = new Set((overridesRes?.data ?? []).map(o => o.staffId));
+
+  const unpinStaff = useMutation({
+    mutationFn: (staffId: string) => apiClient.delete(`/scheduling/overrides/${staffId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["overrides", selectedOutletId] });
+      queryClient.invalidateQueries({ queryKey: rosterKey });
+      toast.success("Returned to rotation — next week's roster places them normally.");
+    },
+  });
+
   const outlets = outletRes?.data ?? [];
   const roster  = rosterRes?.data ?? [];
   const selectedOutletName = outlets.find((o: { id: string; name: string }) => o.id === selectedOutletId)?.name ?? "";
@@ -355,6 +372,10 @@ export default function SchedulingPage() {
           ))}
           {roster.length > 0 && (
             <div className="ml-auto flex items-center gap-2">
+              <button onClick={() => window.print()}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-card border border-border text-muted-foreground hover:bg-muted transition">
+                <Printer size={12} /> Print
+              </button>
               {canPublish && !isPublished && (
                 <button onClick={() => publishMutation.mutate()} disabled={publishMutation.isPending || !scheduleId}
                   className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 transition">
@@ -638,6 +659,7 @@ export default function SchedulingPage() {
                               </td>
                               {/* Move-to shift dropdown — reassign this staff (this week onward) */}
                               <td className="py-2.5 px-2">
+                                <div className="flex items-center gap-1.5">
                                 {(() => {
                                   const isMoving = moveStaff.isPending && moveStaff.variables?.staffId === staff.staffId;
                                   return (
@@ -663,6 +685,15 @@ export default function SchedulingPage() {
                                     </div>
                                   );
                                 })()}
+                                {pinnedIds.has(staff.staffId) && (
+                                  <button onClick={() => unpinStaff.mutate(staff.staffId)}
+                                    disabled={unpinStaff.isPending && unpinStaff.variables === staff.staffId}
+                                    title="Return to rotation"
+                                    className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50">
+                                    <RotateCcw size={12} />
+                                  </button>
+                                )}
+                                </div>
                               </td>
                               {displayDays.map(d => {
                                 const dateKey = format(d, "yyyy-MM-dd");
@@ -709,6 +740,54 @@ export default function SchedulingPage() {
           })}
           </div>
         </>
+      )}
+
+      {/* Print-only roster (A4 portrait, black-on-white; @media print in globals.css) */}
+      {roster.length > 0 && (
+        <div className="print-roster hidden print:block">
+          <div style={{ color: "#000", background: "#fff", fontFamily: "sans-serif" }}>
+            <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Weekly Roster — {selectedOutletName}</h1>
+            <p style={{ fontSize: 12, margin: "4px 0 12px" }}>
+              Week {format(currentWeek, "d MMM")} – {format(weekDays[6], "d MMM yyyy")} · {isPublished ? "Published" : "Draft"} · Generated {format(new Date(), "d MMM yyyy, HH:mm")}
+            </p>
+            {roster.map(shift => {
+              const firstDayKey = Object.keys(shift.dates)[0];
+              const printStaff = firstDayKey ? shift.dates[firstDayKey].staff : [];
+              return (
+                <div key={shift.shiftName} style={{ marginBottom: 14, breakInside: "avoid" }}>
+                  <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 4px" }}>
+                    {shift.shiftName.split("(")[0].trim()} ({shift.startTime.slice(0, 5)}–{shift.isOvernight ? "00:00" : shift.endTime.slice(0, 5)})
+                  </h2>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: "left", borderBottom: "1px solid #000", padding: "2px 4px" }}>Staff</th>
+                        {weekDays.map(d => (
+                          <th key={d.toISOString()} style={{ borderBottom: "1px solid #000", padding: "2px 4px" }}>{format(d, "EEE d")}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {printStaff.map(s => (
+                        <tr key={s.staffId}>
+                          <td style={{ padding: "2px 4px", borderBottom: "1px solid #ccc" }}>{s.name}</td>
+                          {weekDays.map(d => {
+                            const assigned = shift.dates[format(d, "yyyy-MM-dd")]?.staff.some(x => x.staffId === s.staffId);
+                            return (
+                              <td key={d.toISOString()} style={{ textAlign: "center", padding: "2px 4px", borderBottom: "1px solid #ccc" }}>
+                                {assigned ? "✓" : ""}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
     </div>
   );

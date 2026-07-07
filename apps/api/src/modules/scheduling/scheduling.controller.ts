@@ -26,6 +26,12 @@ export class SchedulingController {
     return this.schedulingService.getMyWeek(user, week);
   }
 
+  @Get("overrides")
+  @ApiOperation({ summary: "Manual shift pins (overrides) for an outlet" })
+  getOverrides(@CurrentUser() user: AuthUser, @Query("outletId") outletId: string) {
+    return this.schedulingService.getOverrides(user, outletId);
+  }
+
   @Get("schedules")
   @ApiOperation({ summary: "Get weekly schedules for an outlet" })
   getSchedules(
@@ -111,6 +117,13 @@ export class SchedulingController {
     @Body() body: { startTime: string; endTime: string; breakMinutes?: number; fromWeekStartDate?: string },
   ) {
     return this.schedulingService.updateShiftTemplate(user, id, body);
+  }
+
+  @Delete("overrides/:staffId")
+  @RequirePermission("schedule:write")
+  @ApiOperation({ summary: "Return a staff member to their rotation (remove the manual pin)" })
+  deleteOverride(@CurrentUser() user: AuthUser, @Param("staffId", ParseUUIDPipe) staffId: string) {
+    return this.schedulingService.deleteOverride(user, staffId);
   }
 
   @Post("assignments/move")

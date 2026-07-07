@@ -366,6 +366,36 @@ export class SchedulingService {
     return { data: { weekStartDate, published: pub.rows.length > 0, shifts } };
   }
 
+  /**
+   * Return a staff member to their rotation: hard-delete their staff_shift_overrides
+   * pin so the next weekly generation places them back in their rotation group. Scoped
+   * to the caller's outlet. No pin → a harmless no-op.
+   */
+  async deleteOverride(user: AuthUser, staffId: string): Promise<{ data: { removed: boolean } }> {
+    const res = await this.db.query(
+      "SELECT outlet_id FROM staff_shift_overrides WHERE staff_id = $1 AND tenant_id = $2",
+      [staffId, user.tenantId],
+    );
+    const row = res.rows[0];
+    if (!row) return { data: { removed: false } };
+    assertOutletAllowed(user, row.outlet_id);
+    await this.db.query(
+      "DELETE FROM staff_shift_overrides WHERE staff_id = $1 AND tenant_id = $2",
+      [staffId, user.tenantId],
+    );
+    return { data: { removed: true } };
+  }
+
+  /** The manual shift pins (overrides) for an outlet — used to show a "return to rotation" affordance. */
+  async getOverrides(user: AuthUser, outletId: string): Promise<{ data: { staffId: string; templateId: string }[] }> {
+    assertOutletAllowed(user, outletId);
+    const res = await this.db.query(
+      "SELECT staff_id, template_id FROM staff_shift_overrides WHERE outlet_id = $1 AND tenant_id = $2",
+      [outletId, user.tenantId],
+    );
+    return { data: res.rows.map((r: Record<string, unknown>) => ({ staffId: r.staff_id as string, templateId: r.template_id as string })) };
+  }
+
   async getShifts(outletFilter: string[] | null, scheduleId?: string, date?: string) {
     // Server-derived outlet scope — null = every outlet in the tenant (admins).
     const conditions: string[] = ["($1::uuid[] IS NULL OR ss.outlet_id = ANY($1))"];

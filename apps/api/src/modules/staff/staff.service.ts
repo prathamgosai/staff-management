@@ -17,7 +17,7 @@ export class StaffService {
   async findAll(tenantId: string, query: StaffQueryDto, outletFilter: string[] | null) {
     const { page = 1, limit = 20, search, status, departmentId, positionId } = query;
     const offset = (page - 1) * limit;
-    const conditions: string[] = ["s.tenant_id = $1", "s.employment_status != 'terminated'"];
+    const conditions: string[] = ["s.tenant_id = $1"];
     const params: unknown[] = [tenantId];
     let i = 2;
 
@@ -30,7 +30,10 @@ export class StaffService {
     conditions.push(`($${i}::uuid[] IS NULL OR s.current_outlet_id = ANY($${i}))`);
     params.push(outletFilter);
     i++;
+    // Default view hides departed staff (terminated + resigned); an explicit status
+    // filter can still surface them.
     if (status) { conditions.push(`s.employment_status = $${i++}`); params.push(status); }
+    else { conditions.push("s.employment_status NOT IN ('terminated', 'resigned')"); }
     if (departmentId) { conditions.push(`s.department_id = $${i++}`); params.push(departmentId); }
     if (positionId) { conditions.push(`s.position_id = $${i++}`); params.push(positionId); }
 
