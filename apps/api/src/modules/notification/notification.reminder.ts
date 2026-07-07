@@ -34,7 +34,13 @@ export class ReminderScheduler implements OnApplicationBootstrap {
       );
       this.logger.log(`Nightly shift reminders scheduled at "${REMINDER_CRON}" (${REMINDER_TZ})`);
     } catch (e) {
-      this.logger.error(`Could not schedule nightly shift reminders: ${formatError(e)}`);
+      // Almost always "Redis unreachable" — the queue lives in Redis. Non-fatal: the rest
+      // of the app runs without it. Start Redis and restart to enable nightly reminders.
+      // WARN (not ERROR) so a missing dev Redis doesn't look like a crash.
+      this.logger.warn(
+        `Nightly shift reminders not scheduled — is Redis running at ` +
+          `${process.env.REDIS_HOST || "127.0.0.1"}:${process.env.REDIS_PORT || "6379"}? (${formatError(e)})`,
+      );
     }
   }
 }
