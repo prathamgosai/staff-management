@@ -54,9 +54,24 @@ export class AuthService {
     email: string,
     password: string,
   ): Promise<{ user: AuthUser; mustChangePassword: boolean } | null> {
+    // Resolve the login identifier flexibly, case-insensitively: a real email, the
+    // synthetic "<id>@workforceiq.app" login (admin / HR / staff without a unique
+    // email), or a staff Employee ID. Priority: exact email > employee_id > synthetic,
+    // so a stray collision can't hijack a login and the person typing their own ID wins.
+    const ident = (email ?? "").trim();
     const result = await this.db.query(
-      "SELECT * FROM users WHERE email = $1",
-      [email.toLowerCase()],
+      `SELECT u.* FROM users u
+         LEFT JOIN staff s ON s.user_id = u.id AND s.tenant_id = u.tenant_id
+        WHERE lower(u.email) = lower($1)
+           OR lower(u.email) = lower($1) || '@workforceiq.app'
+           OR lower(s.employee_id) = lower($1)
+        ORDER BY CASE
+                   WHEN lower(u.email) = lower($1) THEN 0
+                   WHEN lower(s.employee_id) = lower($1) THEN 1
+                   ELSE 2
+                 END
+        LIMIT 1`,
+      [ident],
     );
     const user = result.rows[0];
     if (!user || !user.password_hash) return null;
