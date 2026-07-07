@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type TouchEvent as ReactTouchEvent } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import {
@@ -63,6 +63,8 @@ export default function SchedulingPage() {
   const [expandedShift, setExpandedShift]       = useState<string | null>(null);
   const [selectedDay, setSelectedDay]           = useState<string | null>(null);
   const [deptFilter, setDeptFilter]             = useState("");
+  const [mobileDayIdx, setMobileDayIdx]         = useState(0);
+  const touchStartX = useRef<number | null>(null);
 
   const weekStartDate = format(currentWeek, "yyyy-MM-dd");
 
@@ -72,6 +74,23 @@ export default function SchedulingPage() {
     d.setDate(d.getDate() + i);
     return d;
   });
+
+  // Mobile day-first view defaults to today (when today falls in the shown week).
+  useEffect(() => {
+    const todayKey = format(new Date(), "yyyy-MM-dd");
+    const idx = weekDays.findIndex(d => format(d, "yyyy-MM-dd") === todayKey);
+    setMobileDayIdx(idx >= 0 ? idx : 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekStartDate]);
+
+  const swipeStart = (e: ReactTouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+  const swipeEnd = (e: ReactTouchEvent) => {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) < 50) return;
+    setMobileDayIdx(i => Math.min(6, Math.max(0, i + (dx < 0 ? 1 : -1))));
+  };
 
   const { data: outletRes } = useQuery({
     queryKey: ["outlets"],
@@ -487,7 +506,69 @@ export default function SchedulingPage() {
           )}
         </div>
       ) : (
-        <div className="space-y-4">
+        <>
+          {/* Mobile: day-first view (defaults to today · chips + swipe) */}
+          <div className="md:hidden space-y-3" onTouchStart={swipeStart} onTouchEnd={swipeEnd}>
+            <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+              {weekDays.map((d, i) => {
+                const active = i === mobileDayIdx;
+                return (
+                  <button key={i} onClick={() => setMobileDayIdx(i)}
+                    className={`flex min-h-[44px] shrink-0 flex-col items-center justify-center rounded-xl px-3 text-xs font-semibold transition ${active ? "bg-blue-600 text-white" : "bg-card border border-border text-muted-foreground"}`}>
+                    <span>{format(d, "EEE")}</span>
+                    <span className="text-sm font-black">{format(d, "d")}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {(() => {
+              const dayKey = format(weekDays[mobileDayIdx], "yyyy-MM-dd");
+              const dayShifts = roster
+                .map(shift => ({
+                  shift,
+                  staff: (shift.dates[dayKey]?.staff ?? []).filter(s =>
+                    !deptFilter || (s.departmentName ?? "").toLowerCase().includes(deptFilter.toLowerCase())),
+                }))
+                .filter(x => x.staff.length > 0);
+              if (dayShifts.length === 0) {
+                return (
+                  <div className="rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+                    No shifts on {format(weekDays[mobileDayIdx], "EEE d MMM")}.
+                  </div>
+                );
+              }
+              return dayShifts.map(({ shift, staff }) => {
+                const { bg: shiftBg, badge } = shiftStyle(shift.shiftName);
+                return (
+                  <div key={shift.shiftName} className={`rounded-2xl border-l-4 border border-border overflow-hidden ${shiftBg}`}>
+                    <div className="flex items-center gap-3 px-4 py-3">
+                      <div className={`${badge} text-white text-xs font-black px-2.5 py-1 rounded-lg shrink-0`}>
+                        {shift.startTime.slice(0, 5)}–{shift.isOvernight ? "00:00" : shift.endTime.slice(0, 5)}
+                      </div>
+                      <p className="flex-1 truncate text-sm font-bold text-foreground">{shift.shiftName.split("(")[0].trim()}</p>
+                      <span className="shrink-0 text-xs text-muted-foreground">{staff.length}</span>
+                    </div>
+                    <ul className="divide-y divide-black/5 border-t border-black/5">
+                      {staff.map(s => (
+                        <li key={s.staffId} className="flex items-center gap-2.5 px-4 py-2.5">
+                          <div className={`w-8 h-8 rounded-full ${badge} text-white text-xs font-bold flex items-center justify-center shrink-0`}>
+                            {s.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold leading-tight text-foreground">{s.name}</p>
+                            <p className="truncate text-xs text-muted-foreground">{s.positionName}{s.employeeId ? ` · ${s.employeeId}` : ""}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+
+          {/* Desktop: full week table (unchanged) */}
+          <div className="hidden md:block space-y-4">
           {roster.map(shift => {
             const isExpanded = expandedShift === null || expandedShift === shift.shiftName;
             const { bg: shiftBg, badge } = shiftStyle(shift.shiftName);
@@ -626,7 +707,8 @@ export default function SchedulingPage() {
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );
