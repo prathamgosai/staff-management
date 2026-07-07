@@ -8,7 +8,7 @@ import { useAuthStore } from "@/store/auth.store";
 import { isAdminRole, canAssignRoles, ASSIGNABLE_ROLES, ROLE_META } from "@workforceiq/shared";
 import { format } from "date-fns";
 import {
-  KeyRound, Search, Loader2, X, Check, Copy, ShieldCheck, RefreshCw, Mail, Hash, UserCog,
+  KeyRound, Search, Loader2, X, Check, Copy, ShieldCheck, RefreshCw, Mail, Hash, UserCog, Building2,
 } from "lucide-react";
 
 interface Account {
@@ -22,6 +22,7 @@ interface Account {
   last_login_at: string | null;
   created_at: string;
   employee_id: string | null;
+  outlet_ids: string[] | null;
 }
 
 const ROLE_CLS: Record<string, string> = {
@@ -68,7 +69,7 @@ function ResetPasswordModal({ account, onClose }: { account: Account; onClose: (
 
   function submit() {
     setErr(null);
-    if (mode === "set" && pwd.trim().length < 8) { setErr("Password must be at least 8 characters."); return; }
+    if (mode === "set" && pwd.trim().length < 10) { setErr("Password must be at least 10 characters."); return; }
     mutation.mutate();
   }
 
@@ -125,7 +126,7 @@ function ResetPasswordModal({ account, onClose }: { account: Account; onClose: (
 
             {mode === "set" ? (
               <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-1.5">New password (min 8 characters)</label>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1.5">New password (min 10 characters)</label>
                 <input value={pwd} onChange={e => setPwd(e.target.value)} type="text" autoComplete="off"
                   placeholder="e.g. Welcome@2026"
                   className="w-full border border-border rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500" />
@@ -150,6 +151,79 @@ function ResetPasswordModal({ account, onClose }: { account: Account; onClose: (
   );
 }
 
+/* ─── Outlet access modal ─────────────────────────────────────────────── */
+function OutletsModal({ account, onClose }: { account: Account; onClose: () => void }) {
+  const qc = useQueryClient();
+  const { data: outletsRes, isLoading } = useQuery<{ data: { id: string; name: string }[] }>({
+    queryKey: ["outlets"],
+    queryFn: () => apiClient.get("/outlets").then(r => r.data),
+  });
+  const outlets = outletsRes?.data ?? [];
+  const [selected, setSelected] = useState<Set<string>>(new Set(account.outlet_ids ?? []));
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: () => apiClient.put(`/auth/accounts/${account.id}/outlets`, { outletIds: [...selected] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      toast.success("Outlet access updated.");
+      onClose();
+    },
+    onError: (error) => {
+      const e = error as { response?: { data?: { message?: string | string[] } } };
+      const m = e?.response?.data?.message;
+      setErr(Array.isArray(m) ? m.join(", ") : m ?? "Could not update outlet access. Please try again.");
+    },
+  });
+
+  function toggle(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-card rounded-2xl shadow-2xl w-96 max-w-[calc(100vw-2rem)] mx-4 p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-bold text-foreground">Outlet access</h3>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted"><X size={16} /></button>
+        </div>
+        <p className="text-xs text-muted-foreground mb-3 truncate">{account.name} · <span className="font-mono">{account.email}</span></p>
+        <p className="text-xs text-muted-foreground mb-3">
+          Which outlets this account can see. Admins &amp; HR always see every outlet regardless.
+        </p>
+
+        {isLoading ? (
+          <div className="py-8 text-center"><Loader2 size={22} className="animate-spin mx-auto text-muted-foreground" /></div>
+        ) : (
+          <div className="max-h-64 overflow-y-auto space-y-1 mb-4">
+            {outlets.map(o => (
+              <label key={o.id} className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-muted cursor-pointer">
+                <input type="checkbox" checked={selected.has(o.id)} onChange={() => toggle(o.id)}
+                  className="h-4 w-4 rounded border-border text-blue-600 focus:ring-blue-500" />
+                <span className="text-sm text-foreground">{o.name}</span>
+              </label>
+            ))}
+            {outlets.length === 0 && <p className="text-sm text-muted-foreground px-2 py-4">No outlets found.</p>}
+          </div>
+        )}
+
+        {err && <p className="text-xs text-red-600 bg-red-50 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30 rounded-lg px-3 py-2 mb-3">{err}</p>}
+
+        <button onClick={() => { setErr(null); save.mutate(); }} disabled={save.isPending}
+          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition flex items-center justify-center gap-2">
+          {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+          Save outlet access
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Page ────────────────────────────────────────────────────────────── */
 export default function AccountsPage() {
   const myRole = useAuthStore((s) => s.user?.role ?? null);
@@ -159,6 +233,7 @@ export default function AccountsPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [resetting, setResetting] = useState<Account | null>(null);
+  const [editingOutlets, setEditingOutlets] = useState<Account | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkRole, setBulkRole] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
@@ -223,6 +298,7 @@ export default function AccountsPage() {
   return (
     <>
       {resetting && <ResetPasswordModal account={resetting} onClose={() => setResetting(null)} />}
+      {editingOutlets && <OutletsModal account={editingOutlets} onClose={() => setEditingOutlets(null)} />}
 
       <div className="space-y-6">
         {/* Header */}
@@ -350,16 +426,24 @@ export default function AccountsPage() {
                           {a.last_login_at ? format(new Date(a.last_login_at), "d MMM yyyy, HH:mm") : <span className="text-muted-foreground/60">never</span>}
                         </td>
                         <td className="px-4 py-3.5 text-right">
-                          {a.role === "super_admin" && !isSuperAdmin ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title="Only a Super Admin can reset a Super Admin password">
-                              <ShieldCheck size={12} /> Protected
-                            </span>
-                          ) : (
-                            <button onClick={() => setResetting(a)}
-                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-blue-200 dark:border-blue-500/30 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition">
-                              <KeyRound size={12} /> Reset password
-                            </button>
-                          )}
+                          <div className="inline-flex items-center gap-2 justify-end">
+                            {canAssign && (
+                              <button onClick={() => setEditingOutlets(a)}
+                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground border border-border hover:bg-muted px-3 py-1.5 rounded-lg transition">
+                                <Building2 size={12} /> Outlets
+                              </button>
+                            )}
+                            {a.role === "super_admin" && !isSuperAdmin ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title="Only a Super Admin can reset a Super Admin password">
+                                <ShieldCheck size={12} /> Protected
+                              </span>
+                            ) : (
+                              <button onClick={() => setResetting(a)}
+                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-blue-200 dark:border-blue-500/30 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition">
+                                <KeyRound size={12} /> Reset password
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

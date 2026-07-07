@@ -112,6 +112,19 @@ export class AuthController {
     return this.authService.resetPassword(user, id, body.newPassword);
   }
 
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("accounts:manage")
+  @Put("accounts/:id/outlets")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Set a staff account's outlet scope (requires accounts:manage)" })
+  setAccountOutlets(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body() body: { outletIds: string[] },
+  ) {
+    return this.authService.setAccountOutlets(user, id, body?.outletIds ?? []);
+  }
+
   // Changing an account's role is restricted to super_admin and HR only —
   // deliberately NOT the accounts:manage permission (which Admin also holds).
   @UseGuards(JwtAuthGuard, RolesGuard)

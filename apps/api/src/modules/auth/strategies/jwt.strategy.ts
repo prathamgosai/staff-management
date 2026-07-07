@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
 import { ConfigService } from "@nestjs/config";
+import { isAdminRole } from "@workforceiq/shared";
 import type { TokenPayload, AuthUser } from "@workforceiq/shared";
 import { RolesService } from "../../roles/roles.service";
 
@@ -23,11 +24,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: TokenPayload): Promise<AuthUser> {
     if (!payload.sub) throw new UnauthorizedException();
     const permissions = await this.rolesService.getPermissionsForRole(payload.tenantId, payload.role);
+    // Outlet scope is only consulted for non-admin roles (admins = all outlets), and it
+    // must reflect an outlet reassignment without re-login — so resolve it live (cached)
+    // for them rather than trusting the (possibly stale) value baked into the token.
+    const outletIds = isAdminRole(payload.role)
+      ? payload.outletIds
+      : await this.rolesService.getOutletIdsForUser(payload.sub, payload.tenantId);
     return {
       id: payload.sub,
       email: payload.email,
       role: payload.role,
-      outletIds: payload.outletIds,
+      outletIds,
       tenantId: payload.tenantId,
       name: "",
       permissions,

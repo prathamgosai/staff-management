@@ -214,6 +214,18 @@ export class AuthService {
         "UPDATE users SET is_active = true, pending_approval = false, updated_at = NOW() WHERE id = $1",
         [userId],
       );
+      // Derive outlet scope from the linked staff row so the fresh account isn't
+      // blanked out by fail-closed scoping. Only fills an empty outlet_ids.
+      await this.db.query(
+        `UPDATE users u
+            SET outlet_ids = ARRAY[s.current_outlet_id], updated_at = NOW()
+           FROM staff s
+          WHERE u.id = $1 AND s.user_id = u.id
+            AND s.current_outlet_id IS NOT NULL
+            AND (u.outlet_ids IS NULL OR u.outlet_ids = '{}')`,
+        [userId],
+      );
+      this.rolesService.bustOutletCache(userId);
     } else {
       await this.db.query("UPDATE staff SET user_id = NULL WHERE user_id = $1", [userId]);
       await this.db.query("DELETE FROM users WHERE id = $1", [userId]);
@@ -224,7 +236,7 @@ export class AuthService {
   async getAllAccounts(tenantId: string) {
     const result = await this.db.query(
       `SELECT u.id, u.email, u.name, u.role, u.is_active, u.pending_approval,
-              u.ticket_number, u.last_login_at, u.created_at,
+              u.ticket_number, u.last_login_at, u.created_at, u.outlet_ids,
               s.employee_id
        FROM users u
        LEFT JOIN staff s ON s.user_id = u.id
@@ -276,6 +288,39 @@ export class AuthService {
       [userId],
     );
     return { data: generated ? { tempPassword: password } : {} };
+  }
+
+  /**
+   * accounts:manage — set a user's outlet scope. Only outlets within the actor's tenant
+   * are assignable, and the target must be in the same tenant. Busts the live outlet
+   * cache so the change takes effect on the user's next request (no re-login).
+   */
+  async setAccountOutlets(
+    actor: AuthUser,
+    userId: string,
+    outletIds: string[],
+  ): Promise<{ data: { userId: string; outletIds: string[] } }> {
+    const unique = [...new Set((outletIds ?? []).filter(Boolean))];
+    const target = await this.db.query(
+      "SELECT id FROM users WHERE id = $1 AND tenant_id = $2",
+      [userId, actor.tenantId],
+    );
+    if (!target.rows[0]) throw new BadRequestException("Account not found");
+    if (unique.length > 0) {
+      const valid = await this.db.query(
+        "SELECT COUNT(*)::int AS c FROM outlets WHERE id = ANY($1::uuid[]) AND tenant_id = $2",
+        [unique, actor.tenantId],
+      );
+      if (valid.rows[0].c !== unique.length) {
+        throw new BadRequestException("One or more outlets are not valid for this tenant.");
+      }
+    }
+    await this.db.query(
+      "UPDATE users SET outlet_ids = $1::uuid[], updated_at = NOW() WHERE id = $2 AND tenant_id = $3",
+      [unique, userId, actor.tenantId],
+    );
+    this.rolesService.bustOutletCache(userId);
+    return { data: { userId, outletIds: unique } };
   }
 
   /**
