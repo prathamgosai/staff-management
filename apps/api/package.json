@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "build": "nest build",
-    "dev": "node scripts/free-port.js 4000 && nest start --watch",
-    "dev:tsnode": "node scripts/free-port.js 4000 && ts-node -r tsconfig-paths/register -r reflect-metadata src/main.ts",
+    "dev": "node scripts/free-port.js 4000 && ts-node -r tsconfig-paths/register -r reflect-metadata src/main.ts",
+    "dev:watch": "node scripts/free-port.js 4000 && nest start --watch",
     "start": "node dist/main",
     "lint": "node ../../scripts/eslint.mjs src",
     "typecheck": "tsc --noEmit",
