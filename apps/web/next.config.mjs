@@ -12,6 +12,14 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ["lucide-react", "recharts"],
   },
+  // Next 14.2's dev webpack filesystem cache desyncs on Node 24, producing the
+  // recurring dev-only 500s ("Cannot find module './xxx.js'", fallback chunks,
+  // metadata routes). Disable the persistent cache in dev for stability — a little
+  // slower to compile, production build untouched. Best real fix is Node 20 (.nvmrc).
+  webpack: (config, { dev }) => {
+    if (dev) config.cache = false;
+    return config;
+  },
   // This app is verified at runtime, but was historically only run via `next dev`
   // (which skips type-checking). Pre-existing strict-mode TS/ESLint issues should
   // not block production builds on Render, which run `next build`.
