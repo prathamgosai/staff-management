@@ -18,6 +18,7 @@ export class RolesService {
   // role) with a short TTL; updateRolePermissions() busts the entry so an Account Types
   // edit still takes effect immediately on this instance.
   private readonly permCache = new Map<string, { perms: string[]; expiresAt: number }>();
+  private readonly outletCache = new Map<string, { outletIds: string[]; expiresAt: number }>();
   private static readonly PERM_TTL_MS = 30_000;
 
   /**
@@ -41,6 +42,28 @@ export class RolesService {
       : (ROLE_PERMISSIONS[role as Role] ?? []);
     this.permCache.set(key, { perms, expiresAt: Date.now() + RolesService.PERM_TTL_MS });
     return perms;
+  }
+
+  /**
+   * A user's outlet scope, resolved live (short-cached) so an outlet reassignment
+   * takes effect on the next request without a re-login. Consulted by JwtStrategy
+   * for non-admin roles only (admins resolve to "all outlets"). Busted on write.
+   */
+  async getOutletIdsForUser(userId: string, tenantId: string): Promise<string[]> {
+    const hit = this.outletCache.get(userId);
+    if (hit && hit.expiresAt > Date.now()) return hit.outletIds;
+    const res = await this.db.query(
+      "SELECT outlet_ids FROM users WHERE id = $1 AND tenant_id = $2",
+      [userId, tenantId],
+    );
+    const outletIds = (res.rows[0]?.outlet_ids as string[] | null) ?? [];
+    this.outletCache.set(userId, { outletIds, expiresAt: Date.now() + RolesService.PERM_TTL_MS });
+    return outletIds;
+  }
+
+  /** Invalidate the cached outlet scope for a user (call after changing outlet_ids). */
+  bustOutletCache(userId: string): void {
+    this.outletCache.delete(userId);
   }
 
   /** The users assigned to a given account type (name/email/employee id). */

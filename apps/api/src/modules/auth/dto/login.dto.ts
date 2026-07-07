@@ -10,7 +10,7 @@ export class LoginDto {
   @MinLength(1)
   email: string;
 
-  @ApiProperty({ example: "Admin@123" })
+  @ApiProperty({ example: "your-password" })
   @IsString()
   @MinLength(6)
   password: string;

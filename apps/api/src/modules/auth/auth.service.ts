@@ -40,6 +40,17 @@ function generateTempPassword(length = 10): string {
   return p;
 }
 
+// SHA-256 digests of the seeded/burned passwords. Stored as digests (never plaintext)
+// so change-password can reject them without a credential ever appearing in the repo.
+const BURNED_PASSWORD_SHA256 = new Set([
+  "e86f78a8a3caf0b60d8e74e5942aa6d86dc150cd3c03338aef25b7d2d7e3acc7",
+  "90ecc336d6200b1389eb49c4b557ee42892345c2f727453ae82c96e6de94098e",
+  "d76d49fd61f3350a0bfb04cff2a047bdece2de0db68ab95bf81d99b45e54f112",
+]);
+function sha256Hex(s: string): string {
+  return createHash("sha256").update(s).digest("hex");
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -203,6 +214,18 @@ export class AuthService {
         "UPDATE users SET is_active = true, pending_approval = false, updated_at = NOW() WHERE id = $1",
         [userId],
       );
+      // Derive outlet scope from the linked staff row so the fresh account isn't
+      // blanked out by fail-closed scoping. Only fills an empty outlet_ids.
+      await this.db.query(
+        `UPDATE users u
+            SET outlet_ids = ARRAY[s.current_outlet_id], updated_at = NOW()
+           FROM staff s
+          WHERE u.id = $1 AND s.user_id = u.id
+            AND s.current_outlet_id IS NOT NULL
+            AND (u.outlet_ids IS NULL OR u.outlet_ids = '{}')`,
+        [userId],
+      );
+      this.rolesService.bustOutletCache(userId);
     } else {
       await this.db.query("UPDATE staff SET user_id = NULL WHERE user_id = $1", [userId]);
       await this.db.query("DELETE FROM users WHERE id = $1", [userId]);
@@ -213,7 +236,7 @@ export class AuthService {
   async getAllAccounts(tenantId: string) {
     const result = await this.db.query(
       `SELECT u.id, u.email, u.name, u.role, u.is_active, u.pending_approval,
-              u.ticket_number, u.last_login_at, u.created_at,
+              u.ticket_number, u.last_login_at, u.created_at, u.outlet_ids,
               s.employee_id
        FROM users u
        LEFT JOIN staff s ON s.user_id = u.id
@@ -249,8 +272,8 @@ export class AuthService {
     const generated = !password;
     if (generated) {
       password = generateTempPassword();
-    } else if (password!.length < 8) {
-      throw new BadRequestException("Password must be at least 8 characters");
+    } else if (password!.length < 10) {
+      throw new BadRequestException("Password must be at least 10 characters");
     }
 
     const hash = await bcrypt.hash(password!, 12);
@@ -265,6 +288,39 @@ export class AuthService {
       [userId],
     );
     return { data: generated ? { tempPassword: password } : {} };
+  }
+
+  /**
+   * accounts:manage — set a user's outlet scope. Only outlets within the actor's tenant
+   * are assignable, and the target must be in the same tenant. Busts the live outlet
+   * cache so the change takes effect on the user's next request (no re-login).
+   */
+  async setAccountOutlets(
+    actor: AuthUser,
+    userId: string,
+    outletIds: string[],
+  ): Promise<{ data: { userId: string; outletIds: string[] } }> {
+    const unique = [...new Set((outletIds ?? []).filter(Boolean))];
+    const target = await this.db.query(
+      "SELECT id FROM users WHERE id = $1 AND tenant_id = $2",
+      [userId, actor.tenantId],
+    );
+    if (!target.rows[0]) throw new BadRequestException("Account not found");
+    if (unique.length > 0) {
+      const valid = await this.db.query(
+        "SELECT COUNT(*)::int AS c FROM outlets WHERE id = ANY($1::uuid[]) AND tenant_id = $2",
+        [unique, actor.tenantId],
+      );
+      if (valid.rows[0].c !== unique.length) {
+        throw new BadRequestException("One or more outlets are not valid for this tenant.");
+      }
+    }
+    await this.db.query(
+      "UPDATE users SET outlet_ids = $1::uuid[], updated_at = NOW() WHERE id = $2 AND tenant_id = $3",
+      [unique, userId, actor.tenantId],
+    );
+    this.rolesService.bustOutletCache(userId);
+    return { data: { userId, outletIds: unique } };
   }
 
   /**
@@ -342,8 +398,12 @@ export class AuthService {
   async changePassword(userId: string, dto: ChangePasswordDto): Promise<AuthTokens> {
     if (dto.newPassword !== dto.confirmPassword)
       throw new BadRequestException("Passwords do not match");
-    if (dto.newPassword.length < 8)
-      throw new BadRequestException("Password must be at least 8 characters");
+    if (dto.newPassword.length < 10)
+      throw new BadRequestException("Password must be at least 10 characters");
+    if (!/[A-Za-z]/.test(dto.newPassword) || !/\d/.test(dto.newPassword))
+      throw new BadRequestException("Password must include at least one letter and one number");
+    if (BURNED_PASSWORD_SHA256.has(sha256Hex(dto.newPassword)))
+      throw new BadRequestException("That password is not allowed — please choose a different one");
     const result = await this.db.query("SELECT * FROM users WHERE id = $1", [userId]);
     const userRow = result.rows[0];
     const valid = await bcrypt.compare(dto.currentPassword, userRow?.password_hash);
@@ -352,7 +412,7 @@ export class AuthService {
       throw new BadRequestException("New password must be different from the current one");
     const hash = await bcrypt.hash(dto.newPassword, 12);
     await this.db.query(
-      "UPDATE users SET password_hash = $1, must_change_password = false, updated_at = NOW() WHERE id = $2",
+      "UPDATE users SET password_hash = $1, must_change_password = false, password_updated_at = NOW(), updated_at = NOW() WHERE id = $2",
       [hash, userId],
     );
     // Revoke every existing session (logs out other devices)…

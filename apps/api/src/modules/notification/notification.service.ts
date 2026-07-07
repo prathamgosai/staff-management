@@ -9,6 +9,7 @@ import type { NotificationPayloadMap, AuthUser } from "@workforceiq/shared";
 import { toLocalDateStr } from "../../common/utils/week.util";
 import { renderMessage, type RecipientKind } from "./notification.messages";
 import { DISPATCH_JOB, DISPATCH_JOB_OPTS, NOTIFICATIONS_QUEUE } from "./notification.constants";
+import { MagicLinkService } from "../public/magic-link.service";
 
 /** A resolved recipient: a user (in-app target) and/or a staff row (external contact). */
 interface Target {
@@ -33,6 +34,7 @@ export class NotificationService {
   constructor(
     @Inject(DB_POOL) private readonly db: Pool,
     @InjectQueue(NOTIFICATIONS_QUEUE) private readonly queue: Queue,
+    private readonly magic: MagicLinkService,
   ) {}
 
   // ── Emit ────────────────────────────────────────────────────────────────────
@@ -114,12 +116,20 @@ export class NotificationService {
           this.outletHeads(p.tenantId, outletId),
           this.outletName(outletId),
         ]);
-        const targets: Target[] = staff.map((row) => ({
-          userId: row.user_id,
-          staffId: row.staff_id,
-          kind: "roster_self",
-          extras: { weekKey, shiftCount: Number(row.shift_count) },
-        }));
+        const targets: Target[] = staff.map((row) => {
+          // For staff with no login (WhatsApp only) — or everyone when flagged — attach a
+          // read-only magic link so they can open their week without an account.
+          const magicLink =
+            this.magic.isEnabled() && (this.magic.linkForEveryone() || !row.user_id)
+              ? this.magic.linkFor({ staffId: row.staff_id, weekKey, tenantId: p.tenantId })
+              : null;
+          return {
+            userId: row.user_id,
+            staffId: row.staff_id,
+            kind: "roster_self" as const,
+            extras: { weekKey, shiftCount: Number(row.shift_count), magicLink },
+          };
+        });
         for (const h of heads) {
           if (h.id === p.publishedBy) continue; // don't notify the publisher of their own action
           targets.push({ userId: h.id, staffId: null, kind: "roster_head", extras: { weekKey, outletName, staffCount: staff.length } });

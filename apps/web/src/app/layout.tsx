@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 import { Providers } from "./providers";
 import { ServiceWorkerRegister } from "@/components/pwa/sw-register";
 import { InstallHint } from "@/components/pwa/install-hint";
@@ -43,13 +45,20 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Locale + catalog are resolved on the server from the `wfiq-locale` cookie
+  // (see src/i18n/request.ts). Passing them to NextIntlClientProvider makes
+  // useTranslations() work in every client component without a per-page fetch.
+  const locale = await getLocale();
+  const messages = await getMessages();
   return (
-    <html lang="en" suppressHydrationWarning className={inter.variable}>
+    <html lang={locale} suppressHydrationWarning className={inter.variable}>
       <body className="min-h-screen overflow-x-hidden bg-background font-sans text-foreground antialiased">
-        <Providers>{children}</Providers>
-        <ServiceWorkerRegister />
-        <InstallHint />
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <Providers>{children}</Providers>
+          <ServiceWorkerRegister />
+          <InstallHint />
+        </NextIntlClientProvider>
       </body>
     </html>
   );
