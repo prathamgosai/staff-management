@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,6 +22,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const t = useTranslations("login");
   const { setAuth } = useAuthStore();
   const [error, setError]           = useState<string | null>(null);
   const [isPending, setIsPending]   = useState(false);
@@ -116,8 +118,8 @@ export default function LoginPage() {
           </div>
 
           <div className="px-8 py-8">
-            <h2 className="text-xl font-bold text-foreground mb-1">Welcome back</h2>
-            <p className="text-sm text-muted-foreground mb-6">Sign in with your Employee ID or email</p>
+            <h2 className="text-xl font-bold text-foreground mb-1">{t("welcome")}</h2>
+            <p className="text-sm text-muted-foreground mb-6">{t("subtitle")}</p>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               {/* Employee ID / Email */}
@@ -193,7 +195,7 @@ export default function LoginPage() {
                 type="submit"
                 disabled={isLoading}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl transition text-sm mt-2">
-                {isLoading ? "Signing in…" : "Sign In"}
+                {isLoading ? t("signingIn") : t("signIn")}
               </button>
             </form>
 

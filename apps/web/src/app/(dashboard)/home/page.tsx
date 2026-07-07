@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { format } from "date-fns";
 import { CalendarClock, CalendarDays, CalendarOff, Bell, ChevronRight, MapPin } from "lucide-react";
@@ -47,6 +48,7 @@ function prettyDate(iso: string): string {
 }
 
 export default function MyDayPage() {
+  const t = useTranslations("myDay");
   const user = useAuthStore((s) => s.user);
   const firstName = (user?.name || user?.email || "there").split(/[ @]/)[0];
 
@@ -74,14 +76,14 @@ export default function MyDayPage() {
   return (
     <div className="mx-auto max-w-lg space-y-4 pb-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Hi {firstName} 👋</h1>
-        <p className="mt-0.5 text-sm text-muted-foreground">Here&apos;s your day.</p>
+        <h1 className="text-2xl font-bold text-foreground">{t("greeting", { name: firstName })} 👋</h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
 
       {/* Next shift — large, first */}
       <section className="rounded-2xl border border-border bg-card p-5 shadow-card">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          <CalendarClock className="size-4 text-primary" /> Next shift
+          <CalendarClock className="size-4 text-primary" /> {t("nextShift")}
         </div>
         {weekLoading ? (
           <div className="mt-3 space-y-2">
@@ -89,7 +91,7 @@ export default function MyDayPage() {
             <Skeleton className="h-4 w-56 max-w-full" />
           </div>
         ) : !week?.published ? (
-          <p className="mt-3 text-sm text-muted-foreground">Roster not published yet — check back soon.</p>
+          <p className="mt-3 text-sm text-muted-foreground">{t("notPublished")}</p>
         ) : nextShift ? (
           <div className="mt-2">
             <p className="text-3xl font-bold text-foreground">
@@ -106,7 +108,7 @@ export default function MyDayPage() {
             )}
           </div>
         ) : (
-          <p className="mt-3 text-sm text-muted-foreground">No upcoming shifts this week.</p>
+          <p className="mt-3 text-sm text-muted-foreground">{t("noUpcoming")}</p>
         )}
       </section>
 
@@ -114,18 +116,18 @@ export default function MyDayPage() {
       <section className="rounded-2xl border border-border bg-card p-5 shadow-card">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <CalendarDays className="size-4 text-primary" /> This week
+            <CalendarDays className="size-4 text-primary" /> {t("thisWeek")}
           </div>
-          <Link href="/scheduling" className="text-xs font-medium text-primary">View roster</Link>
+          <Link href="/scheduling" className="text-xs font-medium text-primary">{t("viewRoster")}</Link>
         </div>
         {weekLoading ? (
           <div className="mt-3 space-y-2">
             {[0, 1, 2].map((i) => <Skeleton key={i} className="h-9 w-full" />)}
           </div>
         ) : !week?.published ? (
-          <p className="mt-3 text-sm text-muted-foreground">Roster not published yet.</p>
+          <p className="mt-3 text-sm text-muted-foreground">{t("notPublishedShort")}</p>
         ) : shifts.length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">You have no shifts this week.</p>
+          <p className="mt-3 text-sm text-muted-foreground">{t("noShifts")}</p>
         ) : (
           <ul className="mt-2 divide-y divide-border">
             {shifts.map((s) => (
@@ -145,9 +147,9 @@ export default function MyDayPage() {
       <section className="rounded-2xl border border-border bg-card p-5 shadow-card">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <CalendarOff className="size-4 text-primary" /> Leave
+            <CalendarOff className="size-4 text-primary" /> {t("leave")}
           </div>
-          <Link href="/leave" className="text-xs font-medium text-primary">Manage</Link>
+          <Link href="/leave" className="text-xs font-medium text-primary">{t("manage")}</Link>
         </div>
         {leaveLoading ? (
           <div className="mt-3 space-y-2">
@@ -158,14 +160,14 @@ export default function MyDayPage() {
           <div className="mt-2">
             <p className="text-2xl font-bold text-foreground">
               {Number.isFinite(totalBalance) ? Math.max(0, Math.round(totalBalance * 10) / 10) : 0}{" "}
-              <span className="text-sm font-normal text-muted-foreground">days available</span>
+              <span className="text-sm font-normal text-muted-foreground">{t("daysAvailable")}</span>
             </p>
             {latestReq ? (
               <p className="mt-1 text-sm text-muted-foreground">
-                Latest request: <span className="capitalize text-foreground">{latestReq.status}</span>
+                {t("latestRequest", { status: latestReq.status })}
               </p>
             ) : (
-              <p className="mt-1 text-sm text-muted-foreground">No leave requests yet.</p>
+              <p className="mt-1 text-sm text-muted-foreground">{t("noRequests")}</p>
             )}
           </div>
         )}
@@ -174,12 +176,12 @@ export default function MyDayPage() {
       {/* Quick actions */}
       <div className="grid grid-cols-2 gap-3">
         <Link href="/leave" className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 shadow-card transition hover:bg-muted">
-          <span className="text-sm font-semibold text-foreground">Request leave</span>
+          <span className="text-sm font-semibold text-foreground">{t("requestLeave")}</span>
           <ChevronRight className="size-4 text-muted-foreground" />
         </Link>
         <Link href="/notifications" className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 shadow-card transition hover:bg-muted">
           <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
-            <Bell className="size-4" /> Notifications
+            <Bell className="size-4" /> {t("notifications")}
           </span>
           <ChevronRight className="size-4 text-muted-foreground" />
         </Link>

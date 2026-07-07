@@ -1,12 +1,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { KeyRound, Bell, LogOut, MapPin, Hash, Briefcase, Mail, ChevronRight, type LucideIcon } from "lucide-react";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth.store";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LocaleSwitcher } from "@/components/i18n/locale-switcher";
 
 interface Profile {
   name: string;
@@ -39,6 +41,7 @@ function LinkRow({ href, icon: Icon, label }: { href: string; icon: LucideIcon; 
 
 export default function ProfilePage() {
   const router = useRouter();
+  const t = useTranslations("profile");
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
@@ -80,8 +83,13 @@ export default function ProfilePage() {
       </section>
 
       <section className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
-        <LinkRow href="/change-password" icon={KeyRound} label="Change password" />
-        <LinkRow href="/settings/notifications" icon={Bell} label="Notification settings" />
+        <LinkRow href="/change-password" icon={KeyRound} label={t("changePassword")} />
+        <LinkRow href="/settings/notifications" icon={Bell} label={t("notificationSettings")} />
+      </section>
+
+      <section className="space-y-3 rounded-2xl border border-border bg-card p-4">
+        <p className="text-sm font-medium text-foreground">{t("language")}</p>
+        <LocaleSwitcher />
       </section>
 
       <button
@@ -91,7 +99,7 @@ export default function ProfilePage() {
         }}
         className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-border bg-card p-4 text-sm font-semibold text-danger transition hover:bg-muted"
       >
-        <LogOut className="size-4" /> Sign out
+        <LogOut className="size-4" /> {t("signOut")}
       </button>
     </div>
   );

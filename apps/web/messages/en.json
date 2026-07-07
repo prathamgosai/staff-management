@@ -1,0 +1,42 @@
+{
+  "nav": {
+    "home": "Home",
+    "roster": "Roster",
+    "attendance": "Attendance",
+    "leave": "Leave",
+    "profile": "Profile"
+  },
+  "myDay": {
+    "greeting": "Hi {name}",
+    "subtitle": "Here's your day.",
+    "nextShift": "Next shift",
+    "thisWeek": "This week",
+    "leave": "Leave",
+    "viewRoster": "View roster",
+    "manage": "Manage",
+    "notPublished": "Roster not published yet — check back soon.",
+    "notPublishedShort": "Roster not published yet.",
+    "noUpcoming": "No upcoming shifts this week.",
+    "noShifts": "You have no shifts this week.",
+    "daysAvailable": "days available",
+    "latestRequest": "Latest request: {status}",
+    "noRequests": "No leave requests yet.",
+    "requestLeave": "Request leave",
+    "notifications": "Notifications"
+  },
+  "login": {
+    "welcome": "Welcome back",
+    "subtitle": "Sign in with your Employee ID or email",
+    "signIn": "Sign In",
+    "signingIn": "Signing in…"
+  },
+  "profile": {
+    "changePassword": "Change password",
+    "notificationSettings": "Notification settings",
+    "signOut": "Sign out",
+    "language": "Language"
+  },
+  "common": {
+    "loading": "Loading…"
+  }
+}

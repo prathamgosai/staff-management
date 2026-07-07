@@ -2,20 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Home, CalendarDays, Clock, CalendarOff, UserRound, type LucideIcon } from "lucide-react";
 
 interface Tab {
   href: string;
-  label: string;
+  labelKey: "home" | "roster" | "attendance" | "leave" | "profile";
   icon: LucideIcon;
 }
 
 const TABS: Tab[] = [
-  { href: "/home", label: "Home", icon: Home },
-  { href: "/scheduling", label: "Roster", icon: CalendarDays },
-  { href: "/attendance", label: "Attendance", icon: Clock },
-  { href: "/leave", label: "Leave", icon: CalendarOff },
-  { href: "/profile", label: "Profile", icon: UserRound },
+  { href: "/home", labelKey: "home", icon: Home },
+  { href: "/scheduling", labelKey: "roster", icon: CalendarDays },
+  { href: "/attendance", labelKey: "attendance", icon: Clock },
+  { href: "/leave", labelKey: "leave", icon: CalendarOff },
+  { href: "/profile", labelKey: "profile", icon: UserRound },
 ];
 
 /**
@@ -26,6 +27,7 @@ const TABS: Tab[] = [
  */
 export function BottomTabs() {
   const pathname = usePathname();
+  const t = useTranslations("nav");
 
   return (
     <nav
@@ -34,7 +36,7 @@ export function BottomTabs() {
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <ul className="flex">
-        {TABS.map(({ href, label, icon: Icon }) => {
+        {TABS.map(({ href, labelKey, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <li key={href} className="flex-1">
@@ -46,7 +48,7 @@ export function BottomTabs() {
                 }`}
               >
                 <Icon className="size-5" />
-                <span>{label}</span>
+                <span>{t(labelKey)}</span>
               </Link>
             </li>
           );
