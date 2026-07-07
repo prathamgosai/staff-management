@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException, Inject, ForbiddenException } from "@nestjs/common";
+import { Injectable, UnauthorizedException, BadRequestException, Inject, ForbiddenException, ServiceUnavailableException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import { Pool } from "pg";
@@ -13,6 +13,17 @@ import { RolesService } from "../roles/roles.service";
 import { NotificationService } from "../notification/notification.service";
 
 const TENANT_ID = "00000000-0000-0000-0000-000000000001";
+
+// Network-level "database unreachable" codes (DNS/connection). Surfaced as a clean
+// 503 on login instead of a raw 500 stack trace when the remote DB blips.
+const DB_CONN_CODES = ["ENOTFOUND", "ECONNREFUSED", "ETIMEDOUT", "EAI_AGAIN", "ECONNRESET"];
+function isDbUnreachable(e: unknown): boolean {
+  const codeOf = (x: unknown): string => (x && typeof x === "object" ? (x as { code?: string }).code ?? "" : "");
+  if (DB_CONN_CODES.includes(codeOf(e))) return true;
+  if (e instanceof AggregateError) return e.errors.some((x) => DB_CONN_CODES.includes(codeOf(x)));
+  const msg = e instanceof Error ? e.message : String(e);
+  return DB_CONN_CODES.some((c) => msg.includes(c));
+}
 
 function generateTicket(): string {
   const now = new Date();
@@ -59,20 +70,32 @@ export class AuthService {
     // email), or a staff Employee ID. Priority: exact email > employee_id > synthetic,
     // so a stray collision can't hijack a login and the person typing their own ID wins.
     const ident = (email ?? "").trim();
-    const result = await this.db.query(
-      `SELECT u.* FROM users u
-         LEFT JOIN staff s ON s.user_id = u.id AND s.tenant_id = u.tenant_id
-        WHERE lower(u.email) = lower($1)
-           OR lower(u.email) = lower($1) || '@workforceiq.app'
-           OR lower(s.employee_id) = lower($1)
-        ORDER BY CASE
-                   WHEN lower(u.email) = lower($1) THEN 0
-                   WHEN lower(s.employee_id) = lower($1) THEN 1
-                   ELSE 2
-                 END
-        LIMIT 1`,
-      [ident],
-    );
+    let result;
+    try {
+      result = await this.db.query(
+        `SELECT u.* FROM users u
+           LEFT JOIN staff s ON s.user_id = u.id AND s.tenant_id = u.tenant_id
+          WHERE lower(u.email) = lower($1)
+             OR lower(u.email) = lower($1) || '@workforceiq.app'
+             OR lower(s.employee_id) = lower($1)
+          ORDER BY CASE
+                     WHEN lower(u.email) = lower($1) THEN 0
+                     WHEN lower(s.employee_id) = lower($1) THEN 1
+                     ELSE 2
+                   END
+          LIMIT 1`,
+        [ident],
+      );
+    } catch (e) {
+      // The remote (Supabase) DB blipping mid-request would otherwise 500 with a raw
+      // getaddrinfo/ECONNREFUSED stack. Give the client a clean, actionable 503.
+      if (isDbUnreachable(e)) {
+        throw new ServiceUnavailableException(
+          "Can't reach the database right now — check your internet connection and try again in a moment.",
+        );
+      }
+      throw e;
+    }
     const user = result.rows[0];
     if (!user || !user.password_hash) return null;
 
