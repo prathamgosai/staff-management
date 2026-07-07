@@ -7,6 +7,7 @@ import { apiClient } from "@/lib/api-client";
 import type { AuthUser } from "@workforceiq/shared";
 import { DesktopSidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { BottomTabs } from "@/components/layout/bottom-tabs";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -45,9 +46,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar />
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[100rem] p-4 sm:p-6">{children}</div>
+          {/* Extra bottom padding on mobile clears the fixed bottom tab bar. */}
+          <div className="mx-auto w-full max-w-[100rem] p-4 pb-24 sm:p-6 md:pb-6">{children}</div>
         </main>
       </div>
+      <BottomTabs />
     </div>
   );
 }

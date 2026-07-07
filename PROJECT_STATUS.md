@@ -1,8 +1,8 @@
 # WorkforceIQ — Project Status & Work Report
 
 > AI-Powered Restaurant Workforce & Operations Planning System
-> Maintained status document. Last updated: **2026-07-06**.
-> Snapshot: server-side outlet scoping + automatic role-based notifications + installable PWA shipped on branch `perf/login-latency` (Tasks 0–7). **Migration `012_notifications` must be applied manually before the notification features work at runtime.**
+> Maintained status document. Last updated: **2026-07-07**.
+> Snapshot: server-side outlet scoping + automatic role-based notifications + installable PWA, plus employee self-service (My Day, mobile tabs, magic-link week), kiosk clock-in, i18n (en/gu/hi), real SendGrid email, and repo-wide lint/hot-reload DX — Tasks 0–11 on branch `perf/login-latency`. **Pending manual DB migrations: `013`, `014`, `015` (see §5). `012_notifications` was applied to prod on 2026-07-07.**
 
 ---
 
@@ -66,13 +66,27 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 | 16 | `609b6f5` | In-app notification bell (unread badge, dropdown, mark-read) + `/notifications` history page (Task 5) |
 | 17 | `d75e7a0` | PWA — app-shell/navigation caching, network-first API cache, dismissible install hint (Task 6) |
 | 18 | `d6e9627` | Nightly `SHIFT_REMINDER` Bull repeatable (idempotent) + `/settings/notifications` preferences (Task 7) |
+| 19 | `56b75e5`… | Session hotfixes (deployed to prod): Employee-ID login, DB connect-retry, permission cache + client refetch tuning, static PWA manifest, Node-20 pin |
+| 20 | _(Task 0)_ | Credential hygiene — scrubbed the three burned passwords repo-wide, strengthened change-password policy (≥10 + letter/digit + burned-password denylist), migration `013` forced reset, removed the credential CSV + hardened `.gitignore` |
+| 21 | _(Task 1)_ | Employee outlet self-scoping — migration `014` backfills `outlet_ids` from the linked staff row, live outlet resolution (no re-login), derive-on-approval, Staff Accounts outlet multi-select (accounts:manage, tenant-validated) |
+| 22 | _(Task 2)_ | Employee "My Day" (`/home`) — role-based landing (employee/chef → `/home`), next-shift / this-week / leave cards, scoped `GET /scheduling/my-week` (published weeks only) |
+| 23 | _(Task 3)_ | Mobile nav — bottom tab bar (Home/Roster/Attendance/Leave/Profile, safe-area, ≥44px) below md + day-first roster (today default, day chips, swipe); desktop table unchanged; new `/profile` page |
+| 24 | _(Task 4)_ | Cold-start resilience — persist key read queries to localStorage (versioned buster, cleared on logout), "Waking the server…" banner on >4s fetches, SW cache `v3`; page loads already use skeletons |
+| 25 | _(Task 5)_ | Magic-link "My Week" — HS256 token (dedicated `MAGIC_LINK_SECRET`), `GET /public/my-week/:token` (no auth, 20/min/IP, uniform 404, staff+tenant from the signed token only), `/w/[token]` read-only page (noindex), ROSTER_PUBLISHED WhatsApp link for login-less staff (degrades to the existing template) |
+| 26 | _(Task 6)_ | Print-ready roster (A4 portrait, black-on-white `@media print`) + default staff list hides resigned as well as terminated (explicit status still shows them) + return-to-rotation un-pin (`DELETE /scheduling/overrides/:staffId`, `schedule:write`, outlet-scoped) |
+| 27 | _(Task 7)_ | Avatar & bundle perf — base64 avatar dropped from the staff-list SQL (list falls back to initials; big response-size cut), client resize to 200×200 WebP (JPEG fallback, q0.8) + ~150 KB server cap, lazy-loaded avatar imgs; recharts/fullcalendar/dnd-kit confirmed unimported (no chart/calendar chunks on employee routes) |
+| 28 | _(Task 8)_ | i18n scaffold — `next-intl` v4 cookie-based (no URL routing, `wfiq-locale`), English / Gujarati / Hindi catalogs (`apps/web/messages/{en,gu,hi}.json`, gu+hi machine-drafted → flagged for human review), `NextIntlClientProvider` at the root layout, `/profile` language switcher, employee-facing surfaces localised (My Day, bottom tabs, login) |
+| 29 | _(Task 9)_ | Kiosk clock-in mode — migration `015` (`kiosk_devices`, `staff.kiosk_pin_hash`, `attendance_records.source`, `'kiosk'` clock method); device-token auth (`x-kiosk-token`, SHA-256 stored, shown once) via `KioskDeviceGuard`; per-staff bcrypt PIN; login-less `/kiosk` keypad screen (Employee ID + PIN → clock-in/out, `source='kiosk'`, outlet-scoped, throttled 30/min); manager UI to enroll/revoke devices (outlet page) + set PINs (staff page), gated by `attendance:write` |
+| 30 | _(Task 10)_ | Real email provider — `EmailProvider` now sends via the SendGrid v3 HTTPS API when `EMAIL_PROVIDER=sendgrid` (`SENDGRID_API_KEY` + verified `EMAIL_FROM`), plain-text + escaped-HTML parts; still defaults to `mock` (logs only). Never throws — a misconfig/failure returns `success:false` so the dispatch worker degrades to in-app, exactly like WhatsApp. Sits behind the existing Bull dispatch worker (WhatsApp → email → in-app fallback) with no worker changes |
+| 31 | _(Task 11)_ | DX — repo-wide **ESLint flat config** (root `eslint.config.mjs` + `eslint.base.mjs`, per-package configs for api/shared/web with the Next + react-hooks plugins), run via a tiny cross-platform `scripts/eslint.mjs` that loads ESLint's **flat** engine (`loadESLint({useFlatConfig})`) on 8.57 without `cross-env`; lenient first pass (legacy → warnings) so `pnpm lint` is green across all workspaces via the existing Turbo pipeline. API dev now hot-reloads (`nest start --watch`; old ts-node path kept as `dev:tsnode`) |
+| 32 | _(review)_ | Adversarial multi-agent review of the whole Tasks 0–11 changeset (5 dimensions × per-finding verification) → **8 confirmed defects fixed**: kiosk attendance bucketed by UTC not local date (`toLocalDateStr`, HIGH), kiosk double clock-in → `UNIQUE(staff_id,date)` 500 (any-record guard), kiosk PIN brute-force (per-device/employee lockout), sign-out didn't clear the in-memory React Query cache (`AuthCacheReset`) or the SW `/api` cache (logout postMessage → SW purge), and the Task 11 lint runner used ESLint's *legacy* engine (a silent no-op — now the real flat engine) with an over-broad `**/public/**` ignore that hid the API `PublicModule`. 3 findings verified as false-positives and dropped |
 
 ### Feature areas delivered
 
 **Employee directory & data (real data loaded)**
 - ~371 active staff imported from `Employee Directory _1.xlsx`; post/section matched by name against `Restaurant Staffing.xlsx`.
 - Live-DB contact backfill (3 passes): real Employee Codes, phones (239/260), emails (207), migrations `004`–`006` (+ rollbacks + audit CSV).
-- Staff logins switched to real emails where unique (204/256), default password `Admin@123`, migration `007`.
+- Staff logins switched to real emails where unique (204/256), seeded default password (now **burned** — forced reset in migration `013`; see credential manager), migration `007`.
 - 6 resigned staff flagged from exit sheets.
 - Deliverable: `Active Staff by Restaurant and Post.xlsx/.csv` (grouped roster + flat table + summary matrix).
 
@@ -121,16 +135,17 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 ## 5. Known gaps / open items
 
 - **RBAC data-scoping — server-side outlet scoping now enforced** (Task 0) across staff/attendance/leave/scheduling via `common/auth/outlet-scope.ts`: super_admin/admin/hr → all tenant outlets; head_of_house/chef/employee → their own outlet(s); an out-of-scope client `outletId` is rejected (403) and unscoped list reads are filtered to the caller's outlets. Also closed several cross-tenant leaks (endpoints that previously had no `tenant_id` filter). Residual: scheduling uses controller-level outlet guards rather than a deep per-query tenant rewrite (safe while single-tenant); no department scoping (`users` has no `department_id`).
-- **Manager/employee outlet assignment** — outlet scoping is fail-closed: `head_of_house`/`chef` accounts must have `outlet_ids` populated or they see (and get notified about) nothing; plain `employee` accounts currently have empty `outlet_ids` and no self-service UI, so they effectively see nothing until per-user self-scoping lands.
-- **Notifications require migration 012** — `pnpm db:migrate` has no runner script on disk; apply `assets/db/012_notifications.sql` by hand (psql) before the notification features work. Until then the `/notifications` endpoints 500 and the bell degrades to 0/empty. The migration DROPs the unused legacy staff-keyed `notification_preferences` (rollback restores it).
-- **Notification delivery caveats** — WhatsApp is mock unless `ENABLE_WHATSAPP=true` + Meta creds; the email provider is still a mock (SES/SendGrid unimplemented), so admins/hr (usually no staff row) get in-app only until email is wired. ~115 active staff have no login → external-channel notifications only (no in-app row). Web Push (Task 8) intentionally not built.
-- **`pnpm lint` is unconfigured repo-wide** — no ESLint config exists in any package (pre-existing), so `pnpm lint` errors before running. `pnpm typecheck` + `pnpm build` are the working quality gates.
+- **Employee outlet assignment (Task 1 — done)** — migration `014` backfills `users.outlet_ids` from each account's linked staff row (`staff.user_id`); approval derives it automatically; a Staff Accounts outlet multi-select (accounts:manage, tenant-validated) sets it manually. `outletIds` is now resolved **live** (cached, busted on write) for non-admin roles, so a reassignment applies without re-login. **Apply `014_backfill_employee_outlets.sql` by hand** for existing accounts. Residual: no department scoping (`users` has no `department_id`).
+- **Migrations are manual** — `pnpm db:migrate` has no runner script on disk; apply each new numbered file by hand (psql), in order. **Pending: `013_force_password_reset.sql`** (Task 0), **`014_backfill_employee_outlets.sql`** (Task 1), **`015_kiosk_clock_in.sql`** (Task 9 — kiosk devices + staff PIN + attendance source; note `015` adds an enum value OUTSIDE its `BEGIN/COMMIT`, so run the whole file, not just the transaction block). `012_notifications.sql` was applied to prod on 2026-07-07.
+- **Credential hygiene done (Task 0)** — the three seeded passwords (`admin`, `HR`, staff default) are treated as **burned**: scrubbed from all docs/migrations, change-password now enforces ≥10 chars + letter + digit + a SHA-256 burned-password denylist, and migration `013` force-resets every non-super_admin account still on a seed password. **Manual: rotate super_admin + HR + all leaked secrets, and purge `.env`/credential CSVs from git history (BFG) — see §Manual Steps.** Until then the `/notifications` endpoints 500 and the bell degrades to 0/empty. The migration DROPs the unused legacy staff-keyed `notification_preferences` (rollback restores it).
+- **Notification delivery caveats** — WhatsApp is mock unless `ENABLE_WHATSAPP=true` + Meta creds. Email is real via **SendGrid** (Task 10) when `EMAIL_PROVIDER=sendgrid` + `SENDGRID_API_KEY` + a verified `EMAIL_FROM`; otherwise it defaults to `mock` (logs only), so admins/hr (usually no staff row) get in-app only until SendGrid is configured. SES is still unimplemented. ~115 active staff have no login → external-channel notifications only (no in-app row). Web Push intentionally not built.
+- **Kiosk clock-in setup (Task 9)** — after applying `015`, a manager enrolls a tablet from **Outlets → open an outlet → Kiosk devices → Enroll device**, then opens the one-time enrollment link on the tablet (the raw device token is shown once and stored only as a SHA-256 hash). Each staff member needs a PIN set from their **Staff → profile → Kiosk PIN** card before they can punch. Kiosk punches are stamped `source='kiosk'`; a lost tablet is killed via **Revoke**. No env vars required.
+- **i18n translations need human review (Task 8)** — `next-intl` v4 is wired cookie-first (`wfiq-locale`, no URL routing); English is authoritative. The Gujarati (`gu.json`) and Hindi (`hi.json`) catalogs are **machine-drafted** and each carry a `_note` TODO — have a native speaker review before relying on them. Only employee-facing strings (My Day, bottom tabs, login, profile) are keyed so far; the rest of the app stays English until more strings are extracted.
+- **`pnpm lint` now works repo-wide (Task 11)** — flat ESLint config at the root + per package, run through `scripts/eslint.mjs` (which enables flat mode on ESLint 8.57). The first pass is deliberately lenient: legacy patterns are **warnings**, so `pnpm lint` exits 0 while surfacing issues to tighten over time. `pnpm typecheck` + `pnpm build` remain the hard gates.
 - **Seed schema is stale** — `001_schema.sql` lacks columns the app later added (e.g. `users.pending_approval`, `ticket_number`, `must_change_password`). Treat the live DB (pg_dump) as source of truth, not the seed files.
-- **API has no hot-reload** — plain `ts-node`; any backend change needs a manual restart, and a type error anywhere blocks startup. Keep `tsc --noEmit` clean.
-- **Resigned staff still listed** — `staff.findAll` hides only `terminated`, not `resigned`.
+- **API hot-reload (Task 11)** — `pnpm dev` now runs `nest start --watch` (recompiles + restarts on change); the old single-shot `ts-node` path is kept as `dev:tsnode`. A type error still blocks startup, so keep `tsc --noEmit` clean. Note: `nest build` uses `incremental` + `deleteOutDir`, so a stale `*.tsbuildinfo` can make a one-off `nest build` a no-op — delete it (or just use the watch, which always recompiles).
 - **`packages/shared` exports gotcha** — `exports.require` points to `dist/index.cjs` which tsup doesn't emit (harmless in dev, would break a prod `nest build`).
 - **Response shape** — hand-returned `{ data: T }`, no global interceptor (matches existing convention, not the idealized briefing).
-- **Per-staff move has no "return to rotation"** un-pin affordance yet (a move is permanent).
 - **Forecasting Phase 2** (Prophet/XGBoost) is stubbed only.
 
 ---
@@ -148,8 +163,8 @@ pnpm dev                 # API :4000, web :3000  (ML :8000 optional)
 
 - `.env` DB block points at the Supabase session pooler (`DB_SSL=true`,
   `DB_USER=postgres.<project-ref>`); a commented LOCAL fallback block remains for offline dev.
-- Admin login: `admin@workforceiq.app` / `P@$$w0rd` (super_admin).
-- HR admin login (typed on web): `bookendshr.admin.com` / `hradmin123`.
+- Admin login: `admin@workforceiq.app` (super_admin) — password in the credential manager, never committed.
+- HR admin login (typed on web): `bookendshr.admin.com` — password in the credential manager, never committed.
 - Read the real DB password from `.env` (git-ignored).
 
 ---
@@ -161,6 +176,39 @@ pnpm dev                 # API :4000, web :3000  (ML :8000 optional)
 - Schema changes = new numbered `assets/db/00N_*.sql` (+ a rollback file).
 - New web UI must use **semantic tokens** (`bg-card`, `text-foreground`, `border-border`…) — never hardcoded gray/white, or dark mode breaks.
 - Roles use `ROLES.*` constants; `ADMIN_ROLES` / `isAdminRole()` for admin-peer gating.
+
+---
+
+## 8. Manual steps to go live (Tasks 0–11)
+
+Everything below is a human/ops action the code can't do for itself. Do them in order.
+
+**A. Database migrations — apply by hand, in order (psql, no runner script).**
+- [ ] `013_force_password_reset.sql` — adds `users.password_updated_at`, flags every non-super_admin still on a seed password with `must_change_password=TRUE`. (Drops the legacy staff-keyed `notification_preferences` table.)
+- [ ] `014_backfill_employee_outlets.sql` — backfills `users.outlet_ids` from each account's linked `staff.current_outlet_id`.
+- [ ] `015_kiosk_clock_in.sql` — `kiosk_devices`, `staff.kiosk_pin_hash`, `attendance_records.source`, and the `'kiosk'` clock method. **Run the whole file**, not just the `BEGIN/COMMIT` block — the `ALTER TYPE ... ADD VALUE 'kiosk'` sits *outside* the transaction on purpose (Postgres can't use a new enum value in the same txn).
+- (`012_notifications.sql` was already applied to prod on 2026-07-07. Each migration has a matching `_ROLLBACK.sql`.)
+
+**B. Secrets & credential hygiene (Task 0).**
+- [ ] Rotate the three **burned** seed passwords: super_admin, HR admin, and the staff default. (Change-password already enforces ≥10 chars + letter + digit + a burned-password denylist; migration `013` forces the reset for staff.)
+- [ ] Rotate any other secrets that ever touched git, and purge `.env*` / the old credential CSV from git **history** with BFG or `git filter-repo` (removing them from the tip is not enough).
+- [ ] Confirm `.env` is present on each environment (DB + Redis creds) — it's git-ignored; read the real DB password from it.
+
+**C. Email delivery (Task 10) — optional but recommended.**
+- [ ] To send real email set `EMAIL_PROVIDER=sendgrid`, `SENDGRID_API_KEY=…`, and `EMAIL_FROM=` a **SendGrid-verified** single sender or domain (optionally `EMAIL_FROM_NAME`). Left unset it stays `mock` (logs only) and admins/hr get in-app only.
+
+**D. Magic-link staff weeks (Task 5) — optional.**
+- [ ] Set `MAGIC_LINK_SECRET=` (a long random string) to enable the WhatsApp/`/w/[token]` read-only week for login-less staff. Optionally `MAGIC_LINK_ALL_STAFF=true` to send the link to everyone, not just login-less staff.
+
+**E. Kiosk clock-in (Task 9).**
+- [ ] After migration `015`, enroll a tablet per outlet: **Outlets → open an outlet → Kiosk devices → Enroll device**, then open the one-time enrollment link on that tablet (the raw token is shown once, stored only as a SHA-256 hash).
+- [ ] Set each staff member's PIN: **Staff → open the profile → Kiosk PIN** (4–6 digits). No env vars needed. Revoke a lost tablet from the same outlet panel.
+
+**F. Internationalization (Task 8).**
+- [ ] Have a native speaker review the **machine-drafted** Gujarati (`apps/web/messages/gu.json`) and Hindi (`hi.json`) catalogs before relying on them — each carries a `_note` TODO. English is authoritative.
+
+**G. Dev environment.**
+- [ ] Use **Node 20** (`.nvmrc`; Next 14.2 dev breaks on Node ≥ 23). `pnpm dev` now hot-reloads the API via `nest start --watch`; `pnpm lint` / `pnpm typecheck` / `pnpm build` are green.
 
 ---
 

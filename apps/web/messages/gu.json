@@ -1,0 +1,43 @@
+{
+  "_note": "TODO human review — machine-drafted Gujarati translations",
+  "nav": {
+    "home": "હોમ",
+    "roster": "રોસ્ટર",
+    "attendance": "હાજરી",
+    "leave": "રજા",
+    "profile": "પ્રોફાઇલ"
+  },
+  "myDay": {
+    "greeting": "નમસ્તે {name}",
+    "subtitle": "તમારો દિવસ અહીં છે.",
+    "nextShift": "આગલી શિફ્ટ",
+    "thisWeek": "આ અઠવાડિયું",
+    "leave": "રજા",
+    "viewRoster": "રોસ્ટર જુઓ",
+    "manage": "મેનેજ કરો",
+    "notPublished": "રોસ્ટર હજી પ્રકાશિત થયું નથી — થોડી વારે તપાસો.",
+    "notPublishedShort": "રોસ્ટર હજી પ્રકાશિત થયું નથી.",
+    "noUpcoming": "આ અઠવાડિયે કોઈ આગામી શિફ્ટ નથી.",
+    "noShifts": "આ અઠવાડિયે તમારી કોઈ શિફ્ટ નથી.",
+    "daysAvailable": "દિવસ ઉપલબ્ધ",
+    "latestRequest": "તાજેતરની વિનંતી: {status}",
+    "noRequests": "હજી સુધી કોઈ રજાની વિનંતી નથી.",
+    "requestLeave": "રજાની વિનંતી કરો",
+    "notifications": "સૂચનાઓ"
+  },
+  "login": {
+    "welcome": "ફરી સ્વાગત છે",
+    "subtitle": "તમારા કર્મચારી ID અથવા ઇમેઇલ સાથે સાઇન ઇન કરો",
+    "signIn": "સાઇન ઇન",
+    "signingIn": "સાઇન ઇન થઈ રહ્યું છે…"
+  },
+  "profile": {
+    "changePassword": "પાસવર્ડ બદલો",
+    "notificationSettings": "સૂચના સેટિંગ્સ",
+    "signOut": "સાઇન આઉટ",
+    "language": "ભાષા"
+  },
+  "common": {
+    "loading": "લોડ થઈ રહ્યું છે…"
+  }
+}

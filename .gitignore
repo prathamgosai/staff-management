@@ -15,13 +15,9 @@ __pycache__/
 *.egg-info/
 .eggs/
 
-# Environment
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.production
+# Environment — ignore every .env* EXCEPT the committed template
+.env*
+!.env.example
 
 # Logs
 logs/
@@ -62,10 +58,13 @@ env/
 .services/
 
 # Real employee PII & credentials — NEVER commit (this repo is public).
-# Spreadsheets/exports of real staff data:
+# Spreadsheets/exports of real staff data + any credential export:
 *.csv
 *.xlsx
 *.xls
+*credential*
+*Credentials*
+*Credentials*.csv
 # DB migrations that embed real staff emails, phones and password hashes:
 assets/db/004_staff_contacts.sql
 assets/db/004_staff_contacts_ROLLBACK.sql

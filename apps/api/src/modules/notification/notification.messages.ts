@@ -43,11 +43,14 @@ export function renderMessage(kind: RecipientKind, ctx: Ctx): RenderedMessage {
       const week = s(ctx.weekKey);
       const count = Number(ctx.shiftCount ?? 0);
       const summary = count === 1 ? "1 shift" : `${count} shifts`;
+      const link = ctx.magicLink ? s(ctx.magicLink) : "";
       return {
         title: "Your roster is published",
-        body: `Your duty roster for the week of ${week} is ready — ${summary} scheduled. Open the app to view your full week.`,
+        body: `Your duty roster for the week of ${week} is ready — ${summary} scheduled.${link ? ` View it: ${link}` : " Open the app to view your full week."}`,
         waTemplate: WA_TEMPLATES.rosterPublished,
-        waVars: [week, summary],
+        // Until a URL-button template is approved in Meta, the link degrades into the
+        // summary variable so it still reaches WhatsApp recipients via the existing template.
+        waVars: [week, link ? `${summary} — ${link}` : summary],
       };
     }
     case "roster_head": {

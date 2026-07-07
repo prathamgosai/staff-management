@@ -1,0 +1,43 @@
+{
+  "_note": "TODO human review — machine-drafted Hindi translations",
+  "nav": {
+    "home": "होम",
+    "roster": "रोस्टर",
+    "attendance": "उपस्थिति",
+    "leave": "छुट्टी",
+    "profile": "प्रोफ़ाइल"
+  },
+  "myDay": {
+    "greeting": "नमस्ते {name}",
+    "subtitle": "यह रहा आपका दिन।",
+    "nextShift": "अगली शिफ्ट",
+    "thisWeek": "इस सप्ताह",
+    "leave": "छुट्टी",
+    "viewRoster": "रोस्टर देखें",
+    "manage": "प्रबंधित करें",
+    "notPublished": "रोस्टर अभी प्रकाशित नहीं हुआ — थोड़ी देर में देखें।",
+    "notPublishedShort": "रोस्टर अभी प्रकाशित नहीं हुआ।",
+    "noUpcoming": "इस सप्ताह कोई आगामी शिफ्ट नहीं।",
+    "noShifts": "इस सप्ताह आपकी कोई शिफ्ट नहीं है।",
+    "daysAvailable": "दिन उपलब्ध",
+    "latestRequest": "नवीनतम अनुरोध: {status}",
+    "noRequests": "अभी तक कोई छुट्टी अनुरोध नहीं।",
+    "requestLeave": "छुट्टी का अनुरोध करें",
+    "notifications": "सूचनाएँ"
+  },
+  "login": {
+    "welcome": "वापसी पर स्वागत है",
+    "subtitle": "अपने कर्मचारी ID या ईमेल से साइन इन करें",
+    "signIn": "साइन इन",
+    "signingIn": "साइन इन हो रहा है…"
+  },
+  "profile": {
+    "changePassword": "पासवर्ड बदलें",
+    "notificationSettings": "सूचना सेटिंग्स",
+    "signOut": "साइन आउट",
+    "language": "भाषा"
+  },
+  "common": {
+    "loading": "लोड हो रहा है…"
+  }
+}

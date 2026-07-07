@@ -76,7 +76,7 @@ Use the Homebrew `psql` if your default one is older: `/opt/homebrew/opt/postgre
 
 Open the web URL (e.g. `https://workforceiq-web.onrender.com`) and log in:
 
-- **admin@workforceiq.app** / **Admin@123**
+- **admin@workforceiq.app** / _see credential manager — never commit credentials_
 
 ---
 

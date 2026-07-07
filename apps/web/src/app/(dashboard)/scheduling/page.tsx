@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type TouchEvent as ReactTouchEvent } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import {
   ChevronLeft, ChevronRight, Clock, Users, Building2,
-  ChevronDown, Info, RefreshCw, Send, CheckCircle2,
+  ChevronDown, Info, RefreshCw, Send, CheckCircle2, RotateCcw, Printer,
 } from "lucide-react";
 import { format, addWeeks, subWeeks, startOfWeek } from "date-fns";
 import { toast } from "@/components/ui/sonner";
@@ -63,6 +63,8 @@ export default function SchedulingPage() {
   const [expandedShift, setExpandedShift]       = useState<string | null>(null);
   const [selectedDay, setSelectedDay]           = useState<string | null>(null);
   const [deptFilter, setDeptFilter]             = useState("");
+  const [mobileDayIdx, setMobileDayIdx]         = useState(0);
+  const touchStartX = useRef<number | null>(null);
 
   const weekStartDate = format(currentWeek, "yyyy-MM-dd");
 
@@ -72,6 +74,23 @@ export default function SchedulingPage() {
     d.setDate(d.getDate() + i);
     return d;
   });
+
+  // Mobile day-first view defaults to today (when today falls in the shown week).
+  useEffect(() => {
+    const todayKey = format(new Date(), "yyyy-MM-dd");
+    const idx = weekDays.findIndex(d => format(d, "yyyy-MM-dd") === todayKey);
+    setMobileDayIdx(idx >= 0 ? idx : 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekStartDate]);
+
+  const swipeStart = (e: ReactTouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+  const swipeEnd = (e: ReactTouchEvent) => {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) < 50) return;
+    setMobileDayIdx(i => Math.min(6, Math.max(0, i + (dx < 0 ? 1 : -1))));
+  };
 
   const { data: outletRes } = useQuery({
     queryKey: ["outlets"],
@@ -223,6 +242,23 @@ export default function SchedulingPage() {
   const moveError = (moveStaff.error as { response?: { data?: { message?: string } } } | null)
     ?.response?.data?.message;
 
+  // Manual shift pins — used to show a "return to rotation" affordance on pinned staff.
+  const { data: overridesRes } = useQuery<{ data: { staffId: string; templateId: string }[] }>({
+    queryKey: ["overrides", selectedOutletId],
+    queryFn: () => apiClient.get("/scheduling/overrides", { params: { outletId: selectedOutletId } }).then(r => r.data),
+    enabled: !!selectedOutletId,
+  });
+  const pinnedIds = new Set((overridesRes?.data ?? []).map(o => o.staffId));
+
+  const unpinStaff = useMutation({
+    mutationFn: (staffId: string) => apiClient.delete(`/scheduling/overrides/${staffId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["overrides", selectedOutletId] });
+      queryClient.invalidateQueries({ queryKey: rosterKey });
+      toast.success("Returned to rotation — next week's roster places them normally.");
+    },
+  });
+
   const outlets = outletRes?.data ?? [];
   const roster  = rosterRes?.data ?? [];
   const selectedOutletName = outlets.find((o: { id: string; name: string }) => o.id === selectedOutletId)?.name ?? "";
@@ -336,6 +372,10 @@ export default function SchedulingPage() {
           ))}
           {roster.length > 0 && (
             <div className="ml-auto flex items-center gap-2">
+              <button onClick={() => window.print()}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-card border border-border text-muted-foreground hover:bg-muted transition">
+                <Printer size={12} /> Print
+              </button>
               {canPublish && !isPublished && (
                 <button onClick={() => publishMutation.mutate()} disabled={publishMutation.isPending || !scheduleId}
                   className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 transition">
@@ -487,7 +527,69 @@ export default function SchedulingPage() {
           )}
         </div>
       ) : (
-        <div className="space-y-4">
+        <>
+          {/* Mobile: day-first view (defaults to today · chips + swipe) */}
+          <div className="md:hidden space-y-3" onTouchStart={swipeStart} onTouchEnd={swipeEnd}>
+            <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+              {weekDays.map((d, i) => {
+                const active = i === mobileDayIdx;
+                return (
+                  <button key={i} onClick={() => setMobileDayIdx(i)}
+                    className={`flex min-h-[44px] shrink-0 flex-col items-center justify-center rounded-xl px-3 text-xs font-semibold transition ${active ? "bg-blue-600 text-white" : "bg-card border border-border text-muted-foreground"}`}>
+                    <span>{format(d, "EEE")}</span>
+                    <span className="text-sm font-black">{format(d, "d")}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {(() => {
+              const dayKey = format(weekDays[mobileDayIdx], "yyyy-MM-dd");
+              const dayShifts = roster
+                .map(shift => ({
+                  shift,
+                  staff: (shift.dates[dayKey]?.staff ?? []).filter(s =>
+                    !deptFilter || (s.departmentName ?? "").toLowerCase().includes(deptFilter.toLowerCase())),
+                }))
+                .filter(x => x.staff.length > 0);
+              if (dayShifts.length === 0) {
+                return (
+                  <div className="rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+                    No shifts on {format(weekDays[mobileDayIdx], "EEE d MMM")}.
+                  </div>
+                );
+              }
+              return dayShifts.map(({ shift, staff }) => {
+                const { bg: shiftBg, badge } = shiftStyle(shift.shiftName);
+                return (
+                  <div key={shift.shiftName} className={`rounded-2xl border-l-4 border border-border overflow-hidden ${shiftBg}`}>
+                    <div className="flex items-center gap-3 px-4 py-3">
+                      <div className={`${badge} text-white text-xs font-black px-2.5 py-1 rounded-lg shrink-0`}>
+                        {shift.startTime.slice(0, 5)}–{shift.isOvernight ? "00:00" : shift.endTime.slice(0, 5)}
+                      </div>
+                      <p className="flex-1 truncate text-sm font-bold text-foreground">{shift.shiftName.split("(")[0].trim()}</p>
+                      <span className="shrink-0 text-xs text-muted-foreground">{staff.length}</span>
+                    </div>
+                    <ul className="divide-y divide-black/5 border-t border-black/5">
+                      {staff.map(s => (
+                        <li key={s.staffId} className="flex items-center gap-2.5 px-4 py-2.5">
+                          <div className={`w-8 h-8 rounded-full ${badge} text-white text-xs font-bold flex items-center justify-center shrink-0`}>
+                            {s.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold leading-tight text-foreground">{s.name}</p>
+                            <p className="truncate text-xs text-muted-foreground">{s.positionName}{s.employeeId ? ` · ${s.employeeId}` : ""}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+
+          {/* Desktop: full week table (unchanged) */}
+          <div className="hidden md:block space-y-4">
           {roster.map(shift => {
             const isExpanded = expandedShift === null || expandedShift === shift.shiftName;
             const { bg: shiftBg, badge } = shiftStyle(shift.shiftName);
@@ -557,6 +659,7 @@ export default function SchedulingPage() {
                               </td>
                               {/* Move-to shift dropdown — reassign this staff (this week onward) */}
                               <td className="py-2.5 px-2">
+                                <div className="flex items-center gap-1.5">
                                 {(() => {
                                   const isMoving = moveStaff.isPending && moveStaff.variables?.staffId === staff.staffId;
                                   return (
@@ -582,6 +685,15 @@ export default function SchedulingPage() {
                                     </div>
                                   );
                                 })()}
+                                {pinnedIds.has(staff.staffId) && (
+                                  <button onClick={() => unpinStaff.mutate(staff.staffId)}
+                                    disabled={unpinStaff.isPending && unpinStaff.variables === staff.staffId}
+                                    title="Return to rotation"
+                                    className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50">
+                                    <RotateCcw size={12} />
+                                  </button>
+                                )}
+                                </div>
                               </td>
                               {displayDays.map(d => {
                                 const dateKey = format(d, "yyyy-MM-dd");
@@ -626,6 +738,55 @@ export default function SchedulingPage() {
               </div>
             );
           })}
+          </div>
+        </>
+      )}
+
+      {/* Print-only roster (A4 portrait, black-on-white; @media print in globals.css) */}
+      {roster.length > 0 && (
+        <div className="print-roster hidden print:block">
+          <div style={{ color: "#000", background: "#fff", fontFamily: "sans-serif" }}>
+            <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Weekly Roster — {selectedOutletName}</h1>
+            <p style={{ fontSize: 12, margin: "4px 0 12px" }}>
+              Week {format(currentWeek, "d MMM")} – {format(weekDays[6], "d MMM yyyy")} · {isPublished ? "Published" : "Draft"} · Generated {format(new Date(), "d MMM yyyy, HH:mm")}
+            </p>
+            {roster.map(shift => {
+              const firstDayKey = Object.keys(shift.dates)[0];
+              const printStaff = firstDayKey ? shift.dates[firstDayKey].staff : [];
+              return (
+                <div key={shift.shiftName} style={{ marginBottom: 14, breakInside: "avoid" }}>
+                  <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 4px" }}>
+                    {shift.shiftName.split("(")[0].trim()} ({shift.startTime.slice(0, 5)}–{shift.isOvernight ? "00:00" : shift.endTime.slice(0, 5)})
+                  </h2>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: "left", borderBottom: "1px solid #000", padding: "2px 4px" }}>Staff</th>
+                        {weekDays.map(d => (
+                          <th key={d.toISOString()} style={{ borderBottom: "1px solid #000", padding: "2px 4px" }}>{format(d, "EEE d")}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {printStaff.map(s => (
+                        <tr key={s.staffId}>
+                          <td style={{ padding: "2px 4px", borderBottom: "1px solid #ccc" }}>{s.name}</td>
+                          {weekDays.map(d => {
+                            const assigned = shift.dates[format(d, "yyyy-MM-dd")]?.staff.some(x => x.staffId === s.staffId);
+                            return (
+                              <td key={d.toISOString()} style={{ textAlign: "center", padding: "2px 4px", borderBottom: "1px solid #ccc" }}>
+                                {assigned ? "✓" : ""}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

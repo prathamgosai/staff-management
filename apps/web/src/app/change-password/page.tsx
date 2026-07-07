@@ -6,11 +6,11 @@ import { useAuthStore } from "@/store/auth.store";
 import { apiClient } from "@/lib/api-client";
 import { Eye, EyeOff, KeyRound } from "lucide-react";
 
-// Mirror of ChangePasswordDto on the API: 8+ chars with an uppercase letter,
-// a number, and a special character from this exact set. Kept in sync so the
-// client never advertises or accepts a rule the server rejects.
-const PASSWORD_POLICY = /^(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,}$/;
-const PASSWORD_HINT = "At least 8 characters, with an uppercase letter, a number, and a special character (!@#$%^&*)";
+// Mirror of ChangePasswordDto on the API: at least 10 characters including a
+// letter and a digit. Kept in sync so the client never advertises or accepts a
+// rule the server rejects. (The server also blocks a burned-password denylist.)
+const PASSWORD_POLICY = /^(?=.*[A-Za-z])(?=.*\d).{10,}$/;
+const PASSWORD_HINT = "At least 10 characters, including a letter and a number";
 
 function apiMessage(err: unknown): string | undefined {
   const raw = (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message;

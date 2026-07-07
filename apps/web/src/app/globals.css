@@ -190,3 +190,25 @@
   }
 }
 
+
+/* Print: isolate the roster print-view (black on white, A4 portrait). The page's
+   .print-roster block is `hidden print:block`; this hides everything else. */
+@media print {
+  body {
+    visibility: hidden;
+  }
+  .print-roster,
+  .print-roster * {
+    visibility: visible;
+  }
+  .print-roster {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+}
