@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster, toast } from "@/components/ui/sonner";
 import { getApiErrorMessage } from "@/lib/errors";
+import { useAuthStore } from "@/store/auth.store";
 
 // Only these read queries are persisted to localStorage so a cold Render start paints
 // last-known data instantly while a background refetch runs. Keyed on the first key
@@ -66,6 +67,26 @@ function WakingBanner() {
   );
 }
 
+/**
+ * Empties the in-memory React Query cache whenever the signed-in identity changes
+ * (sign-out → null, or a different user signing in on the same tab). The single
+ * QueryClient lives for the tab's lifetime and client-side navigation never
+ * remounts it, so without this the next user on a shared device could see the
+ * previous user's cached data. logout() clears the *persisted* copy; this clears
+ * the live one that actually renders.
+ */
+function AuthCacheReset({ client }: { client: QueryClient }) {
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const prev = useRef(userId);
+  useEffect(() => {
+    if (prev.current !== null && prev.current !== userId) {
+      client.clear();
+    }
+    prev.current = userId;
+  }, [userId, client]);
+  return null;
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
@@ -111,6 +132,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           },
         }}
       >
+        <AuthCacheReset client={queryClient} />
         {children}
         <Toaster />
         <ReactQueryDevtools initialIsOpen={false} />

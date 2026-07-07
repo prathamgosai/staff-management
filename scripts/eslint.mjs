@@ -10,7 +10,12 @@
  */
 process.env.ESLINT_USE_FLAT_CONFIG = "true";
 
-const { ESLint } = await import("eslint");
+// IMPORTANT: on ESLint 8.57 the top-level `ESLint` export is the LEGACY eslintrc
+// engine — it ignores ESLINT_USE_FLAT_CONFIG and, with no .eslintrc present,
+// silently matches zero files (a green no-op). `loadESLint({ useFlatConfig })`
+// returns the flat-config engine that actually reads eslint.config.mjs.
+const { loadESLint } = await import("eslint");
+const ESLint = await loadESLint({ useFlatConfig: true });
 
 const patterns = process.argv.slice(2);
 const eslint = new ESLint({ errorOnUnmatchedPattern: false });

@@ -19,7 +19,9 @@ export default [
       "**/coverage/**",
       "**/build/**",
       "**/.turbo/**",
-      "**/public/**",
+      // Only the web app's static assets — NOT source dirs named "public"
+      // (e.g. apps/api/src/modules/public, the magic-link/PublicModule code).
+      "apps/web/public/**",
       "**/*.config.js",
       "**/*.config.mjs",
       "**/*.config.ts",
@@ -41,6 +43,8 @@ export default [
       "no-unused-vars": "off",
       "no-redeclare": "off",
       "no-dupe-class-members": "off",
+      // Intentional empty catches (best-effort cleanup) are idiomatic here.
+      "no-empty": ["warn", { allowEmptyCatch: true }],
       // Keep the first pass green: report legacy patterns as warnings, not errors.
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       "@typescript-eslint/no-explicit-any": "off",

@@ -7,6 +7,7 @@ import * as bcrypt from "bcrypt";
 import { randomBytes, createHash } from "crypto";
 import { DB_POOL } from "../../database/database.module";
 import { assertOutletAllowed, allowedOutletIds } from "../../common/auth/outlet-scope";
+import { toLocalDateStr } from "../../common/utils/week.util";
 import type { AuthUser } from "@workforceiq/shared";
 
 /** Resolved kiosk device context, stamped onto the request by KioskDeviceGuard. */
@@ -16,9 +17,19 @@ export interface KioskDevice {
   outletId: string;
 }
 
+// PIN brute-force guard. A 4-digit PIN behind only the per-IP throttle would be
+// crackable at 30/min from the shared kiosk IP; lock a (device, employeeId) pair
+// out after too many misses. In-memory (per API instance) — same approach as the
+// roles outlet cache; adequate for a single-instance deployment.
+const PIN_MAX_ATTEMPTS = 5;
+const PIN_LOCKOUT_MS = 5 * 60_000;
+
 @Injectable()
 export class KioskService {
   constructor(@Inject(DB_POOL) private readonly db: Pool) {}
+
+  // key = `${deviceId}:${employeeId}` → { fails, until }
+  private readonly pinAttempts = new Map<string, { fails: number; until: number }>();
 
   private static sha256(s: string): string {
     return createHash("sha256").update(s).digest("hex");
@@ -141,6 +152,16 @@ export class KioskService {
     if (!employeeId?.trim() || !pin?.trim()) {
       throw new BadRequestException("Employee ID and PIN are required.");
     }
+    // Brute-force guard: a short PIN behind only the per-IP throttle is crackable
+    // from the shared kiosk IP. Lock a (device, employeeId) pair after too many
+    // misses, checked BEFORE the DB hit so a lockout can't be probed for timing.
+    const key = `${device.deviceId}:${employeeId.trim().toLowerCase()}`;
+    const now = Date.now();
+    const rec = this.pinAttempts.get(key) ?? { fails: 0, until: 0 };
+    if (rec.until > now) {
+      throw new UnauthorizedException(`Too many attempts. Try again in ${Math.ceil((rec.until - now) / 1000)}s.`);
+    }
+
     const res = await this.db.query(
       `SELECT id, name, kiosk_pin_hash
          FROM staff
@@ -151,22 +172,39 @@ export class KioskService {
     );
     const staff = res.rows[0];
     // Uniform 401 whether the ID is unknown, the PIN unset, or the PIN wrong.
-    if (!staff || !staff.kiosk_pin_hash) throw new UnauthorizedException("Incorrect Employee ID or PIN.");
-    const ok = await bcrypt.compare(pin.trim(), staff.kiosk_pin_hash);
-    if (!ok) throw new UnauthorizedException("Incorrect Employee ID or PIN.");
+    const ok = !!staff && !!staff.kiosk_pin_hash && (await bcrypt.compare(pin.trim(), staff.kiosk_pin_hash));
+    if (!ok) {
+      rec.fails += 1;
+      if (rec.fails >= PIN_MAX_ATTEMPTS) { rec.until = now + PIN_LOCKOUT_MS; rec.fails = 0; }
+      this.pinAttempts.set(key, rec);
+      throw new UnauthorizedException("Incorrect Employee ID or PIN.");
+    }
+    this.pinAttempts.delete(key); // reset the counter on a successful punch
     return { id: staff.id as string, name: staff.name as string };
   }
 
   /** Clock the staff member IN at this device's outlet (source='kiosk'). */
   async clockIn(device: KioskDevice, employeeId: string, pin: string) {
     const staff = await this.authStaff(device, employeeId, pin);
-    const today = new Date().toISOString().split("T")[0];
+    // Local date, NOT toISOString() (UTC) — attendance is bucketed per local day
+    // to match the roster's local-Monday week keys; UTC would misdate/lose
+    // early-morning IST punches. See common/utils/week.util.ts.
+    const today = toLocalDateStr(new Date());
 
-    const open = await this.db.query(
-      "SELECT id FROM attendance_records WHERE staff_id = $1 AND date = $2 AND clock_out IS NULL",
+    // Check for ANY record today, not just an open one: attendance_records has
+    // UNIQUE(staff_id, date), so a second INSERT after a completed cycle (or a
+    // manager's manual entry) would 500. Give a clean message instead.
+    const existing = await this.db.query(
+      "SELECT clock_out FROM attendance_records WHERE staff_id = $1 AND date = $2",
       [staff.id, today],
     );
-    if (open.rows[0]) throw new ConflictException(`${staff.name} is already clocked in.`);
+    if (existing.rows[0]) {
+      throw new ConflictException(
+        existing.rows[0].clock_out
+          ? `${staff.name} has already completed attendance for today.`
+          : `${staff.name} is already clocked in.`,
+      );
+    }
 
     const res = await this.db.query(
       `INSERT INTO attendance_records
@@ -181,7 +219,8 @@ export class KioskService {
   /** Clock the staff member OUT of their open record for today (source='kiosk'). */
   async clockOut(device: KioskDevice, employeeId: string, pin: string) {
     const staff = await this.authStaff(device, employeeId, pin);
-    const today = new Date().toISOString().split("T")[0];
+    // Local date (see clockIn) so clock-out finds the same day's open record.
+    const today = toLocalDateStr(new Date());
 
     const open = await this.db.query(
       `SELECT id, clock_in, break_minutes FROM attendance_records

@@ -41,9 +41,14 @@ export const useAuthStore = create<AuthState>()(
       setHasHydrated: (v) => set({ hasHydrated: v }),
       logout: () => {
         // Drop the persisted TanStack Query cache too, so the next user on a shared
-        // device (or a kiosk) can't see the previous user's cached data.
+        // device (or a kiosk) can't see the previous user's cached data. The live
+        // in-memory query cache is cleared by AuthCacheReset (providers.tsx) when the
+        // user id changes; the service-worker /api cache is purged via postMessage.
         try {
-          if (typeof window !== "undefined") window.localStorage.removeItem("wfiq-query-cache");
+          if (typeof window !== "undefined") {
+            window.localStorage.removeItem("wfiq-query-cache");
+            navigator.serviceWorker?.controller?.postMessage({ type: "wfiq-logout" });
+          }
         } catch {
           /* ignore */
         }

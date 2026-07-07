@@ -6,7 +6,7 @@
    - Static assets (Next hashes them → immutable): cache-first.
    BUMP `CACHE` whenever this file, the precache list, the icons or the manifest change,
    or installed clients will keep serving stale assets (the activate step purges old keys). */
-const CACHE = "bookendsshiftly-v3";
+const CACHE = "bookendsshiftly-v4";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icon-192.png", "/icon-512.png", "/manifest.webmanifest"];
 
@@ -29,6 +29,23 @@ self.addEventListener("activate", (event) => {
       await self.clients.claim();
     })(),
   );
+});
+
+// On sign-out the app posts { type: "wfiq-logout" }; purge the cached /api/*
+// responses so the next user on a shared device can't be served the previous
+// user's data while offline (cache keys are URL-only, ignoring the bearer token).
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "wfiq-logout") {
+    event.waitUntil(
+      (async () => {
+        const cache = await caches.open(CACHE);
+        const keys = await cache.keys();
+        await Promise.all(
+          keys.filter((r) => new URL(r.url).pathname.startsWith("/api/")).map((r) => cache.delete(r)),
+        );
+      })(),
+    );
+  }
 });
 
 self.addEventListener("fetch", (event) => {
