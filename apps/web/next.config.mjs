@@ -34,7 +34,13 @@ const nextConfig = {
   // Next 14.2's trace instrumentation on some Node runtimes (observed on
   // Render), so the root must NOT be a rendered redirect page.
   async redirects() {
-    return [{ source: "/", destination: "/dashboard", permanent: false }];
+    return [
+      { source: "/", destination: "/dashboard", permanent: false },
+      // The Home / "My Day" page was removed — send any lingering /home links
+      // (bookmarks, browser history, an old cached bundle that still pushes there
+      // after login) to the dashboard instead of a hard 404.
+      { source: "/home", destination: "/dashboard", permanent: false },
+    ];
   },
   // Proxy every /api/* call through THIS server to the backend, so the browser
   // only ever talks to its own origin (no CORS) and there's no build-time
