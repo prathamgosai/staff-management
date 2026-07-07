@@ -7,7 +7,7 @@ import { assertOutletAllowed } from "../../common/auth/outlet-scope";
 import { NotificationEvent } from "@workforceiq/shared";
 import type { AuthUser } from "@workforceiq/shared";
 import { NotificationService } from "../notification/notification.service";
-import { toLocalDateStr } from "../../common/utils/week.util";
+import { getMondayStr, toLocalDateStr } from "../../common/utils/week.util";
 import { formatError } from "../../common/utils/format-error";
 
 // Week number from a fixed epoch for consistent rotation
@@ -314,6 +314,56 @@ export class SchedulingService {
       [outletId, weekKey],
     );
     return r.rows.length > 0;
+  }
+
+  /**
+   * The caller's OWN shifts for a week — PUBLISHED weeks only (drafts never leak to
+   * staff). Scoped to the caller's staff row via staff.user_id, never a client id.
+   * Returns { weekStartDate, published, shifts } so the client can tell "roster not
+   * published yet" apart from "no shifts this week".
+   */
+  async getMyWeek(user: AuthUser, week?: string) {
+    if (week && !/^\d{4}-\d{2}-\d{2}$/.test(week)) {
+      throw new BadRequestException("week must be in YYYY-MM-DD format");
+    }
+    const weekStartDate = getMondayStr(week ? new Date(`${week}T00:00:00`) : new Date());
+    const staffRes = await this.db.query(
+      "SELECT id, current_outlet_id FROM staff WHERE user_id = $1 AND tenant_id = $2",
+      [user.id, user.tenantId],
+    );
+    const staff = staffRes.rows[0];
+    if (!staff) return { data: { weekStartDate, published: false, shifts: [] } };
+
+    const [pub, shiftsRes] = await Promise.all([
+      this.db.query(
+        "SELECT 1 FROM schedules WHERE outlet_id = $1 AND week_start_date = $2 AND status = 'published'",
+        [staff.current_outlet_id, weekStartDate],
+      ),
+      this.db.query(
+        `SELECT ss.id AS shift_id, ss.date, ss.start_time, ss.end_time, ss.is_overnight,
+                st.name AS shift_name, o.id AS outlet_id, o.name AS outlet_name
+           FROM shift_assignments sa
+           JOIN schedule_shifts ss ON ss.id = sa.shift_id
+           JOIN schedules sc ON sc.id = ss.schedule_id AND sc.status = 'published'
+           LEFT JOIN shift_templates st ON st.id = ss.template_id
+           LEFT JOIN outlets o ON o.id = ss.outlet_id
+          WHERE sa.staff_id = $1 AND sa.status <> 'cancelled' AND sc.week_start_date = $2
+          ORDER BY ss.date, ss.start_time`,
+        [staff.id, weekStartDate],
+      ),
+    ]);
+
+    const shifts = shiftsRes.rows.map((r: Record<string, unknown>) => ({
+      shiftId: r.shift_id,
+      date: toLocalDateStr(r.date as Date | string),
+      startTime: r.start_time,
+      endTime: r.end_time,
+      isOvernight: r.is_overnight,
+      shiftName: r.shift_name,
+      outletId: r.outlet_id,
+      outletName: r.outlet_name,
+    }));
+    return { data: { weekStartDate, published: pub.rows.length > 0, shifts } };
   }
 
   async getShifts(outletFilter: string[] | null, scheduleId?: string, date?: string) {
