@@ -3,16 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Home, CalendarDays, Clock, CalendarOff, UserRound, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, CalendarDays, Clock, CalendarOff, UserRound, type LucideIcon } from "lucide-react";
 
 interface Tab {
   href: string;
-  labelKey: "home" | "roster" | "attendance" | "leave" | "profile";
+  labelKey: "dashboard" | "roster" | "attendance" | "leave" | "profile";
   icon: LucideIcon;
 }
 
 const TABS: Tab[] = [
-  { href: "/home", labelKey: "home", icon: Home },
+  { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard },
   { href: "/scheduling", labelKey: "roster", icon: CalendarDays },
   { href: "/attendance", labelKey: "attendance", icon: Clock },
   { href: "/leave", labelKey: "leave", icon: CalendarOff },

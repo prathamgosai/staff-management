@@ -69,11 +69,9 @@ export default function LoginPage() {
       }
 
       setAuth(user, accessToken, refreshToken, mustChangePassword);
-      // First-login / reset accounts must set a new password before continuing.
-      // Employees & chefs land on their personal "My Day"; managers keep the dashboard.
-      const role = (user as { role?: string })?.role ?? "";
-      const home = role === "employee" || role === "chef" ? "/home" : "/dashboard";
-      router.push(mustChangePassword ? "/change-password" : home);
+      // First-login / reset accounts must set a new password before continuing;
+      // everyone else lands on the dashboard.
+      router.push(mustChangePassword ? "/change-password" : "/dashboard");
     } catch (err: unknown) {
       const response = (err as { response?: { status?: number; data?: { message?: string | string[] } } }).response;
       const status = response?.status;
