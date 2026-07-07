@@ -22,8 +22,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
         }),
         defaultOptions: {
           queries: {
+            // The DB is remote (Sydney, ~470ms). Serve cached data aggressively so
+            // switching tabs is instant, and stop re-hitting the DB on every window
+            // refocus. Pages needing live data still override with staleTime: 0.
             staleTime: 60 * 1000,
+            gcTime: 10 * 60 * 1000, // keep results ~10min so back-navigation is instant
             retry: 1,
+            refetchOnWindowFocus: false,
           },
         },
       }),

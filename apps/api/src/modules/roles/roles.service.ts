@@ -13,20 +13,34 @@ const EDITABLE_ROLES = Object.values(ROLES).filter((r) => r !== ROLES.SUPER_ADMI
 export class RolesService {
   constructor(@Inject(DB_POOL) private readonly db: Pool) {}
 
+  // Permissions change rarely but are read on EVERY authenticated request (JwtStrategy),
+  // and each DB round-trip to the remote (Sydney) pooler is ~470ms. Cache per (tenant,
+  // role) with a short TTL; updateRolePermissions() busts the entry so an Account Types
+  // edit still takes effect immediately on this instance.
+  private readonly permCache = new Map<string, { perms: string[]; expiresAt: number }>();
+  private static readonly PERM_TTL_MS = 30_000;
+
   /**
-   * Effective permissions for a role, read from the editable matrix.
+   * Effective permissions for a role, read from the editable matrix (cached).
    * super_admin is hard-wired to ["*"] so it can never be locked out, and any
    * role with no rows yet falls back to the seeded ROLE_PERMISSIONS constant.
    * Consumed by the auth layer to stamp permissions onto the request user.
    */
   async getPermissionsForRole(tenantId: string, role: Role | string): Promise<string[]> {
     if (role === ROLES.SUPER_ADMIN) return ["*"];
+    const key = `${tenantId}:${role}`;
+    const hit = this.permCache.get(key);
+    if (hit && hit.expiresAt > Date.now()) return hit.perms;
+
     const res = await this.db.query(
       "SELECT permission FROM role_permissions WHERE tenant_id = $1 AND role = $2::user_role",
       [tenantId, role],
     );
-    if (res.rows.length > 0) return res.rows.map((r) => r.permission as string);
-    return ROLE_PERMISSIONS[role as Role] ?? [];
+    const perms = res.rows.length > 0
+      ? res.rows.map((r) => r.permission as string)
+      : (ROLE_PERMISSIONS[role as Role] ?? []);
+    this.permCache.set(key, { perms, expiresAt: Date.now() + RolesService.PERM_TTL_MS });
+    return perms;
   }
 
   /** The users assigned to a given account type (name/email/employee id). */
@@ -133,6 +147,8 @@ export class RolesService {
       (client as { release(): void }).release();
     }
 
+    // Bust the cache so the new permissions apply on the very next request.
+    this.permCache.delete(`${tenantId}:${role}`);
     return { data: { role, permissions: unique } };
   }
 }
