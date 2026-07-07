@@ -15,6 +15,9 @@ export const metadata: Metadata = {
   title: "BookendsShiftly — Restaurant Workforce Management",
   description: "AI-powered workforce planning and operations management for multi-outlet restaurant groups",
   applicationName: "BookendsShiftly",
+  // Served as a STATIC file from /public (not a generated app/manifest.ts route) so the
+  // Next 14.2 dev server can't 500 while compiling a metadata route. Link it manually.
+  manifest: "/manifest.webmanifest",
   // Lets iOS/Android treat an installed instance as a standalone app.
   appleWebApp: { capable: true, statusBarStyle: "default", title: "BookendsShiftly" },
   formatDetection: { telephone: false },
