@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Users, Building2, Calendar, Clock,
   CalendarOff, ArrowLeftRight, BarChart3,
-  ShieldCheck, KeyRound, UserCog, Bell, Settings, type LucideIcon,
+  ShieldCheck, KeyRound, UserCog, Bell, Settings, Home, type LucideIcon,
 } from "lucide-react";
 
 export type NavItem = {
@@ -28,6 +28,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: null,
     items: [
+      { href: "/home", label: "Home", icon: Home },
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/notifications", label: "Notifications", icon: Bell },
     ],

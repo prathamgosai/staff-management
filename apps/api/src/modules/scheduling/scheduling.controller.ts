@@ -20,6 +20,12 @@ import type { AuthUser } from "@workforceiq/shared";
 export class SchedulingController {
   constructor(private readonly schedulingService: SchedulingService) {}
 
+  @Get("my-week")
+  @ApiOperation({ summary: "My own shifts for a week (published weeks only, caller-scoped)" })
+  getMyWeek(@CurrentUser() user: AuthUser, @Query("week") week?: string) {
+    return this.schedulingService.getMyWeek(user, week);
+  }
+
   @Get("schedules")
   @ApiOperation({ summary: "Get weekly schedules for an outlet" })
   getSchedules(

@@ -69,6 +69,7 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 | 19 | `56b75e5`… | Session hotfixes (deployed to prod): Employee-ID login, DB connect-retry, permission cache + client refetch tuning, static PWA manifest, Node-20 pin |
 | 20 | _(Task 0)_ | Credential hygiene — scrubbed the three burned passwords repo-wide, strengthened change-password policy (≥10 + letter/digit + burned-password denylist), migration `013` forced reset, removed the credential CSV + hardened `.gitignore` |
 | 21 | _(Task 1)_ | Employee outlet self-scoping — migration `014` backfills `outlet_ids` from the linked staff row, live outlet resolution (no re-login), derive-on-approval, Staff Accounts outlet multi-select (accounts:manage, tenant-validated) |
+| 22 | _(Task 2)_ | Employee "My Day" (`/home`) — role-based landing (employee/chef → `/home`), next-shift / this-week / leave cards, scoped `GET /scheduling/my-week` (published weeks only) |
 
 ### Feature areas delivered
 
