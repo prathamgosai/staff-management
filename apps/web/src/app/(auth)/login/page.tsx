@@ -52,10 +52,11 @@ export default function LoginPage() {
     setError(null);
     setIsPending(false);
     try {
-      const email = data.email.includes("@")
-        ? data.email
-        : `${data.email.toLowerCase()}@workforceiq.app`;
-      const response = await apiClient.post("/auth/login", { email, password: data.password });
+      // Send the identifier exactly as typed (trimmed) — an email, an Employee ID, or
+      // the short admin/HR login id. The API resolves all three (authenticate()); the
+      // old client-side "@workforceiq.app" append silently broke Employee-ID login.
+      const identifier = data.email.trim();
+      const response = await apiClient.post("/auth/login", { email: identifier, password: data.password });
       const { data: user, accessToken, refreshToken, mustChangePassword } = response.data;
 
       // Remember only the Employee ID / email — never the password.
@@ -125,7 +126,7 @@ export default function LoginPage() {
                   {...register("email")}
                   type="text"
                   autoComplete="username"
-                  placeholder="CP-001 or admin@workforceiq.app"
+                  placeholder="e.g. 42 or you@email.com"
                   aria-invalid={!!errors.email}
                   className="w-full px-4 py-2.5 border border-border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-base"
                 />
