@@ -1,7 +1,7 @@
 # WorkforceIQ — Project Status & Work Report
 
 > AI-Powered Restaurant Workforce & Operations Planning System
-> Maintained status document. Last updated: **2026-07-06**.
+> Maintained status document. Last updated: **2026-07-07**.
 > Snapshot: server-side outlet scoping + automatic role-based notifications + installable PWA shipped on branch `perf/login-latency` (Tasks 0–7). **Migration `012_notifications` must be applied manually before the notification features work at runtime.**
 
 ---
@@ -66,13 +66,15 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 | 16 | `609b6f5` | In-app notification bell (unread badge, dropdown, mark-read) + `/notifications` history page (Task 5) |
 | 17 | `d75e7a0` | PWA — app-shell/navigation caching, network-first API cache, dismissible install hint (Task 6) |
 | 18 | `d6e9627` | Nightly `SHIFT_REMINDER` Bull repeatable (idempotent) + `/settings/notifications` preferences (Task 7) |
+| 19 | `56b75e5`… | Session hotfixes (deployed to prod): Employee-ID login, DB connect-retry, permission cache + client refetch tuning, static PWA manifest, Node-20 pin |
+| 20 | _(Task 0)_ | Credential hygiene — scrubbed the three burned passwords repo-wide, strengthened change-password policy (≥10 + letter/digit + burned-password denylist), migration `013` forced reset, removed the credential CSV + hardened `.gitignore` |
 
 ### Feature areas delivered
 
 **Employee directory & data (real data loaded)**
 - ~371 active staff imported from `Employee Directory _1.xlsx`; post/section matched by name against `Restaurant Staffing.xlsx`.
 - Live-DB contact backfill (3 passes): real Employee Codes, phones (239/260), emails (207), migrations `004`–`006` (+ rollbacks + audit CSV).
-- Staff logins switched to real emails where unique (204/256), default password `Admin@123`, migration `007`.
+- Staff logins switched to real emails where unique (204/256), seeded default password (now **burned** — forced reset in migration `013`; see credential manager), migration `007`.
 - 6 resigned staff flagged from exit sheets.
 - Deliverable: `Active Staff by Restaurant and Post.xlsx/.csv` (grouped roster + flat table + summary matrix).
 
@@ -122,7 +124,8 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 
 - **RBAC data-scoping — server-side outlet scoping now enforced** (Task 0) across staff/attendance/leave/scheduling via `common/auth/outlet-scope.ts`: super_admin/admin/hr → all tenant outlets; head_of_house/chef/employee → their own outlet(s); an out-of-scope client `outletId` is rejected (403) and unscoped list reads are filtered to the caller's outlets. Also closed several cross-tenant leaks (endpoints that previously had no `tenant_id` filter). Residual: scheduling uses controller-level outlet guards rather than a deep per-query tenant rewrite (safe while single-tenant); no department scoping (`users` has no `department_id`).
 - **Manager/employee outlet assignment** — outlet scoping is fail-closed: `head_of_house`/`chef` accounts must have `outlet_ids` populated or they see (and get notified about) nothing; plain `employee` accounts currently have empty `outlet_ids` and no self-service UI, so they effectively see nothing until per-user self-scoping lands.
-- **Notifications require migration 012** — `pnpm db:migrate` has no runner script on disk; apply `assets/db/012_notifications.sql` by hand (psql) before the notification features work. Until then the `/notifications` endpoints 500 and the bell degrades to 0/empty. The migration DROPs the unused legacy staff-keyed `notification_preferences` (rollback restores it).
+- **Migrations are manual** — `pnpm db:migrate` has no runner script on disk; apply each new numbered file by hand (psql), in order. **Pending: `013_force_password_reset.sql`** (Task 0 — forces a reset for every account still on a seeded password, adds `users.password_updated_at`). `012_notifications.sql` was applied to prod on 2026-07-07.
+- **Credential hygiene done (Task 0)** — the three seeded passwords (`admin`, `HR`, staff default) are treated as **burned**: scrubbed from all docs/migrations, change-password now enforces ≥10 chars + letter + digit + a SHA-256 burned-password denylist, and migration `013` force-resets every non-super_admin account still on a seed password. **Manual: rotate super_admin + HR + all leaked secrets, and purge `.env`/credential CSVs from git history (BFG) — see §Manual Steps.** Until then the `/notifications` endpoints 500 and the bell degrades to 0/empty. The migration DROPs the unused legacy staff-keyed `notification_preferences` (rollback restores it).
 - **Notification delivery caveats** — WhatsApp is mock unless `ENABLE_WHATSAPP=true` + Meta creds; the email provider is still a mock (SES/SendGrid unimplemented), so admins/hr (usually no staff row) get in-app only until email is wired. ~115 active staff have no login → external-channel notifications only (no in-app row). Web Push (Task 8) intentionally not built.
 - **`pnpm lint` is unconfigured repo-wide** — no ESLint config exists in any package (pre-existing), so `pnpm lint` errors before running. `pnpm typecheck` + `pnpm build` are the working quality gates.
 - **Seed schema is stale** — `001_schema.sql` lacks columns the app later added (e.g. `users.pending_approval`, `ticket_number`, `must_change_password`). Treat the live DB (pg_dump) as source of truth, not the seed files.
@@ -148,8 +151,8 @@ pnpm dev                 # API :4000, web :3000  (ML :8000 optional)
 
 - `.env` DB block points at the Supabase session pooler (`DB_SSL=true`,
   `DB_USER=postgres.<project-ref>`); a commented LOCAL fallback block remains for offline dev.
-- Admin login: `admin@workforceiq.app` / `P@$$w0rd` (super_admin).
-- HR admin login (typed on web): `bookendshr.admin.com` / `hradmin123`.
+- Admin login: `admin@workforceiq.app` (super_admin) — password in the credential manager, never committed.
+- HR admin login (typed on web): `bookendshr.admin.com` — password in the credential manager, never committed.
 - Read the real DB password from `.env` (git-ignored).
 
 ---
