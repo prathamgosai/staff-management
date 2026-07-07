@@ -1,8 +1,9 @@
 -- 009_hr_admin_login.sql
 -- Creates the HR admin login and gives the hr_manager account type FULL access.
 -- Login on the web app by entering ID "bookendshr.admin.com" (the login page
--- auto-appends @workforceiq.app) with password "hradmin123".
--- Password hash is bcrypt(cost 12) of "hradmin123".
+-- auto-appends @workforceiq.app). The seeded password is now BURNED — migration
+-- 013 forces a reset; the current password lives in the credential manager.
+-- password_hash below is the original bcrypt(cost 12) seed hash.
 BEGIN;
 
 -- 1) HR admin login account (idempotent: re-running refreshes the password/role/flags).

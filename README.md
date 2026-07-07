@@ -47,7 +47,7 @@ You can also run everything from the repo root with `pnpm dev` (Turborepo).
 
 ```
 User: admin@workforceiq.app
-Pass: Admin@123
+Pass: see credential manager — never commit credentials
 ```
 
 ## Useful scripts (repo root)
