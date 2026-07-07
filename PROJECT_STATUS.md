@@ -178,4 +178,37 @@ pnpm dev                 # API :4000, web :3000  (ML :8000 optional)
 
 ---
 
+## 8. Manual steps to go live (Tasks 0–11)
+
+Everything below is a human/ops action the code can't do for itself. Do them in order.
+
+**A. Database migrations — apply by hand, in order (psql, no runner script).**
+- [ ] `013_force_password_reset.sql` — adds `users.password_updated_at`, flags every non-super_admin still on a seed password with `must_change_password=TRUE`. (Drops the legacy staff-keyed `notification_preferences` table.)
+- [ ] `014_backfill_employee_outlets.sql` — backfills `users.outlet_ids` from each account's linked `staff.current_outlet_id`.
+- [ ] `015_kiosk_clock_in.sql` — `kiosk_devices`, `staff.kiosk_pin_hash`, `attendance_records.source`, and the `'kiosk'` clock method. **Run the whole file**, not just the `BEGIN/COMMIT` block — the `ALTER TYPE ... ADD VALUE 'kiosk'` sits *outside* the transaction on purpose (Postgres can't use a new enum value in the same txn).
+- (`012_notifications.sql` was already applied to prod on 2026-07-07. Each migration has a matching `_ROLLBACK.sql`.)
+
+**B. Secrets & credential hygiene (Task 0).**
+- [ ] Rotate the three **burned** seed passwords: super_admin, HR admin, and the staff default. (Change-password already enforces ≥10 chars + letter + digit + a burned-password denylist; migration `013` forces the reset for staff.)
+- [ ] Rotate any other secrets that ever touched git, and purge `.env*` / the old credential CSV from git **history** with BFG or `git filter-repo` (removing them from the tip is not enough).
+- [ ] Confirm `.env` is present on each environment (DB + Redis creds) — it's git-ignored; read the real DB password from it.
+
+**C. Email delivery (Task 10) — optional but recommended.**
+- [ ] To send real email set `EMAIL_PROVIDER=sendgrid`, `SENDGRID_API_KEY=…`, and `EMAIL_FROM=` a **SendGrid-verified** single sender or domain (optionally `EMAIL_FROM_NAME`). Left unset it stays `mock` (logs only) and admins/hr get in-app only.
+
+**D. Magic-link staff weeks (Task 5) — optional.**
+- [ ] Set `MAGIC_LINK_SECRET=` (a long random string) to enable the WhatsApp/`/w/[token]` read-only week for login-less staff. Optionally `MAGIC_LINK_ALL_STAFF=true` to send the link to everyone, not just login-less staff.
+
+**E. Kiosk clock-in (Task 9).**
+- [ ] After migration `015`, enroll a tablet per outlet: **Outlets → open an outlet → Kiosk devices → Enroll device**, then open the one-time enrollment link on that tablet (the raw token is shown once, stored only as a SHA-256 hash).
+- [ ] Set each staff member's PIN: **Staff → open the profile → Kiosk PIN** (4–6 digits). No env vars needed. Revoke a lost tablet from the same outlet panel.
+
+**F. Internationalization (Task 8).**
+- [ ] Have a native speaker review the **machine-drafted** Gujarati (`apps/web/messages/gu.json`) and Hindi (`hi.json`) catalogs before relying on them — each carries a `_note` TODO. English is authoritative.
+
+**G. Dev environment.**
+- [ ] Use **Node 20** (`.nvmrc`; Next 14.2 dev breaks on Node ≥ 23). `pnpm dev` now hot-reloads the API via `nest start --watch`; `pnpm lint` / `pnpm typecheck` / `pnpm build` are green.
+
+---
+
 *This file is a living summary. When you complete meaningful work, add a row to §4 and update §5 gaps.*
