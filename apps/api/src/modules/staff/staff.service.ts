@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, ForbiddenException, Inject } from "@nestjs/common";
+import { Injectable, NotFoundException, ConflictException, ForbiddenException, BadRequestException, Inject } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import { isAdminRole, type AuthUser } from "@workforceiq/shared";
@@ -40,7 +40,7 @@ export class StaffService {
     const where = conditions.join(" AND ");
     const [data, count] = await Promise.all([
       this.db.query(
-        `SELECT s.id, s.employee_id, s.name, s.phone, s.whatsapp, s.avatar_url,
+        `SELECT s.id, s.employee_id, s.name, s.phone, s.whatsapp,
                 s.primary_outlet_id, s.current_outlet_id, s.department_id, s.position_id,
                 s.employment_type, s.employment_status, s.join_date,
                 d.name AS department_name, p.name AS position_name,
@@ -142,6 +142,11 @@ export class StaffService {
       throw new ForbiddenException("You can only change your own profile photo.");
     }
     const value = avatarUrl && avatarUrl.trim() ? avatarUrl : null;
+    // Safety net behind the client-side resize/compress: a 200x200 WebP is a few KB,
+    // so reject anything over ~150 KB (base64 is ~33% larger than the binary).
+    if (value && value.length > 210_000) {
+      throw new BadRequestException("That image is too large. Please use a photo under ~150 KB.");
+    }
     const result = await this.db.query(
       `UPDATE staff SET avatar_url = $3, updated_at = NOW()
        WHERE id = $1 AND tenant_id = $2 RETURNING *`,

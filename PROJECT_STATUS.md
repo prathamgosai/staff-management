@@ -74,6 +74,7 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 | 24 | _(Task 4)_ | Cold-start resilience — persist key read queries to localStorage (versioned buster, cleared on logout), "Waking the server…" banner on >4s fetches, SW cache `v3`; page loads already use skeletons |
 | 25 | _(Task 5)_ | Magic-link "My Week" — HS256 token (dedicated `MAGIC_LINK_SECRET`), `GET /public/my-week/:token` (no auth, 20/min/IP, uniform 404, staff+tenant from the signed token only), `/w/[token]` read-only page (noindex), ROSTER_PUBLISHED WhatsApp link for login-less staff (degrades to the existing template) |
 | 26 | _(Task 6)_ | Print-ready roster (A4 portrait, black-on-white `@media print`) + default staff list hides resigned as well as terminated (explicit status still shows them) + return-to-rotation un-pin (`DELETE /scheduling/overrides/:staffId`, `schedule:write`, outlet-scoped) |
+| 27 | _(Task 7)_ | Avatar & bundle perf — base64 avatar dropped from the staff-list SQL (list falls back to initials; big response-size cut), client resize to 200×200 WebP (JPEG fallback, q0.8) + ~150 KB server cap, lazy-loaded avatar imgs; recharts/fullcalendar/dnd-kit confirmed unimported (no chart/calendar chunks on employee routes) |
 
 ### Feature areas delivered
 

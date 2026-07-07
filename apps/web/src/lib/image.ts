@@ -1,14 +1,16 @@
 /**
- * Read an image File, center-crop it to a square, downscale it, and return a
- * compressed JPEG data URL suitable for storing as a profile avatar.
+ * Read an image File, center-crop it to a square, downscale to a small thumbnail, and
+ * return a compressed data URL suitable for a profile avatar. Output is WebP (much
+ * smaller) with a JPEG fallback for browsers that can't encode WebP.
  *
- * Keeping the output small (square, max ~512px, JPEG) means the avatar fits
- * comfortably in the staff.avatar_url TEXT column and in a single JSON request.
+ * Keeping the output tiny (≤200×200) means the avatar is a few KB — it fits comfortably
+ * in the staff.avatar_url TEXT column and a single JSON request, and the server rejects
+ * anything over ~150 KB as a safety net.
  */
 export async function fileToAvatarDataUrl(
   file: File,
-  size = 512,
-  quality = 0.82,
+  size = 200,
+  quality = 0.8,
 ): Promise<string> {
   if (!file.type.startsWith("image/")) {
     throw new Error("Please choose an image file.");
@@ -40,5 +42,8 @@ export async function fileToAvatarDataUrl(
   if (!ctx) throw new Error("Image processing isn't supported in this browser.");
   ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
 
-  return canvas.toDataURL("image/jpeg", quality);
+  // Prefer WebP (smaller); browsers that can't encode it return a PNG data URL, in
+  // which case fall back to JPEG.
+  const webp = canvas.toDataURL("image/webp", quality);
+  return webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/jpeg", quality);
 }
