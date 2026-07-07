@@ -39,7 +39,16 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user }),
       clearMustChangePassword: () => set({ mustChangePassword: false }),
       setHasHydrated: (v) => set({ hasHydrated: v }),
-      logout: () => set({ user: null, accessToken: null, refreshToken: null, mustChangePassword: false }),
+      logout: () => {
+        // Drop the persisted TanStack Query cache too, so the next user on a shared
+        // device (or a kiosk) can't see the previous user's cached data.
+        try {
+          if (typeof window !== "undefined") window.localStorage.removeItem("wfiq-query-cache");
+        } catch {
+          /* ignore */
+        }
+        set({ user: null, accessToken: null, refreshToken: null, mustChangePassword: false });
+      },
     }),
     {
       name: "workforceiq-auth",
