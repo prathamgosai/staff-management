@@ -12,7 +12,7 @@ import { useState, useRef } from "react";
 import {
   ArrowLeft, Phone, Mail, MapPin, Briefcase, Calendar,
   Clock, Building2, User, ChevronDown, Check, Loader2,
-  Pencil, X, Shield, Hash, Camera,
+  Pencil, X, Shield, Hash, Camera, KeyRound,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -314,6 +314,64 @@ function AvatarUploader({ staffId, name, avatarUrl, canEdit }: { staffId: string
   );
 }
 
+/* ─── Kiosk PIN card ──────────────────────────────────────────────────── */
+function KioskPinCard({ staffId }: { staffId: string }) {
+  const [pin, setPin] = useState("");
+  const [done, setDone] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const setMut = useMutation({
+    mutationFn: (value: string | null) => apiClient.put(`/kiosk/staff/${staffId}/pin`, { pin: value }),
+    onSuccess: (_res, value) => {
+      setDone(value ? "PIN set — the staff member can now clock in at a kiosk." : "PIN cleared.");
+      setErr(null);
+      setPin("");
+    },
+    onError: (error) => {
+      const e = error as { response?: { data?: { message?: string | string[] } } };
+      const m = e?.response?.data?.message;
+      setErr(Array.isArray(m) ? m.join(", ") : m ?? "Could not save the PIN.");
+      setDone(null);
+    },
+  });
+
+  return (
+    <div className="bg-card rounded-2xl border border-border shadow-sm p-5">
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
+        <KeyRound size={13} /> Kiosk PIN
+      </p>
+      <p className="text-xs text-muted-foreground mb-3">
+        Set a 4–6 digit PIN so this staff member can clock in/out at a kiosk with their Employee ID. PINs are stored hashed and never shown.
+      </p>
+      <div className="flex gap-2">
+        <input
+          value={pin}
+          onChange={(e) => { setPin(e.target.value.replace(/\D/g, "").slice(0, 6)); setDone(null); setErr(null); }}
+          inputMode="numeric"
+          placeholder="New PIN"
+          className="flex-1 border border-border rounded-xl px-3 py-2.5 text-sm font-mono tracking-widest outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button
+          onClick={() => setMut.mutate(pin)}
+          disabled={setMut.isPending || pin.length < 4}
+          className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition"
+        >
+          {setMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Set
+        </button>
+      </div>
+      <button
+        onClick={() => { if (confirm("Clear this staff member's kiosk PIN?")) setMut.mutate(null); }}
+        disabled={setMut.isPending}
+        className="mt-2 text-xs text-muted-foreground hover:text-red-500 transition"
+      >
+        Clear PIN
+      </button>
+      {done && <p className="mt-2 text-xs text-emerald-600">{done}</p>}
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+    </div>
+  );
+}
+
 /* ─── Page ────────────────────────────────────────────────────────────── */
 export default function StaffDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -332,6 +390,8 @@ export default function StaffDetailPage() {
   const isAdmin = isAdminRole(currentUser?.role);
   const isSelf = !!staff && !!currentUser && staff.userId === currentUser.id;
   const canEditProfile = isAdmin || isSelf; // super admin edits anyone; others edit only their own profile
+  // Kiosk PIN is a manager action (attendance:write); super_admin always allowed.
+  const canManageKiosk = currentUser?.role === "super_admin" || !!currentUser?.permissions?.includes("attendance:write");
 
   if (isLoading) {
     return (
@@ -459,6 +519,9 @@ export default function StaffDetailPage() {
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Leave History</p>
             <LeaveHistory staffId={id} />
           </div>
+
+          {/* Kiosk PIN (managers only) */}
+          {canManageKiosk && <KioskPinCard staffId={id} />}
         </div>
       </div>
     </>

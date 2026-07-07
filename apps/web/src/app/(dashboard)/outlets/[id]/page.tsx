@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { KioskDevicesSection } from "@/components/kiosk/kiosk-devices-section";
 
 /* ─── types ──────────────────────────────────────────────────────────── */
 interface OutletDetail {
@@ -280,6 +281,9 @@ export default function OutletDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Kiosk devices (managers only; the component self-hides otherwise) */}
+      {outlet && <KioskDevicesSection outletId={id} />}
 
       {/* Staff section */}
       <div>
