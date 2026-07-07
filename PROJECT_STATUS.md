@@ -71,6 +71,7 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 | 21 | _(Task 1)_ | Employee outlet self-scoping — migration `014` backfills `outlet_ids` from the linked staff row, live outlet resolution (no re-login), derive-on-approval, Staff Accounts outlet multi-select (accounts:manage, tenant-validated) |
 | 22 | _(Task 2)_ | Employee "My Day" (`/home`) — role-based landing (employee/chef → `/home`), next-shift / this-week / leave cards, scoped `GET /scheduling/my-week` (published weeks only) |
 | 23 | _(Task 3)_ | Mobile nav — bottom tab bar (Home/Roster/Attendance/Leave/Profile, safe-area, ≥44px) below md + day-first roster (today default, day chips, swipe); desktop table unchanged; new `/profile` page |
+| 24 | _(Task 4)_ | Cold-start resilience — persist key read queries to localStorage (versioned buster, cleared on logout), "Waking the server…" banner on >4s fetches, SW cache `v3`; page loads already use skeletons |
 
 ### Feature areas delivered
 
