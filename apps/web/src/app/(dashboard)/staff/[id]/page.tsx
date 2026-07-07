@@ -274,7 +274,7 @@ function AvatarUploader({ staffId, name, avatarUrl, canEdit }: { staffId: string
         <div className="w-20 h-20 rounded-2xl overflow-hidden">
           {avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
+            <img src={avatarUrl} alt={name} loading="lazy" className="w-full h-full object-cover" />
           ) : (
             <span className={`w-full h-full ${avatarColor(name)} text-white flex items-center justify-center text-2xl font-black`}>
               {initials(name)}
@@ -293,7 +293,7 @@ function AvatarUploader({ staffId, name, avatarUrl, canEdit }: { staffId: string
         className="group relative w-20 h-20 rounded-2xl overflow-hidden block focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
         {avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
+          <img src={avatarUrl} alt={name} loading="lazy" className="w-full h-full object-cover" />
         ) : (
           <span className={`w-full h-full ${avatarColor(name)} text-white flex items-center justify-center text-2xl font-black`}>
             {initials(name)}

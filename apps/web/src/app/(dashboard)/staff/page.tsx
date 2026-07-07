@@ -530,7 +530,7 @@ export default function StaffPage() {
                             {staff.avatarUrl || staff.avatar_url ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={(staff.avatarUrl || staff.avatar_url) as string} alt={staff.name}
-                                className="w-9 h-9 rounded-full object-cover shrink-0" />
+                                loading="lazy" className="w-9 h-9 rounded-full object-cover shrink-0" />
                             ) : (
                               <div className={`w-9 h-9 rounded-full ${avatarColor(staff.name)} text-white flex items-center justify-center font-bold text-xs shrink-0`}>
                                 {initials(staff.name)}
