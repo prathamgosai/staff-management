@@ -1,8 +1,8 @@
 # WorkforceIQ — Project Status & Work Report
 
 > AI-Powered Restaurant Workforce & Operations Planning System
-> Maintained status document. Last updated: **2026-07-02**.
-> Snapshot: 13 commits · branch `main` · working tree clean · first commit 2026-06-26, latest 2026-07-01.
+> Maintained status document. Last updated: **2026-07-06**.
+> Snapshot: server-side outlet scoping + automatic role-based notifications + installable PWA shipped on branch `perf/login-latency` (Tasks 0–7). **Migration `012_notifications` must be applied manually before the notification features work at runtime.**
 
 ---
 
@@ -58,6 +58,14 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 | 8 | `da6d419` | Fix weekly roster generation + manual shift-time editor |
 | 9 | `6e49313` | RBAC, account types & permissions management; attendance fix |
 | 10 | `9943bf4` | Per-staff shift move + full dark-mode theming |
+| 11 | `c1471e3` | Server-side outlet scoping across staff/attendance/leave/scheduling (Task 0) |
+| 12 | `ff7f6ab` | Shared notification event contracts — `NotificationEvent`, per-event payloads, channel (Task 1) |
+| 13 | `42040ee` | Migration `012` — `notifications`, user-centric `notification_preferences`, `roster_publications` (Task 2) |
+| 14 | `ac590cb` | Notification module — `emit()` recipient matrix, dispatch worker (WhatsApp→email→in-app), in-app centre, leave/registration emit points (Task 3) |
+| 15 | `cc38bd1` | Roster draft→publish (+`schedule:publish` gate) + `SHIFT_CHANGED` on published-week edits + web Publish button/badge (Task 4) |
+| 16 | `609b6f5` | In-app notification bell (unread badge, dropdown, mark-read) + `/notifications` history page (Task 5) |
+| 17 | `d75e7a0` | PWA — app-shell/navigation caching, network-first API cache, dismissible install hint (Task 6) |
+| 18 | `d6e9627` | Nightly `SHIFT_REMINDER` Bull repeatable (idempotent) + `/settings/notifications` preferences (Task 7) |
 
 ### Feature areas delivered
 
@@ -97,11 +105,26 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 - No-Docker local run: portable Postgres 16 + Redis under `.services/`, `start-services.ps1` / `stop-services.ps1`.
 - EADDRINUSE + IPv4 (`127.0.0.1` vs `localhost`/`::1`) fixes; `AggregateError` unwrapping in scheduler logs.
 
+**Automatic role-based notifications (2026-07-06)**
+- Server-side outlet scoping (Task 0): staff/attendance/leave/scheduling derive allowed outlets from the caller (`common/auth/outlet-scope.ts`); out-of-scope `outletId` → 403; unscoped list reads filtered to the caller's outlets. Also closed cross-tenant leaks.
+- `notificationService.emit(event, payload)` (Task 3): resolves recipients from the payload + server-side role/outlet scope (never a client id), writes one in-app `notifications` row per recipient, and enqueues one external-channel Bull job each. Recipient matrix implemented; `super_admin` only receives `SYSTEM_ALERT` + `ACCOUNT_PENDING_APPROVAL`.
+- Bull `dispatch` worker: per-user prefs → WhatsApp template (Meta Graph API, only when `ENABLE_WHATSAPP=true` + phone) → email fallback → in-app only; records `channels_sent`; retry+backoff; `AggregateError` unwrapped (shared `formatError`).
+- Emit points: leave create/decision, registration (`ACCOUNT_PENDING_APPROVAL`), roster publish (`ROSTER_PUBLISHED`), per-staff move + template retime on **published** weeks (`SHIFT_CHANGED`). Generation/regeneration never notifies.
+- Roster draft→publish (Task 4): `roster_publications` + `@RequirePermission('schedule:publish')`; web Publish button + Draft/Published badge.
+- In-app centre (Task 5): header bell (unread badge, 30s poll, mark-read, deep-links) + `/notifications` history page; own-data endpoints only.
+- Nightly `SHIFT_REMINDER` (Task 7): Bull repeatable at 20:00 Asia/Kolkata, idempotent per (user, shift); `/settings/notifications` per-channel toggles.
+
+**PWA (Task 6)** — service worker (cache `v2`) now caches the app shell/navigations and does network-first-with-fallback for `/api/*` GETs; a dismissible install hint captures `beforeinstallprompt` (Android/desktop) and shows Add-to-Home-Screen instructions on iOS. (Manifest + icons already shipped in `0063a1e`.)
+
 ---
 
 ## 5. Known gaps / open items
 
 - **RBAC data-scoping — server-side outlet scoping now enforced** (Task 0) across staff/attendance/leave/scheduling via `common/auth/outlet-scope.ts`: super_admin/admin/hr → all tenant outlets; head_of_house/chef/employee → their own outlet(s); an out-of-scope client `outletId` is rejected (403) and unscoped list reads are filtered to the caller's outlets. Also closed several cross-tenant leaks (endpoints that previously had no `tenant_id` filter). Residual: scheduling uses controller-level outlet guards rather than a deep per-query tenant rewrite (safe while single-tenant); no department scoping (`users` has no `department_id`).
+- **Manager/employee outlet assignment** — outlet scoping is fail-closed: `head_of_house`/`chef` accounts must have `outlet_ids` populated or they see (and get notified about) nothing; plain `employee` accounts currently have empty `outlet_ids` and no self-service UI, so they effectively see nothing until per-user self-scoping lands.
+- **Notifications require migration 012** — `pnpm db:migrate` has no runner script on disk; apply `assets/db/012_notifications.sql` by hand (psql) before the notification features work. Until then the `/notifications` endpoints 500 and the bell degrades to 0/empty. The migration DROPs the unused legacy staff-keyed `notification_preferences` (rollback restores it).
+- **Notification delivery caveats** — WhatsApp is mock unless `ENABLE_WHATSAPP=true` + Meta creds; the email provider is still a mock (SES/SendGrid unimplemented), so admins/hr (usually no staff row) get in-app only until email is wired. ~115 active staff have no login → external-channel notifications only (no in-app row). Web Push (Task 8) intentionally not built.
+- **`pnpm lint` is unconfigured repo-wide** — no ESLint config exists in any package (pre-existing), so `pnpm lint` errors before running. `pnpm typecheck` + `pnpm build` are the working quality gates.
 - **Seed schema is stale** — `001_schema.sql` lacks columns the app later added (e.g. `users.pending_approval`, `ticket_number`, `must_change_password`). Treat the live DB (pg_dump) as source of truth, not the seed files.
 - **API has no hot-reload** — plain `ts-node`; any backend change needs a manual restart, and a type error anywhere blocks startup. Keep `tsc --noEmit` clean.
 - **Resigned staff still listed** — `staff.findAll` hides only `terminated`, not `resigned`.

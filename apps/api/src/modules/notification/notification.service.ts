@@ -300,17 +300,22 @@ export class NotificationService {
     let sent = 0;
     let skipped = 0;
     for (const r of rows.rows) {
-      // Idempotency guard — meaningful for staff with a login (in-app row keyed by user).
-      if (r.user_id) {
-        const dup = await this.db.query(
-          `SELECT 1 FROM notifications
-           WHERE user_id = $1 AND type = $2 AND data->>'shiftId' = $3 LIMIT 1`,
-          [r.user_id, NotificationEvent.SHIFT_REMINDER, r.shift_id],
-        );
-        if (dup.rows[0]) {
-          skipped++;
-          continue;
-        }
+      // The reminder's idempotency model keys on an existing shift_reminder notification,
+      // which is user_id-scoped. Login-less staff have no such row to dedupe against, so a
+      // re-run could double-send their WhatsApp — skip them here (they still receive the
+      // publish + shift-change WhatsApps). Nightly reminders go to staff with an app login.
+      if (!r.user_id) {
+        skipped++;
+        continue;
+      }
+      const dup = await this.db.query(
+        `SELECT 1 FROM notifications
+         WHERE user_id = $1 AND type = $2 AND data->>'shiftId' = $3 LIMIT 1`,
+        [r.user_id, NotificationEvent.SHIFT_REMINDER, r.shift_id],
+      );
+      if (dup.rows[0]) {
+        skipped++;
+        continue;
       }
       await this.emit(NotificationEvent.SHIFT_REMINDER, {
         tenantId: r.tenant_id,

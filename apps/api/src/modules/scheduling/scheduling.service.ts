@@ -256,7 +256,7 @@ export class SchedulingService {
   async publishSchedule(user: AuthUser, scheduleId: string) {
     // Scope by the schedule's outlet — a manager may only publish their own.
     const found = await this.db.query(
-      `SELECT sc.id, sc.outlet_id, sc.week_start_date
+      `SELECT sc.id, sc.outlet_id, sc.week_start_date, sc.status
        FROM schedules sc JOIN outlets o ON o.id = sc.outlet_id
        WHERE sc.id = $1 AND o.tenant_id = $2`,
       [scheduleId, user.tenantId],
@@ -266,15 +266,22 @@ export class SchedulingService {
     assertOutletAllowed(user, outletId);
     const weekKey = toLocalDateStr(found.rows[0].week_start_date);
 
+    // Only the draft -> published TRANSITION notifies. The `status <> 'published'` guard
+    // (plus row locking) makes a double-click / repeat publish of an already-published week
+    // a no-op, so ROSTER_PUBLISHED fires exactly once per publish. A regenerate reverts the
+    // week to draft, so a deliberate re-publish of a fresh roster DOES re-notify — intended.
     const result = await this.db.query(
       `UPDATE schedules SET status = 'published', published_at = NOW(), published_by = $2
-       WHERE id = $1 RETURNING *`,
+       WHERE id = $1 AND status <> 'published' RETURNING *`,
       [scheduleId, user.id],
     );
-    if (!result.rows[0]) throw new NotFoundException("Schedule not found");
+    if (!result.rows[0]) {
+      // Already published — return the current record without re-notifying.
+      const current = await this.db.query("SELECT * FROM schedules WHERE id = $1", [scheduleId]);
+      return { data: current.rows[0] };
+    }
 
-    // Record the publication (unique per outlet+week). This is BOTH the draft->published
-    // gate for SHIFT_CHANGED and the idempotency key so a re-publish doesn't re-alert.
+    // Record the publication (unique per outlet+week) — the draft->published audit row.
     await this.db.query(
       `INSERT INTO roster_publications (tenant_id, outlet_id, week_key, published_by)
        VALUES ($1, $2, $3, $4)
