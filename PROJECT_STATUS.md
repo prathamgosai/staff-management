@@ -209,6 +209,7 @@ Everything below is a human/ops action the code can't do for itself. Do them in 
 
 **G. Dev environment.**
 - [ ] Use **Node 20** (`.nvmrc`; Next 14.2 dev breaks on Node ≥ 23). `pnpm dev` now hot-reloads the API via `nest start --watch`; `pnpm lint` / `pnpm typecheck` / `pnpm build` are green.
+- [ ] After pulling changes to `next.config.mjs` or new dependencies (e.g. next-intl), **fully restart `pnpm dev`** — Next does not hot-reload config or newly-installed packages. If you hit `Cannot find module './xxx.js'` / fallback-chunk 500s (a Node-24 webpack-cache artifact), run **`pnpm clean`** (wipes `.next` + build caches) and restart.
 
 ---
 
