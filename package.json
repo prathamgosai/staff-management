@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "dev": "turbo run dev",
+    "clean": "node scripts/clean.mjs",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
