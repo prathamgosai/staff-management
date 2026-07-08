@@ -1,6 +1,7 @@
 import { Module, Global, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Pool } from "pg";
+import { DbKeepWarmService } from "./db-keepwarm.service";
 
 export const DB_POOL = "DB_POOL";
 
@@ -23,8 +24,23 @@ const TRANSIENT_DB_ERRORS = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]);
           user: config.get("DB_USER", "workforceiq_user"),
           password: config.get("DB_PASSWORD"),
           ssl: config.get("DB_SSL") === "true" ? { rejectUnauthorized: false } : false,
+          // Names this API in pg_stat_activity / the Supabase dashboard, so its
+          // connections (and any runaway query) can be attributed and killed.
+          application_name: "workforceiq-api",
           max: config.get<number>("DB_POOL_MAX", 20),
-          idleTimeoutMillis: 30000,
+          // Cap any single query so a hung cross-region statement can't pin one of
+          // the few (8 in prod) session-pooler connections indefinitely.
+          // statement_timeout kills the backend server-side; query_timeout frees the
+          // pool client. Default 30s is a safety net, not an SLA — bump
+          // DB_STATEMENT_TIMEOUT_MS if a legitimately heavy op (e.g. schedule
+          // generation) ever trips it.
+          statement_timeout: config.get<number>("DB_STATEMENT_TIMEOUT_MS", 30000),
+          query_timeout: config.get<number>("DB_STATEMENT_TIMEOUT_MS", 30000),
+          // Hold idle sockets open long enough that the keep-warm SELECT 1 (every
+          // ~4 min — see DbKeepWarmService) keeps at least one Sydney socket alive,
+          // so the first login after a lull doesn't pay a full cross-region
+          // TCP+TLS+pooler-auth reconnect. Tunable via env.
+          idleTimeoutMillis: config.get<number>("DB_IDLE_TIMEOUT_MS", 300000),
           // Keep idle sockets alive so a NAT/firewall between here and the remote
           // pooler doesn't silently drop them — otherwise the next request pays a
           // full TLS reconnect to the (distant) database before it can even query.
@@ -65,6 +81,7 @@ const TRANSIENT_DB_ERRORS = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]);
         return pool;
       },
     },
+    DbKeepWarmService,
   ],
   exports: [DB_POOL],
 })
