@@ -35,6 +35,9 @@ services:
     branch: main
     buildCommand: corepack enable && pnpm install --prod=false && pnpm --filter @workforceiq/shared build && pnpm --filter @workforceiq/api build
     startCommand: pnpm --filter @workforceiq/api start
+    # DB-free liveness route. Lets Render restart the dyno if the app stops
+    # responding, and gives an external keep-warm pinger a cheap target.
+    healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_VERSION
         value: "20"
@@ -98,11 +101,13 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20"
-      # NEXT_PUBLIC_* are baked in at BUILD time — set them before the first build,
-      # and re-deploy the web service if the API URL changes later.
-      - key: NEXT_PUBLIC_API_URL
-        sync: false              # https://workforceiq-api.onrender.com/api/v1
-      - key: NEXT_PUBLIC_WS_URL
-        sync: false              # wss://workforceiq-api.onrender.com
+      # The web server proxies every /api/* call to the API (see next.config.mjs),
+      # so the browser stays same-origin (no CORS) and there is NO build-time API
+      # URL to misconfigure. Point this at the API service's public URL. If Render
+      # gave the API a suffixed hostname, set the real value here and redeploy web.
+      # (If left unset, next.config.mjs falls back to a hard-coded default — set it
+      #  explicitly so a rename can't silently break the proxy.)
+      - key: API_ORIGIN
+        sync: false              # e.g. https://bookends-shiftly.onrender.com
       - key: NEXT_PUBLIC_APP_NAME
         value: WorkforceIQ

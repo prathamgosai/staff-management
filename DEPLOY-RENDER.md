@@ -80,6 +80,37 @@ Open the web URL (e.g. `https://workforceiq-web.onrender.com`) and log in:
 
 ---
 
+## 6. Keep the app awake (fixes the "sometimes broken on open" problem)
+
+On the **free** plan a web service **sleeps after ~15 min idle**; the next request
+wakes it and can take **30–120 s**. During that wake-up the browser sees a 502 /
+"can't reach the server", data pages render empty, and login appears to hang — so
+the whole app looks broken until it's warm. The fix is to stop it sleeping.
+
+The API now exposes a DB-free liveness route for exactly this:
+
+```
+GET https://<your-api>.onrender.com/api/v1/health   →  {"status":"ok", ...}
+```
+
+**Set up a free external pinger** (nothing to install) — e.g. [UptimeRobot](https://uptimerobot.com)
+or [cron-job.org](https://cron-job.org). Add **two HTTP monitors**, each every **5–10 min**:
+
+| Monitor | URL |
+|---------|-----|
+| API  | `https://bookends-shiftly.onrender.com/api/v1/health` |
+| Web  | `https://staff-management-yf21.onrender.com/` |
+
+> Replace those hosts with your actual service URLs if they differ.
+
+**Caveat — free instance-hours:** keeping a service pinged 24/7 means it runs ~730
+h/month. Render's free tier budget is limited, so pinging **both** services around
+the clock can exhaust it. Options: ping only during the hours people actually use
+the app (most pingers support a schedule), or upgrade the busier service (the API)
+to a paid Starter instance (~$7/mo) so it never sleeps at all.
+
+---
+
 ## Notes & caveats (Render free tier)
 
 - **Cold starts**: free web services sleep after ~15 min idle; the first request then takes ~30–60 s to wake. Upgrade to a paid instance to keep them warm.

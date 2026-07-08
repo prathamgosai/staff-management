@@ -80,9 +80,14 @@ export default function LoginPage() {
       if (!response) {
         // No HTTP response reached the browser at all — the API is unreachable or
         // the browser blocked the response (CORS). Guide the user instead of
-        // implying the password is wrong.
+        // implying the password is wrong. In production the API runs on a free tier
+        // that sleeps after ~15 min idle and takes up to a minute to wake, so the
+        // first attempt after a while fails exactly like this; the localhost/port
+        // hint only makes sense in local development.
         setError(
-          "Can't reach the server. Check that the API is running on port 4000, and open the app at http://localhost:3000 (not 127.0.0.1 or a LAN IP).",
+          process.env.NODE_ENV === "production"
+            ? "Can't reach the server — it may be waking up from sleep (this can take up to a minute on the first visit). Please wait a moment and try again."
+            : "Can't reach the server. Check that the API is running on port 4000, and open the app at http://localhost:3000 (not 127.0.0.1 or a LAN IP).",
         );
       } else if (status === 403) {
         setIsPending(true);
