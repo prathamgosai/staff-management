@@ -99,6 +99,11 @@ export default function LoginPage() {
         setError("Too many sign-in attempts. Please wait about a minute and try again.");
       } else if (status === 401) {
         setError("Incorrect Employee ID / email or password.");
+      } else if (status === 502 || status === 503 || status === 504) {
+        // Render's proxy returns a gateway error while the free-tier API cold-starts
+        // (up to ~1 min after idle). Distinguish it from a real failure / wrong
+        // password so the user waits instead of assuming the app is broken.
+        setError("The server is starting up — this can take up to a minute on the first visit. Please wait a moment, then try again.");
       } else {
         setError(message ?? "Login failed. Please try again.");
       }
