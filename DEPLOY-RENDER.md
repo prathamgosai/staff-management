@@ -1,10 +1,20 @@
 # Deploying WorkforceIQ to Render
 
-This deploys four resources from the [`render.yaml`](render.yaml) blueprint:
+> ⚠️ **DB topology correction.** The database is **external Supabase** (Sydney,
+> session pooler) — there is **no** Render-managed Postgres, despite some older
+> wording below. The authoritative DB reference is
+> **[docs/SUPABASE-WIRING.md](docs/SUPABASE-WIRING.md)**. Also, the live services
+> are named **`bookends-shiftly`** (API) and **`staff-management-yf21`** (web),
+> not the `workforceiq-*` names in `render.yaml` — that blueprint is illustrative,
+> and re-applying it as-is would create *new* orphan services. Live env vars are
+> managed by hand in each service's dashboard.
+
+This blueprint ([`render.yaml`](render.yaml)) provisions **three** Render
+resources; the database is **external Supabase** (not a Render service):
 
 | Resource | Render type | Purpose |
 |----------|-------------|---------|
-| `workforceiq-db` | PostgreSQL 16 | Application database |
+| Database | **External Supabase** (Sydney, session pooler) | App database — see [docs/SUPABASE-WIRING.md](docs/SUPABASE-WIRING.md) |
 | `workforceiq-redis` | Key Value (Redis) | Cache + BullMQ queues |
 | `workforceiq-api` | Web service (Node) | NestJS API |
 | `workforceiq-web` | Web service (Node) | Next.js frontend |
@@ -36,10 +46,10 @@ git push origin main
 
 1. Go to **dashboard.render.com → New + → Blueprint**.
 2. Connect the GitHub repo and select the branch (`main`).
-3. Render reads `render.yaml` and shows the 4 resources. Click **Apply**.
-4. It provisions the DB + Redis, then builds and deploys both web services. First build takes a few minutes.
+3. Render reads `render.yaml` and shows the 3 resources (Redis + API + web). Click **Apply**.
+4. It provisions Redis, then builds and deploys both web services. First build takes a few minutes.
 
-The API's auth secrets (`JWT_SECRET`, `JWT_REFRESH_SECRET`) are auto-generated. The DB and Redis connection vars are wired automatically.
+The API's auth secrets (`JWT_SECRET`, `JWT_REFRESH_SECRET`) are auto-generated and Redis is wired automatically. The **Supabase** connection vars (`DB_HOST/PORT/NAME/USER/SSL`) are in `render.yaml`; you set `DB_PASSWORD` by hand in the API service's Environment (`sync:false`). See [docs/SUPABASE-WIRING.md](docs/SUPABASE-WIRING.md).
 
 ## 3. Confirm the public URLs match
 
@@ -50,27 +60,27 @@ The blueprint hard-codes the two cross-service URLs to the predicted hostnames:
 
 If Render assigned different hostnames (it appends a suffix when a name is taken), open each service → **Environment**, correct those two values, and trigger a redeploy. `NEXT_PUBLIC_API_URL` is baked in at build time, so the **web** service must rebuild after changing it.
 
-## 4. Load the database (one time)
+## 4. Database — already provisioned on Supabase
 
-The managed DB starts empty. Load the real data from the local dump (`.services/wfiq_full_clean.sql`, ~1 MB) using the **External** connection string from the `workforceiq-db` dashboard page (Render → workforceiq-db → "External Database URL").
+There is **no database step in this deploy**: the app uses an **external Supabase**
+project (Sydney), already provisioned and loaded (data migrated 2026‑07‑03, all
+33 tables). You do **not** create or load a Render Postgres.
 
-```bash
-cd "staff management project 1"
-export DB_URL='postgresql://workforceiq_user:PASSWORD@HOST.singapore-postgres.render.com/workforceiq?sslmode=require'
+What you *do* need for the API service (Render dashboard → `bookends-shiftly` →
+Environment): set **`DB_PASSWORD`** to the current Supabase database password
+(`sync:false` — never committed). The other `DB_*` vars are already in
+`render.yaml`. Full reference, including why each value is what it is:
+**[docs/SUPABASE-WIRING.md](docs/SUPABASE-WIRING.md)**.
 
-# extensions the schema needs (TimescaleDB is NOT required)
-psql "$DB_URL" -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"; CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS unaccent;'
+To run SQL against the DB (e.g. an admin password reset, ad‑hoc queries), use the
+**Supabase dashboard → SQL Editor** — no local `psql` needed.
 
-# load schema + data
-psql "$DB_URL" -f .services/wfiq_full_clean.sql
-
-# sanity check
-psql "$DB_URL" -c 'SELECT count(*) FROM users;'   # expect 262
-```
-
-Use the Homebrew `psql` if your default one is older: `/opt/homebrew/opt/postgresql@16/bin/psql`.
-
-> Prefer a clean install over real data? Load `assets/db/001_schema.sql`, `002_seed.sql`, then `003_real_staff.sql` instead of the dump.
+> **Migrations / bulk load** (rarely needed — the DB is already populated): the
+> schema/data files are in `assets/db/` (`001_schema.sql`, `002_seed.sql`,
+> `003_real_staff.sql`, …). For a `pg_dump`/`pg_restore`‑style bulk load you must
+> use the **direct** host `db.<ref>.supabase.co:5432` (the pooler can't stream a
+> COPY dump) — note that host is **IPv6‑only**, so run it from an IPv6‑capable
+> machine, not from Render or an IPv4‑only box.
 
 ## 5. Sign in
 
@@ -114,9 +124,9 @@ to a paid Starter instance (~$7/mo) so it never sleeps at all.
 ## Notes & caveats (Render free tier)
 
 - **Cold starts**: free web services sleep after ~15 min idle; the first request then takes ~30–60 s to wake. Upgrade to a paid instance to keep them warm.
-- **Free Postgres expires after 30 days** and is limited to 1 GB. Upgrade before then to avoid losing the database, or take backups (`pg_dump "$DB_URL" > backup.sql`).
-- **Region**: all four resources are pinned to `singapore` so the API reaches the DB/Redis over Render's private network. Keep them in the same region.
+- **Database is external Supabase** (not Render) — the "free Postgres expires after 30 days" limit does **not** apply. Watch Supabase's own free‑tier limits/pausing instead, and back up via Supabase.
+- **Region**: the Render services (API, web, Redis) are pinned to `singapore`; **Redis** is co‑located on Render's private network, but the **Supabase DB is in Sydney**, so every DB round‑trip is cross‑region (~90–100 ms). See [docs/SUPABASE-WIRING.md](docs/SUPABASE-WIRING.md) for the latency note and the co‑location recommendation.
 - **TimescaleDB**: not available on Render Postgres, and not needed — it only powered the "PAX Prediction (coming soon)" feature, and `001_schema.sql` enables it optionally.
 - **MinIO / object storage**: not used — profile photos are stored in the database.
 - **ML service** (`apps/ml-service`): optional Python FastAPI, not deployed here (`ENABLE_ML_FORECASTING=false`). Add it later as a separate Render service if needed.
-- **If the API can't reach Postgres** with an SSL error, the `DB_SSL=true` setting (uses `rejectUnauthorized: false`) covers Render's certs; if you ever switch to a non-SSL endpoint, set `DB_SSL=false`.
+- **If the API can't reach Postgres** with an SSL error, the `DB_SSL=true` setting (uses `rejectUnauthorized: false`) accepts **Supabase's** pooler cert without strict verification; if you ever point at a non‑SSL endpoint, set `DB_SSL=false`.
