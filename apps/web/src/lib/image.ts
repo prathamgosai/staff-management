@@ -16,19 +16,8 @@ export async function fileToAvatarDataUrl(
     throw new Error("Please choose an image file.");
   }
 
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error("Could not read that file."));
-    reader.readAsDataURL(file);
-  });
-
-  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("That image could not be loaded."));
-    image.src = dataUrl;
-  });
+  const dataUrl = await readAsDataUrl(file);
+  const img = await loadImage(dataUrl);
 
   // Center-crop to a square so the avatar always fills its circle/rounded frame.
   const side = Math.min(img.width, img.height);
@@ -46,4 +35,73 @@ export async function fileToAvatarDataUrl(
   // which case fall back to JPEG.
   const webp = canvas.toDataURL("image/webp", quality);
   return webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/jpeg", quality);
+}
+
+/* ─── Document upload prep ─────────────────────────────────────────────────
+ * Unlike the avatar helper (which square-crops), documents must keep their full
+ * frame and aspect ratio — a cropped ID scan is useless. Images are downscaled so
+ * the longest edge is ≤ maxEdge (never upscaled) and re-encoded WebP/JPEG; PDFs pass
+ * through untouched. Returns the data URL + its real MIME type for the API's
+ * mime_type column (the API strips the data-URL prefix before storing).
+ */
+export const DOCUMENT_ACCEPT = "application/pdf,image/jpeg,image/png,image/webp";
+const MAX_DOC_BYTES = 2 * 1024 * 1024; // mirrors the API's 2 MB decoded cap
+
+export interface PreparedDocument {
+  contentBase64: string; // full data URL; the API keeps only the base64 payload
+  mimeType: string;
+  fileName: string;
+}
+
+export async function prepareDocumentForUpload(
+  file: File,
+  maxEdge = 1600,
+  quality = 0.8,
+): Promise<PreparedDocument> {
+  if (file.type === "application/pdf") {
+    if (file.size > MAX_DOC_BYTES) {
+      throw new Error("This PDF is over 2 MB. Please upload a smaller scan.");
+    }
+    return { contentBase64: await readAsDataUrl(file), mimeType: "application/pdf", fileName: file.name };
+  }
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Please choose a PDF or an image (JPEG, PNG or WebP).");
+  }
+
+  const img = await loadImage(await readAsDataUrl(file));
+  // Preserve aspect ratio; only ever shrink to fit maxEdge on the longest side.
+  const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Image processing isn't supported in this browser.");
+  ctx.drawImage(img, 0, 0, w, h);
+
+  const webp = canvas.toDataURL("image/webp", quality);
+  const isWebp = webp.startsWith("data:image/webp");
+  const dataUrl = isWebp ? webp : canvas.toDataURL("image/jpeg", quality);
+  return { contentBase64: dataUrl, mimeType: isWebp ? "image/webp" : "image/jpeg", fileName: file.name };
+}
+
+/* ─── shared helpers ─────────────────────────────────────────────────────── */
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("Could not read that file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("That image could not be loaded."));
+    image.src = src;
+  });
 }

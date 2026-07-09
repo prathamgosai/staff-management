@@ -5,6 +5,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "@/components/ui/sonner";
 import { fileToAvatarDataUrl } from "@/lib/image";
+import { DocumentsCard } from "@/components/staff/documents-card";
+import { hasPermission } from "@/lib/permissions";
 import { useAuthStore } from "@/store/auth.store";
 import { isAdminRole } from "@workforceiq/shared";
 import Link from "next/link";
@@ -392,6 +394,7 @@ export default function StaffDetailPage() {
   const canEditProfile = isAdmin || isSelf; // super admin edits anyone; others edit only their own profile
   // Kiosk PIN is a manager action (attendance:write); super_admin always allowed.
   const canManageKiosk = currentUser?.role === "super_admin" || !!currentUser?.permissions?.includes("attendance:write");
+  const canManageDocuments = hasPermission(currentUser, "staff:documents");
 
   if (isLoading) {
     return (
@@ -523,6 +526,11 @@ export default function StaffDetailPage() {
           {/* Kiosk PIN (managers only) */}
           {canManageKiosk && <KioskPinCard staffId={id} />}
         </div>
+
+        {/* Documents (admin/hr — holders of staff:documents) */}
+        {canManageDocuments && (
+          <DocumentsCard source={{ kind: "staff", staffId: id }} canManage />
+        )}
       </div>
     </>
   );

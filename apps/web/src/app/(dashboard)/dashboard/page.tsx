@@ -15,6 +15,8 @@ import Link from "next/link";
 import { toast } from "@/components/ui/sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { CapacityStaffingSection } from "@/components/dashboard/capacity-staffing-section";
+import { RebalancingCard } from "@/components/dashboard/rebalancing-card";
 
 interface OverviewData { totalOutlets: number; activeStaff: number; staffOnLeaveToday: number; presentToday: number; }
 interface TodaySnapshot { staffOnShift: number; pendingLeave: number; pendingApprovals: number; }
@@ -219,6 +221,12 @@ export default function DashboardPage() {
           )}
         </div>
       )}
+
+      {/* Capacity & staffing (visible to allocation:read holders; self-hides otherwise) */}
+      <CapacityStaffingSection />
+
+      {/* Advisory cross-outlet rebalancing */}
+      <RebalancingCard />
 
       {/* Shift legend */}
       <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-2xl px-5 py-4 text-white">

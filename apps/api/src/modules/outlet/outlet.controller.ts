@@ -1,7 +1,10 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, HttpCode, HttpStatus } from "@nestjs/common";
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, HttpCode, HttpStatus } from "@nestjs/common";
 import { ApiTags, ApiBearerAuth, ApiOperation } from "@nestjs/swagger";
 import { OutletService } from "./outlet.service";
+import { CapacityService } from "../capacity/capacity.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { PermissionsGuard } from "../../common/guards/permissions.guard";
+import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "@workforceiq/shared";
 
@@ -10,7 +13,10 @@ import type { AuthUser } from "@workforceiq/shared";
 @UseGuards(JwtAuthGuard)
 @Controller("outlets")
 export class OutletController {
-  constructor(private readonly outletService: OutletService) {}
+  constructor(
+    private readonly outletService: OutletService,
+    private readonly capacityService: CapacityService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: "List all outlets for the tenant" })
@@ -34,9 +40,37 @@ export class OutletController {
     return this.outletService.create(user.tenantId, body);
   }
 
+  @Get("capacity-analysis")
+  @UseGuards(PermissionsGuard)
+  @RequirePermission("allocation:read")
+  @ApiOperation({ summary: "Required vs actual staffing per dine-in outlet (capacity model)" })
+  capacityAnalysis(@CurrentUser() user: AuthUser) {
+    return this.capacityService.getCapacityAnalysis(user);
+  }
+
+  @Get("rebalancing-suggestions")
+  @UseGuards(PermissionsGuard)
+  @RequirePermission("allocation:read")
+  @ApiOperation({ summary: "Advisory cross-outlet staff rebalancing suggestions" })
+  rebalancingSuggestions(@CurrentUser() user: AuthUser) {
+    return this.capacityService.getRebalancingSuggestions(user);
+  }
+
   @Get(":id")
   findOne(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.outletService.findOne(user.tenantId, id);
+  }
+
+  @Put(":id/capacity")
+  @UseGuards(PermissionsGuard)
+  @RequirePermission("outlet:write")
+  @ApiOperation({ summary: "Set an outlet's table count and max pax (capacity model)" })
+  updateCapacity(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body() body: { totalTables?: number | null; maxPax?: number | null },
+  ) {
+    return this.outletService.updateCapacity(user, id, body);
   }
 
   @Delete(":id")

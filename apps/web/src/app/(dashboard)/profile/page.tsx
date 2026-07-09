@@ -9,6 +9,7 @@ import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth.store";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LocaleSwitcher } from "@/components/i18n/locale-switcher";
+import { DocumentsCard } from "@/components/staff/documents-card";
 
 interface Profile {
   name: string;
@@ -81,6 +82,9 @@ export default function ProfilePage() {
           </>
         )}
       </section>
+
+      {/* Own documents — read-only (upload/delete is admin/hr only). */}
+      <DocumentsCard source={{ kind: "me" }} canManage={false} />
 
       <section className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
         <LinkRow href="/change-password" icon={KeyRound} label={t("changePassword")} />

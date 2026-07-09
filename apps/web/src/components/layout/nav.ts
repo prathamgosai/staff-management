@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Users, Building2, Calendar, Clock,
-  CalendarOff, ArrowLeftRight, BarChart3,
-  ShieldCheck, KeyRound, UserCog, Bell, Settings, type LucideIcon,
+  CalendarOff, ArrowLeftRight, BarChart3, Calculator, Upload,
+  ShieldCheck, KeyRound, UserCog, Bell, Settings, Sliders, type LucideIcon,
 } from "lucide-react";
 
 export type NavItem = {
@@ -50,7 +50,10 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Insights",
-    items: [{ href: "/reports", label: "Reports", icon: BarChart3 }],
+    items: [
+      { href: "/reports", label: "Reports", icon: BarChart3 },
+      { href: "/planning/new-outlet", label: "New-outlet planner", icon: Calculator, perm: "allocation:read" },
+    ],
   },
   {
     label: "Administration",
@@ -63,6 +66,8 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Settings",
     items: [
+      { href: "/settings/staffing-ratios", label: "Staffing ratios", icon: Sliders, perm: "allocation:read" },
+      { href: "/planning/pax-import", label: "Import pax history", icon: Upload, perm: "outlet:write" },
       { href: "/settings/notifications", label: "Notification settings", icon: Settings },
     ],
   },

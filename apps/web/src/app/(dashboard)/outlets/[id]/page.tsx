@@ -1,14 +1,19 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import {
   ArrowLeft, MapPin, Users, Building2, Coffee, Utensils,
   ShoppingBag, Truck, Wine, MoreHorizontal, Phone, Hash,
+  Table2, Armchair, Pencil, Check, X, Loader2,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useState } from "react";
+import { toast } from "@/components/ui/sonner";
+import { useAuthStore } from "@/store/auth.store";
+import { hasPermission } from "@/lib/permissions";
 import { KioskDevicesSection } from "@/components/kiosk/kiosk-devices-section";
 
 /* ─── types ──────────────────────────────────────────────────────────── */
@@ -18,6 +23,8 @@ interface OutletDetail {
   address: { city?: string; state?: string; country?: string };
   contact: { phone?: string; email?: string };
   seating_capacity?: number;
+  total_tables?: number | null;
+  max_pax?: number | null;
 }
 
 interface StaffRow {
@@ -149,10 +156,116 @@ function DeptSection({ dept, members }: { dept: string; members: StaffRow[] }) {
   );
 }
 
+/* ─── Capacity card ───────────────────────────────────────────────────── */
+function OutletCapacityCard({ outletId, totalTables, maxPax, canEdit }: {
+  outletId: string;
+  totalTables: number | null | undefined;
+  maxPax: number | null | undefined;
+  canEdit: boolean;
+}) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [tables, setTables] = useState("");
+  const [pax, setPax] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: () => apiClient.put(`/outlets/${outletId}/capacity`, {
+      totalTables: tables.trim() === "" ? null : Number(tables),
+      maxPax: pax.trim() === "" ? null : Number(pax),
+    }),
+    onSuccess: () => {
+      toast.success("Capacity updated.");
+      qc.invalidateQueries({ queryKey: ["outlet", outletId] });
+      setEditing(false);
+      setErr(null);
+    },
+    onError: (e) => {
+      const m = (e as { response?: { data?: { message?: string | string[] } } }).response?.data?.message;
+      setErr(Array.isArray(m) ? m.join(", ") : m ?? "Could not save.");
+    },
+  });
+
+  function startEdit() {
+    setTables(totalTables != null ? String(totalTables) : "");
+    setPax(maxPax != null ? String(maxPax) : "");
+    setErr(null);
+    setEditing(true);
+  }
+
+  const paxPerTable = totalTables && maxPax && totalTables > 0 ? (maxPax / totalTables).toFixed(1) : null;
+  const hasCapacity = totalTables != null || maxPax != null;
+
+  return (
+    <div className="bg-card rounded-2xl border border-border p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Capacity</h3>
+        {canEdit && !editing && (
+          <button onClick={startEdit} className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition">
+            <Pencil size={11} /> Edit
+          </button>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Tables</label>
+              <input value={tables} onChange={(e) => setTables(e.target.value.replace(/[^\d]/g, ""))} inputMode="numeric" placeholder="—"
+                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Max pax</label>
+              <input value={pax} onChange={(e) => setPax(e.target.value.replace(/[^\d]/g, ""))} inputMode="numeric" placeholder="—"
+                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+          {err && <p className="text-xs text-red-600">{err}</p>}
+          <div className="flex gap-2">
+            <button onClick={() => save.mutate()} disabled={save.isPending}
+              className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-xl transition">
+              {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save
+            </button>
+            <button onClick={() => { setEditing(false); setErr(null); }}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl border border-border hover:bg-muted transition">
+              <X size={14} /> Cancel
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">Leave blank to exclude this outlet from the capacity model.</p>
+        </div>
+      ) : !hasCapacity ? (
+        <p className="text-sm text-muted-foreground py-2">
+          No capacity set{canEdit ? " — add tables and max pax to include this outlet in the staffing model." : "."}
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="bg-muted rounded-xl px-4 py-3">
+            <p className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><Table2 size={12} /> Tables</p>
+            <p className="text-2xl font-bold text-foreground mt-0.5">{totalTables ?? "—"}</p>
+          </div>
+          <div className="bg-muted rounded-xl px-4 py-3">
+            <p className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><Armchair size={12} /> Max pax</p>
+            <p className="text-2xl font-bold text-foreground mt-0.5">{maxPax ?? "—"}</p>
+          </div>
+          {paxPerTable && (
+            <div className="bg-muted rounded-xl px-4 py-3">
+              <p className="text-xs text-muted-foreground font-medium">Pax / table</p>
+              <p className="text-2xl font-bold text-foreground mt-0.5">{paxPerTable}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Main Page ───────────────────────────────────────────────────────── */
 export default function OutletDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const currentUser = useAuthStore((s) => s.user);
+  const canEditCapacity = hasPermission(currentUser, "outlet:write");
 
   const { data: outletRes, isLoading: outletLoading } = useQuery<{ data: OutletDetail }>({
     queryKey: ["outlet", id],
@@ -280,6 +393,16 @@ export default function OutletDetailPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Capacity (tables + max pax — drives the staffing model) */}
+      {outlet && (
+        <OutletCapacityCard
+          outletId={id}
+          totalTables={outlet.total_tables}
+          maxPax={outlet.max_pax}
+          canEdit={canEditCapacity}
+        />
       )}
 
       {/* Kiosk devices (managers only; the component self-hides otherwise) */}
