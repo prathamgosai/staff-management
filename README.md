@@ -5,7 +5,7 @@ A staff management platform for multi-outlet operations — scheduling, attendan
 ## Stack
 
 - **Web** (`apps/web`) — Next.js 14 (App Router), React 18, TanStack Query, Zustand, Radix UI
-- **API** (`apps/api`) — NestJS 10, PostgreSQL 16, Redis + BullMQ
+- **API** (`apps/api`) — NestJS 10, PostgreSQL 16, Redis + Bull
 - **ML service** (`apps/ml-service`) — Python (FastAPI) for demand forecasting
 - **Shared** (`packages/shared`) — types and utilities shared across apps
 
@@ -15,35 +15,38 @@ API feature modules: auth, staff, staff-documents, outlet, capacity, department,
 
 ## Prerequisites
 
-- Node.js >= 20, pnpm >= 9
-- PostgreSQL 16
-- Redis
+- **Node.js 20** — the project requires `>=20 <23`; `pnpm dev` is blocked on Node 23/24 (Next 14 dev is flaky there)
+- pnpm >= 9
+- PostgreSQL 16 — hosted (Supabase) or local
+- Redis — for Bull queues (a bundled Windows Redis auto-starts on `pnpm dev`)
 
 ## Local development
 
-```bash
-cd "staff management project 1"
+> Windows-first, no Docker. The database is **Postgres 16 hosted on Supabase** (see
+> `.env.example`); Redis is required for the Bull queues.
 
-# 1. Start Postgres 16 on port 5433 (Redis usually auto-starts)
-/opt/homebrew/opt/postgresql@16/bin/pg_ctl -D /opt/homebrew/var/postgresql@16 \
-  -o "-p 5433" -l /opt/homebrew/var/log/pg16-5433.log start
+```powershell
+# 1. Create your env file from the template, then fill it in
+copy .env.example .env
+#   • DB_*     -> your Supabase "Session pooler" host/user/password (DB_SSL=true),
+#                 or a local Postgres (DB_HOST=localhost, DB_SSL=false)
+#   • JWT_SECRET / JWT_REFRESH_SECRET -> unique random values (see .env.example comments)
 
-# 2. Install dependencies
+# 2. Install dependencies (on Node 20 — NOT 23/24)
 pnpm install
 
-# 3. Run database migrations and seed data
-pnpm db:migrate
-pnpm db:seed
+# 3. Run everything from the repo root — API :4000 (ts-node) + web :3000
+pnpm dev
+#   ensure-redis.js auto-starts a bundled Redis on Windows; free-port clears :4000.
 ```
 
-Then start the apps in two terminals:
+Open http://localhost:3000. To run a single app: `pnpm --filter @workforceiq/api dev`
+or `pnpm --filter @workforceiq/web dev`.
 
-```bash
-cd apps/api && pnpm dev      # http://localhost:4000
-cd apps/web && pnpm dev      # http://localhost:3000
-```
-
-You can also run everything from the repo root with `pnpm dev` (Turborepo).
+**Database migrations are applied BY HAND** — `pnpm db:migrate` / `pnpm db:seed` are *not*
+wired (there is no committed runner). Apply the numbered files in `assets/db/` in order via the
+**Supabase SQL editor** (or `psql`); each has a matching `_ROLLBACK.sql`. The hosted DB already
+holds the seed + real-staff data.
 
 ### Default login
 
@@ -61,8 +64,8 @@ Pass: see credential manager — never commit credentials
 | `pnpm lint` | Lint all packages |
 | `pnpm test` | Run tests |
 | `pnpm typecheck` | Type-check all packages |
-| `pnpm db:migrate` | Run API database migrations |
-| `pnpm db:seed` | Seed the database |
+| `pnpm db:migrate` | ⚠️ Not wired (no runner) — apply `assets/db/*.sql` by hand, in order |
+| `pnpm db:seed` | ⚠️ Not wired — seed/real-staff data is loaded via the numbered SQL files |
 
 ## Deployment
 
