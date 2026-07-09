@@ -1,7 +1,7 @@
 import { Injectable, Inject, Logger } from "@nestjs/common";
 import { Interval } from "@nestjs/schedule";
 import type { Pool } from "pg";
-import { DB_POOL } from "./database.module";
+import { DB_POOL } from "./database.constants";
 
 /**
  * Keeps ONE database socket warm to the cross-region (Sydney) Supabase pooler.

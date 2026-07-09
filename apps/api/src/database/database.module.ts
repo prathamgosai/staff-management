@@ -2,8 +2,9 @@ import { Module, Global, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Pool } from "pg";
 import { DbKeepWarmService } from "./db-keepwarm.service";
+import { DB_POOL } from "./database.constants";
 
-export const DB_POOL = "DB_POOL";
+export { DB_POOL };
 
 // Connect-time network errors to the remote (Sydney) pooler. These fire BEFORE the
 // query reaches the server, so retrying is safe and never double-executes a write.
