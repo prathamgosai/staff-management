@@ -2,6 +2,8 @@ import { Controller, Get, Post, Body, Query, UseGuards } from "@nestjs/common";
 import { ApiTags, ApiBearerAuth, ApiOperation } from "@nestjs/swagger";
 import { ForecastingService } from "./forecasting.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { PermissionsGuard } from "../../common/guards/permissions.guard";
+import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "@workforceiq/shared";
 
@@ -62,5 +64,17 @@ export class ForecastingController {
     @Query("date") date: string,
   ) {
     return this.forecastingService.getHeadcountRecommendation(outletId, date);
+  }
+
+  @Get("staffing-suggestions")
+  @UseGuards(PermissionsGuard)
+  @RequirePermission("forecast:read")
+  @ApiOperation({ summary: "Phase-1 day-of-week forecast: suggested vs rostered per day" })
+  staffingSuggestions(
+    @CurrentUser() user: AuthUser,
+    @Query("outletId") outletId: string,
+    @Query("weekStart") weekStart: string,
+  ) {
+    return this.forecastingService.getStaffingSuggestions(user, outletId, weekStart);
   }
 }

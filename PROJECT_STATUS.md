@@ -2,7 +2,7 @@
 
 > AI-Powered Restaurant Workforce & Operations Planning System
 > Maintained status document. Last updated: **2026-07-07**.
-> Snapshot: server-side outlet scoping + automatic role-based notifications + installable PWA, plus employee self-service (My Day, mobile tabs, magic-link week), kiosk clock-in, i18n (en/gu/hi), real SendGrid email, and repo-wide lint/hot-reload DX — Tasks 0–11 on branch `perf/login-latency`. **Pending manual DB migrations: `013`, `014`, `015` (see §5). `012_notifications` was applied to prod on 2026-07-07.**
+> Snapshot: server-side outlet scoping + automatic role-based notifications + installable PWA, plus employee self-service (My Day, mobile tabs, magic-link week), kiosk clock-in, i18n (en/gu/hi), real SendGrid email, and repo-wide lint/hot-reload DX — Tasks 0–11 on branch `perf/login-latency`. **Plus (2026-07-09) capacity planning, staff-documents vault, and a Phase-1 demand forecast** — see §4/§5/§8-H. **Pending manual DB migrations: `013`–`018` (see §5 & §8). `012_notifications` was applied to prod on 2026-07-07.**
 
 ---
 
@@ -34,13 +34,13 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 ## 3. Architecture map
 
 **API modules** (`apps/api/src/modules/`):
-`auth`, `staff`, `outlet`, `department`, `scheduling`, `attendance`, `leave`, `forecasting`, `allocation`, `notification`, `dashboard`, `roles`
+`auth`, `staff`, `staff-documents`, `outlet`, `capacity`, `department`, `scheduling`, `attendance`, `leave`, `forecasting`, `allocation`, `notification`, `dashboard`, `roles`, `me`, `kiosk`, `public`, `health`
 
 **Web pages** (`apps/web/src/app/(dashboard)/`):
-`dashboard`, `staff`, `outlets`, `scheduling`, `attendance`, `leave`, `allocation`, `reports`, `accounts`, `approvals`, `account-types`
+`dashboard`, `staff`, `outlets`, `scheduling`, `attendance`, `leave`, `allocation`, `reports`, `accounts`, `approvals`, `account-types`, `settings/staffing-ratios`, `planning/new-outlet`, `planning/pax-import`
 
 **DB migrations** (`assets/db/`, numbered, most with `_ROLLBACK`):
-`001_schema` → `011_staff_shift_overrides` (11 migrations + seed + real-staff data)
+`001_schema` → `018_tenant_settings` (+ seed + real-staff data)
 
 ---
 
@@ -80,6 +80,14 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 | 30 | _(Task 10)_ | Real email provider — `EmailProvider` now sends via the SendGrid v3 HTTPS API when `EMAIL_PROVIDER=sendgrid` (`SENDGRID_API_KEY` + verified `EMAIL_FROM`), plain-text + escaped-HTML parts; still defaults to `mock` (logs only). Never throws — a misconfig/failure returns `success:false` so the dispatch worker degrades to in-app, exactly like WhatsApp. Sits behind the existing Bull dispatch worker (WhatsApp → email → in-app fallback) with no worker changes |
 | 31 | _(Task 11)_ | DX — repo-wide **ESLint flat config** (root `eslint.config.mjs` + `eslint.base.mjs`, per-package configs for api/shared/web with the Next + react-hooks plugins), run via a tiny cross-platform `scripts/eslint.mjs` that loads ESLint's **flat** engine (`loadESLint({useFlatConfig})`) on 8.57 without `cross-env`; lenient first pass (legacy → warnings) so `pnpm lint` is green across all workspaces via the existing Turbo pipeline. API `dev` stays on the reliable **ts-node** runner (an opt-in `dev:watch` = `nest start --watch` exists but can crash with `Cannot find module dist/main` on Node 24/Windows due to `incremental`+`deleteOutDir` — see §5) |
 | 32 | _(review)_ | Adversarial multi-agent review of the whole Tasks 0–11 changeset (5 dimensions × per-finding verification) → **8 confirmed defects fixed**: kiosk attendance bucketed by UTC not local date (`toLocalDateStr`, HIGH), kiosk double clock-in → `UNIQUE(staff_id,date)` 500 (any-record guard), kiosk PIN brute-force (per-device/employee lockout), sign-out didn't clear the in-memory React Query cache (`AuthCacheReset`) or the SW `/api` cache (logout postMessage → SW purge), and the Task 11 lint runner used ESLint's *legacy* engine (a silent no-op — now the real flat engine) with an over-broad `**/public/**` ignore that hid the API `PublicModule`. 3 findings verified as false-positives and dropped |
+| 33 | _(Capacity 1)_ | **Staff documents** — migration `016` reconciles the empty `staff_documents` scaffold into an in-DB base64 vault (**Aadhaar masked to last-4 server-side**; content never in list SQL); new `staff:documents` perm (admin/hr); module: list-meta / on-demand content / 2 MB upload (413 beyond, mime-checked) / delete, tenant + outlet-scoped, **owner-or-permission reads**; Documents card on `/staff/[id]` + read-only `/profile` (`/me/documents`); aspect-preserving doc downscale util |
+| 34 | _(Capacity 2)_ | **Outlet capacity + ratios** — migration `017`: `outlets.total_tables/max_pax`, `post_category_map` (seeded from the **13 real positions**), per-category `staffing_ratios`, 6 dine-in outlets seeded by code (guarded); `PUT /outlets/:id/capacity` (`outlet:write`+scope); `GET/PUT /settings/staffing-ratios` (`allocation:read`/`roles:manage`); Capacity card on the outlet page + `/settings/staffing-ratios` page |
+| 35 | _(Capacity 3)_ | **Capacity analysis** — `GET /outlets/capacity-analysis` (`allocation:read`, scoped): required vs actual vs variance per dine-in outlet + `totals`/`supportUnits`/`activeStaffTotal`. Verified against live data (**248 active / 173 dine-in / 75 support**, per-outlet exact) |
+| 36 | _(Capacity 4)_ | **Dashboard "Capacity & Staffing"** — 3 stat cards (active / required / surplus-shortage) + per-outlet table + **dynamically-imported** Recharts chart (recharts stays out of employee-route chunks) |
+| 37 | _(Capacity 5)_ | **New-outlet planner** — `POST /planning/staffing-projection` (`allocation:read`): pax or tables→pax @5.3/table, per-category required, comparable outlets (±20% pax), Expansion-pool coverage; `/planning/new-outlet` page. Math verified: 100 pax → 35 staff |
+| 38 | _(Capacity 6)_ | **Pax history import** — reuses `pax_data` (daily rows @ noon key); `POST /pax-history/import` (`outlet:write`, per-row scoped upsert, imported/updated via `xmax`) + `GET /pax-history` (`forecast:read`); `/planning/pax-import` screen — CSV native + `.xlsx` via SheetJS (dynamically imported), **revenue→covers converter**, validated preview, result summary |
+| 39 | _(Capacity 7)_ | **Phase-1 forecast + rebalancing** — migration `018` (`tenant_settings`, `covers_per_on_duty_staff`=10); `GET /forecasting/staffing-suggestions` (day-of-week recency-weighted 4/3/2/1, suggest vs **rostered** via scheduling coverage, `forecast:read`); `GET /outlets/rebalancing-suggestions` (advisory greedy pairing); dashboard rebalancing card + scheduling forecast strip. Pure TS/SQL — no ML |
+| 40 | _(review)_ | Adversarial review of the capacity/documents backend → **1 confirmed fix**: `staff-documents` scope-bypass on NULL-`current_outlet_id` staff (a scoped `staff:documents` holder could reach unassigned staff) — now fails closed (404), matching `assertStaffInScope` |
 
 ### Feature areas delivered
 
@@ -130,6 +138,12 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 
 **PWA (Task 6)** — service worker (cache `v2`) now caches the app shell/navigations and does network-first-with-fallback for `/api/*` GETs; a dismissible install hint captures `beforeinstallprompt` (Android/desktop) and shows Add-to-Home-Screen instructions on iOS. (Manifest + icons already shipped in `0063a1e`.)
 
+**Capacity planning, staff documents & Phase-1 demand forecast (2026-07-09)**
+- **Staff documents** — per-staff document vault (Aadhaar/PAN/passbook/contract…); admin/hr upload/view/delete (`staff:documents`), employees see their own read-only. Aadhaar persisted **masked to last-4** (DPDP); file bytes are base64 in the DB and **never in list responses**. Migration `016`.
+- **Outlet capacity model** — tables + max pax per dine-in outlet; per-category `staffing_ratios` + `post_category_map` (built from the real 13 positions); `required = max(min_staff, ⌈max_pax ÷ pax_per_staff⌉)`. `GET /outlets/capacity-analysis` (required vs actual vs variance, scoped) drives the dashboard **Capacity & Staffing** section (stat cards + per-outlet table + lazy Recharts chart). Migration `017`.
+- **New-outlet planner** — `/planning/new-outlet` projects per-category staff for a planned pax/tables, with comparable outlets and Expansion-pool coverage.
+- **Pax import + Phase-1 forecast** — import daily covers (`/planning/pax-import`; CSV/xlsx; revenue→covers converter) into `pax_data`; `GET /forecasting/staffing-suggestions` returns a day-of-week recency-weighted forecast with suggested vs rostered staff; advisory cross-outlet rebalancing card on the dashboard. Everything is **advisory** — no auto-transfers, no auto-roster changes, no notifications, **no ML** (Phase-1 = pure TS/SQL). Migration `018`.
+
 ---
 
 ## 5. Known gaps / open items
@@ -147,6 +161,12 @@ A staff / workforce management platform for a multi-outlet restaurant group (Boo
 - **`packages/shared` exports gotcha** — `exports.require` points to `dist/index.cjs` which tsup doesn't emit (harmless in dev, would break a prod `nest build`).
 - **Response shape** — hand-returned `{ data: T }`, no global interceptor (matches existing convention, not the idealized briefing).
 - **Forecasting Phase 2** (Prophet/XGBoost) is stubbed only.
+- **Capacity/documents/forecast migrations pending (`016`–`018`)** — apply in order **after** `013`–`015` (see §8-H). Until applied, the capacity/ratios/forecast endpoints error and their UI shows a neutral "not set up yet" state.
+- **Capacity ratios are heuristics, not labour-law compliance** — the seeded defaults reproduce today's group averages. This group has **no Bar/Barista position** and its **Support (ODC) staff sit in a separate unit**, so the default Bar + Support ratios manufacture a phantom dine-in shortage — zero them on the Staffing-ratios page. Position tags are rough (e.g. 42 staff tagged "Outlet Manager"), which blurs per-category variance until posts are corrected.
+- **Pax forecast is Phase-1 only** — day-of-week recency-weighted average of imported covers (no ML); stays dark until ~2 months of covers are imported. ⚠️ The owner's restaurant reports are **revenue (₹), not covers** — use the import screen's revenue→covers converter (Net Sales ÷ avg spend/cover) or supply real cover counts.
+- **Aadhaar stored masked-only by design** — only the last-4 (`XXXX-XXXX-1234`) + the scan are persisted; full Aadhaar numbers are out of scope (a separate DPDP/KYC decision).
+- **No Expansion pool** — the planner's Expansion-pool coverage reads 0 until an outlet named "Expansion" (a new-openings bench) exists.
+- **`xlsx` (SheetJS) added to `apps/web`** — used only by the pax-import screen and **dynamically imported**, so it never lands in other route chunks.
 
 ---
 
@@ -211,6 +231,14 @@ Everything below is a human/ops action the code can't do for itself. Do them in 
 - [ ] Use **Node 20** (`.nvmrc`; Next 14.2 dev breaks on Node ≥ 23). `pnpm dev` runs the API via ts-node (reliable); `pnpm lint` / `pnpm typecheck` / `pnpm build` are green.
 - [ ] If `pnpm dev` seems broken, first check for **zombie dev servers** holding ports 3000/4000 (`Get-NetTCPConnection -LocalPort 3000,4000 -State Listen`), kill stray `node` processes, then `pnpm clean` and re-run — a server left running from before a `next.config`/dependency change serves the old config against new code.
 - [ ] After pulling changes to `next.config.mjs` or new dependencies (e.g. next-intl), **fully restart `pnpm dev`** — Next does not hot-reload config or newly-installed packages. If you hit `Cannot find module './xxx.js'` / fallback-chunk 500s (a Node-24 webpack-cache artifact), run **`pnpm clean`** (wipes `.next` + build caches) and restart.
+
+**H. Capacity planning, staff documents & demand forecast (2026-07-09).**
+- [ ] Apply migrations `016_staff_documents` → `017_outlet_capacity` → `018_tenant_settings`, in order, **after** `013`–`015`. Each ships a `_ROLLBACK.sql`. `016` DROP+recreates the empty `staff_documents` scaffold into the base64 vault; `017` seeds ratios + the 6 dine-in outlets' capacity by code (guarded on `max_pax IS NULL`); `018` seeds `covers_per_on_duty_staff=10`.
+- [ ] Before `017`, confirm the outlet name↔code mappings: **Capiche Uni = `CAP-UNI`**, **Aiko "Pal"/Surat = `AIK-SUR`**, **Aiko "Ambli"/Ahmedabad = `AIK-AHM`** (plus Piplod/Vesu/Ambli). There is **no Expansion-pool outlet** today, so the planner's coverage reads 0 until one is created.
+- [ ] Import ~2 months of daily covers via **Settings → Import pax history** (columns `Date | Outlet | Pax`, outlet names matching the DB). The owner's May/June reports are **revenue, not covers** — tick "derive covers from revenue" and enter an average spend/cover, or supply real cover counts. (Or hand the raw sheet to Claude to reshape into `Date | Outlet | Pax` first.)
+- [ ] After a week of real data, review the seeded ratios on **Staffing ratios** — in particular **zero out Bar and Support for dine-in** — and tune **covers per on-duty staff** (default 10).
+- [ ] Decide whether the rough position tags (42 "Outlet Manager", etc.) should be corrected to real posts — until then per-category variance is blurred.
+- [ ] Aadhaar policy: the system stores **masked last-4 + scan only** by design. If full numbers are ever required (payroll/KYC), treat that as a separate, deliberate compliance decision — do not widen the schema casually.
 
 ---
 

@@ -7,7 +7,9 @@ import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
 import { AuthModule } from "./modules/auth/auth.module";
 import { StaffModule } from "./modules/staff/staff.module";
+import { StaffDocumentsModule } from "./modules/staff-documents/staff-documents.module";
 import { OutletModule } from "./modules/outlet/outlet.module";
+import { CapacityModule } from "./modules/capacity/capacity.module";
 import { DepartmentModule } from "./modules/department/department.module";
 import { SchedulingModule } from "./modules/scheduling/scheduling.module";
 import { AttendanceModule } from "./modules/attendance/attendance.module";
@@ -52,7 +54,9 @@ import { DatabaseModule } from "./database/database.module";
     DatabaseModule,
     AuthModule,
     StaffModule,
+    StaffDocumentsModule,
     OutletModule,
+    CapacityModule,
     DepartmentModule,
     SchedulingModule,
     AttendanceModule,

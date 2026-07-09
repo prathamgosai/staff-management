@@ -4,6 +4,7 @@ import {
 } from "@nestjs/common";
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from "@nestjs/swagger";
 import { MeService } from "./me.service";
+import { StaffDocumentsService } from "../staff-documents/staff-documents.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
@@ -20,7 +21,10 @@ import type { AuthUser } from "@workforceiq/shared";
 @UseGuards(JwtAuthGuard)
 @Controller("me")
 export class MeController {
-  constructor(private readonly meService: MeService) {}
+  constructor(
+    private readonly meService: MeService,
+    private readonly staffDocumentsService: StaffDocumentsService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: "Own profile (safe fields only)" })
@@ -52,6 +56,12 @@ export class MeController {
   @ApiOperation({ summary: "Own leave balance, requests and available leave types" })
   getLeave(@CurrentUser() user: AuthUser) {
     return this.meService.getLeave(user);
+  }
+
+  @Get("documents")
+  @ApiOperation({ summary: "Own documents (read-only, metadata only)" })
+  getDocuments(@CurrentUser() user: AuthUser) {
+    return this.staffDocumentsService.listOwn(user);
   }
 
   @Post("leave-requests")

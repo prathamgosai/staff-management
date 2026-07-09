@@ -70,8 +70,9 @@ export const PERMISSION_CATALOG: PermissionModule[] = [
   {
     key: "staff", label: "Staff",
     permissions: [
-      { key: "staff:read",  label: "View staff",        description: "See staff profiles and directory." },
-      { key: "staff:write", label: "Add / edit staff",  description: "Create, update and deactivate staff." },
+      { key: "staff:read",      label: "View staff",             description: "See staff profiles and directory." },
+      { key: "staff:write",     label: "Add / edit staff",       description: "Create, update and deactivate staff." },
+      { key: "staff:documents", label: "Manage staff documents", description: "Upload, view and delete staff documents (IDs, contracts)." },
     ],
   },
   {

@@ -1,6 +1,6 @@
 # WorkforceIQ
 
-A staff management platform for multi-outlet operations — scheduling, attendance, leave, allocation, and demand forecasting. Built as a pnpm + Turborepo monorepo.
+A staff management platform for multi-outlet operations — scheduling, attendance, leave, allocation, staff documents, outlet capacity planning, and demand forecasting. Built as a pnpm + Turborepo monorepo.
 
 ## Stack
 
@@ -9,7 +9,9 @@ A staff management platform for multi-outlet operations — scheduling, attendan
 - **ML service** (`apps/ml-service`) — Python (FastAPI) for demand forecasting
 - **Shared** (`packages/shared`) — types and utilities shared across apps
 
-API feature modules: auth, staff, outlet, department, scheduling, attendance, leave, allocation, forecasting, dashboard, notification.
+API feature modules: auth, staff, staff-documents, outlet, capacity, department, scheduling, attendance, leave, allocation, forecasting, dashboard, notification, roles.
+
+**Capacity planning & documents:** each staff profile has a document vault (IDs/contracts; Aadhaar stored masked to last-4). Per-outlet capacity (tables + max pax) plus tunable staffing ratios drive a required-vs-actual dashboard, a new-outlet staffing planner, and a Phase-1 day-of-week demand forecast (import daily covers under **Settings → Import pax history**). All advisory — no auto-transfers or auto-roster changes.
 
 ## Prerequisites
 

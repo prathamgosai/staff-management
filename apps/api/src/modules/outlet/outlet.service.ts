@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException, Inject } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
-import { isAdminRole, type Role } from "@workforceiq/shared";
+import { isAdminRole, type Role, type AuthUser } from "@workforceiq/shared";
+import { assertOutletAllowed } from "../../common/auth/outlet-scope";
 
 @Injectable()
 export class OutletService {
@@ -45,6 +46,39 @@ export class OutletService {
       [id],
     );
     return { data: { ...result.rows[0], departments: departments.rows } };
+  }
+
+  /** Set an outlet's capacity (tables / max pax). NULL max_pax = excluded from the model. */
+  async updateCapacity(
+    user: AuthUser,
+    id: string,
+    body: { totalTables?: number | null; maxPax?: number | null },
+  ) {
+    assertOutletAllowed(user, id); // 403 if out of scope (admins bypass)
+
+    const clean = (v: number | null | undefined, label: string): number | null => {
+      if (v === null || v === undefined) return null;
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
+        throw new BadRequestException(`${label} must be a non-negative whole number.`);
+      }
+      return v;
+    };
+
+    const sets: string[] = [];
+    const params: unknown[] = [id, user.tenantId];
+    let i = 3;
+    if (body.totalTables !== undefined) { sets.push(`total_tables = $${i++}`); params.push(clean(body.totalTables, "Total tables")); }
+    if (body.maxPax !== undefined) { sets.push(`max_pax = $${i++}`); params.push(clean(body.maxPax, "Max pax")); }
+    if (sets.length === 0) throw new BadRequestException("Provide totalTables and/or maxPax.");
+
+    const result = await this.db.query(
+      `UPDATE outlets SET ${sets.join(", ")}, updated_at = NOW()
+       WHERE id = $1 AND tenant_id = $2
+       RETURNING id, code, name, total_tables, max_pax`,
+      params,
+    );
+    if (!result.rows[0]) throw new NotFoundException("Outlet not found");
+    return { data: result.rows[0] };
   }
 
   async getHeadcountStatus(outletId: string, date: string) {

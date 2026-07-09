@@ -12,6 +12,7 @@ import { toast } from "@/components/ui/sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthStore } from "@/store/auth.store";
 import { hasPermission } from "@/lib/permissions";
+import { ForecastStrip } from "@/components/scheduling/forecast-strip";
 
 /* ─── types ──────────────────────────────────────────────────────────── */
 interface StaffInShift {
@@ -397,6 +398,9 @@ export default function SchedulingPage() {
           )}
         </div>
       )}
+
+      {/* Forecast vs roster strip (self-hides w/o forecast:read or history) */}
+      {selectedOutletId && <ForecastStrip outletId={selectedOutletId} weekStart={weekStartDate} />}
 
       {/* Per-staff move error (dropdown on each roster row) */}
       {moveStaff.isError && (
