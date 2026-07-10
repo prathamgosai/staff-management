@@ -529,7 +529,11 @@ export default function StaffDetailPage() {
 
         {/* Documents (admin/hr — holders of staff:documents) */}
         {canManageDocuments && (
-          <DocumentsCard source={{ kind: "staff", staffId: id }} canManage />
+          <DocumentsCard
+            source={{ kind: "staff", staffId: id }}
+            canManage
+            canReveal={hasPermission(currentUser, "documents:reveal")}
+          />
         )}
       </div>
     </>

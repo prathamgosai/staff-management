@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CapacityStaffingSection } from "@/components/dashboard/capacity-staffing-section";
 import { RebalancingCard } from "@/components/dashboard/rebalancing-card";
+import { DocumentsWidget } from "@/components/dashboard/documents-widget";
 
 interface OverviewData { totalOutlets: number; activeStaff: number; staffOnLeaveToday: number; presentToday: number; }
 interface TodaySnapshot { staffOnShift: number; pendingLeave: number; pendingApprovals: number; }
@@ -227,6 +228,9 @@ export default function DashboardPage() {
 
       {/* Advisory cross-outlet rebalancing */}
       <RebalancingCard />
+
+      {/* Document compliance (self-hides without documents:status) */}
+      <DocumentsWidget />
 
       {/* Shift legend */}
       <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-2xl px-5 py-4 text-white">

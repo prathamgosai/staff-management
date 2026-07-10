@@ -1,18 +1,16 @@
 import { IsString, IsIn, IsOptional, MaxLength, IsDateString } from "class-validator";
 
-// Kept in sync with the CHECK constraints in 016_staff_documents.sql.
-export const DOC_TYPES = [
-  "aadhaar", "pan", "bank_passbook", "driving_license", "passport",
-  "voter_id", "police_verification", "contract", "other",
-] as const;
-
+// Machine keys the API ships seeded (see document_types). HR can add more at runtime, so the
+// service validates docType against the document_types table — the DTO only bounds length.
 export const DOC_MIME_TYPES = [
   "application/pdf", "image/jpeg", "image/png", "image/webp",
 ] as const;
 
 export class CreateDocumentDto {
-  @IsIn(DOC_TYPES)
-  docType!: (typeof DOC_TYPES)[number];
+  /** Document type KEY (validated against document_types for this tenant). */
+  @IsString()
+  @MaxLength(60)
+  docType!: string;
 
   @IsString()
   @MaxLength(200)
@@ -22,23 +20,28 @@ export class CreateDocumentDto {
   mimeType!: (typeof DOC_MIME_TYPES)[number];
 
   /**
-   * Base64 payload of the file — either the raw base64 or a full data URL
-   * ("data:...;base64,XXXX"); the service strips the prefix. First-line length
-   * guard only (~3.5 MB string ≈ 2.6 MB binary); the service enforces the real
-   * 2 MB DECODED cap and returns 413 beyond it.
+   * Base64 payload of the file — raw base64 or a full data URL ("data:...;base64,XXXX"); the
+   * service strips the prefix. First-line length guard only (~15 MB string ≈ 11 MB binary);
+   * the service enforces the real decoded cap (default 10 MB, MAX_DOCUMENT_BYTES) → 413.
    */
   @IsString()
-  @MaxLength(3_600_000, { message: "File is too large. Maximum size is 2 MB." })
+  @MaxLength(15_000_000, { message: "File is too large." })
   contentBase64!: string;
 
-  /** Optional document number. For aadhaar the server persists only the last 4 digits. */
+  /** Optional document number. Stored app-encrypted (full) + a masked display value. */
   @IsOptional()
   @IsString()
-  @MaxLength(50)
+  @MaxLength(60)
   docNumber?: string;
 
   /** Optional expiry (licenses/passports), ISO date (YYYY-MM-DD). */
   @IsOptional()
   @IsDateString()
   expiresOn?: string;
+
+  /** Optional free-text note. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string;
 }

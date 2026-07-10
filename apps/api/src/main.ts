@@ -14,9 +14,11 @@ async function bootstrap() {
   });
   const config = app.get(ConfigService);
 
-  // Accept larger JSON bodies so base64 profile-photo uploads aren't rejected
-  app.useBodyParser("json", { limit: "8mb" });
-  app.useBodyParser("urlencoded", { limit: "8mb", extended: true });
+  // Accept larger JSON bodies so base64 uploads aren't rejected — profile photos and now
+  // staff documents up to MAX_DOCUMENT_BYTES (default 10 MB → ~13.4 MB base64 + envelope).
+  const jsonLimit = config.get<string>("MAX_JSON_BODY", "16mb");
+  app.useBodyParser("json", { limit: jsonLimit });
+  app.useBodyParser("urlencoded", { limit: jsonLimit, extended: true });
 
   app.use(helmet());
   app.use(compression());

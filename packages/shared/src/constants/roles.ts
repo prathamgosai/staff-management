@@ -72,7 +72,9 @@ export const PERMISSION_CATALOG: PermissionModule[] = [
     permissions: [
       { key: "staff:read",      label: "View staff",             description: "See staff profiles and directory." },
       { key: "staff:write",     label: "Add / edit staff",       description: "Create, update and deactivate staff." },
-      { key: "staff:documents", label: "Manage staff documents", description: "Upload, view and delete staff documents (IDs, contracts)." },
+      { key: "staff:documents", label: "Manage staff documents", description: "Upload, view, download and delete staff documents (IDs, contracts)." },
+      { key: "documents:status", label: "View document status",  description: "See document completeness/status only — no files or numbers (managers)." },
+      { key: "documents:reveal", label: "Reveal document numbers", description: "Unmask a full document number (e.g. Aadhaar/PAN). Sensitive — audit-logged." },
     ],
   },
   {
@@ -80,6 +82,7 @@ export const PERMISSION_CATALOG: PermissionModule[] = [
     permissions: [
       { key: "outlet:read",  label: "View outlets",       description: "See outlet list and details." },
       { key: "outlet:write", label: "Add / edit outlets", description: "Create and update outlets." },
+      { key: "staffing:ratios", label: "Edit config & ratios", description: "Edit restaurant configuration and per-role staffing ratios." },
     ],
   },
   {
@@ -113,6 +116,7 @@ export const PERMISSION_CATALOG: PermissionModule[] = [
     permissions: [
       { key: "forecast:read",  label: "View forecasts",     description: "See demand forecasts and recommendations." },
       { key: "forecast:write", label: "Generate forecasts", description: "Run and update forecasts." },
+      { key: "predictions:run", label: "Run staff predictor", description: "Predict staffing + payroll for a planned outlet." },
     ],
   },
   {
@@ -156,17 +160,21 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
   hr: [...ALL_PERMISSIONS],
   head_of_house: [
     "staff:read",
+    "documents:status",
     "outlet:read",
+    "staffing:ratios",
     "schedule:read", "schedule:write", "schedule:publish",
     "attendance:read", "attendance:write",
     "leave:read", "leave:approve",
     "forecast:read",
+    "predictions:run",
     "allocation:read",
     "reports:read",
     "notifications:send",
   ],
   chef: [
     "staff:read",
+    "documents:status",
     "schedule:read", "schedule:write",
     "attendance:read",
     "leave:read", "leave:approve",
