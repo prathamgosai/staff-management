@@ -9,9 +9,11 @@ A staff management platform for multi-outlet operations — scheduling, attendan
 - **ML service** (`apps/ml-service`) — Python (FastAPI) for demand forecasting
 - **Shared** (`packages/shared`) — types and utilities shared across apps
 
-API feature modules: auth, staff, staff-documents, outlet, capacity, department, scheduling, attendance, leave, allocation, forecasting, dashboard, notification, roles.
+API feature modules: auth, staff, staff-documents, outlet, capacity, restaurant-config, staffing, predictions, transfer-recommendations, department, scheduling, attendance, leave, allocation, forecasting, dashboard, notification, roles.
 
 **Capacity planning & documents:** each staff profile has a document vault (IDs/contracts; Aadhaar stored masked to last-4). Per-outlet capacity (tables + max pax) plus tunable staffing ratios drive a required-vs-actual dashboard, a new-outlet staffing planner, and a Phase-1 day-of-week demand forecast (import daily covers under **Settings → Import pax history**). All advisory — no auto-transfers or auto-roster changes.
+
+**Workforce Intelligence extension** (see [docs/WORKFORCE-INTELLIGENCE.md](docs/WORKFORCE-INTELLIGENCE.md)): a compliance-grade **employee documents** module (encrypted, versioned, audit-logged, expiry/missing tracking); per-restaurant **configuration & per-role staffing ratios** with change history + category templates; a pure, unit-tested **real-time staffing engine** (required vs available, 4-colour status) feeding an executive **company dashboard** (`/staffing`); a **staff predictor** (`/predictions`) that estimates headcount + payroll for a planned outlet; and **intelligent transfer recommendations** that deep-link into the existing allocation flow. Additive migrations `019`–`023`; nothing existing was rewritten.
 
 ## Prerequisites
 
