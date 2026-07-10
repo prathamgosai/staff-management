@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Users, Building2, Calendar, Clock,
   CalendarOff, ArrowLeftRight, BarChart3, Calculator, Upload,
-  ShieldCheck, KeyRound, UserCog, Bell, Settings, Sliders, type LucideIcon,
+  ShieldCheck, KeyRound, UserCog, Bell, Settings, Sliders, FileText, Gauge, type LucideIcon,
 } from "lucide-react";
 
 export type NavItem = {
@@ -46,11 +46,14 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/staff", label: "Staff", icon: Users },
       { href: "/outlets", label: "Outlets", icon: Building2 },
+      { href: "/documents", label: "Documents", icon: FileText, perm: "documents:status" },
     ],
   },
   {
     label: "Insights",
     items: [
+      { href: "/staffing", label: "Company staffing", icon: Gauge, perm: "allocation:read" },
+      { href: "/predictions", label: "Staff predictor", icon: Calculator, perm: "predictions:run" },
       { href: "/reports", label: "Reports", icon: BarChart3 },
       { href: "/planning/new-outlet", label: "New-outlet planner", icon: Calculator, perm: "allocation:read" },
     ],
@@ -67,6 +70,9 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Settings",
     items: [
       { href: "/settings/staffing-ratios", label: "Staffing ratios", icon: Sliders, perm: "allocation:read" },
+      { href: "/settings/ratio-templates", label: "Ratio templates", icon: Sliders, perm: "allocation:read" },
+      { href: "/settings/role-salaries", label: "Role salaries", icon: Sliders, perm: "roles:manage" },
+      { href: "/settings/document-types", label: "Document types", icon: FileText, perm: "staff:documents" },
       { href: "/planning/pax-import", label: "Import pax history", icon: Upload, perm: "outlet:write" },
       { href: "/settings/notifications", label: "Notification settings", icon: Settings },
     ],
