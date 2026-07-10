@@ -15,6 +15,7 @@ import { toast } from "@/components/ui/sonner";
 import { useAuthStore } from "@/store/auth.store";
 import { hasPermission } from "@/lib/permissions";
 import { KioskDevicesSection } from "@/components/kiosk/kiosk-devices-section";
+import { RestaurantConfigCard } from "@/components/outlets/restaurant-config-card";
 
 /* ─── types ──────────────────────────────────────────────────────────── */
 interface OutletDetail {
@@ -404,6 +405,9 @@ export default function OutletDetailPage() {
           canEdit={canEditCapacity}
         />
       )}
+
+      {/* Restaurant configuration + per-role staffing ratios (self-hides without allocation:read) */}
+      {outlet && <RestaurantConfigCard outletId={id} />}
 
       {/* Kiosk devices (managers only; the component self-hides otherwise) */}
       {outlet && <KioskDevicesSection outletId={id} />}
