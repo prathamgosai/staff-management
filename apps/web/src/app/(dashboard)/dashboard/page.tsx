@@ -7,7 +7,7 @@ import { useAuthStore } from "@/store/auth.store";
 import { isAdminRole } from "@workforceiq/shared";
 import {
   Users, Building2, CalendarOff, Clock, ChevronDown,
-  Wand2, TrendingUp, Shield, Loader2, ChevronRight, CheckCircle2,
+  Wand2, Shield, Loader2, ChevronRight, CheckCircle2,
   Pencil, X, Check,
 } from "lucide-react";
 import { format, startOfWeek } from "date-fns";
@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { CapacityStaffingSection } from "@/components/dashboard/capacity-staffing-section";
 import { RebalancingCard } from "@/components/dashboard/rebalancing-card";
 import { DocumentsWidget } from "@/components/dashboard/documents-widget";
+import { PaxPredictionCard } from "@/components/dashboard/pax-prediction-card";
 
 interface OverviewData { totalOutlets: number; activeStaff: number; staffOnLeaveToday: number; presentToday: number; }
 interface TodaySnapshot { staffOnShift: number; pendingLeave: number; pendingApprovals: number; }
@@ -398,25 +399,8 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* PAX prediction placeholder */}
-      <div className="bg-card rounded-2xl border border-border p-5 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="font-bold text-foreground">PAX Prediction & Staffing Requirements</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">AI-powered staff requirement forecasting based on table count & peak hours</p>
-          </div>
-          <span className="text-xs bg-blue-50 dark:bg-blue-500/15 text-blue-600 font-semibold px-3 py-1 rounded-full">Coming soon</span>
-        </div>
-        <div className="grid grid-cols-3 gap-4">
-          {["Table Count", "Peak Hours", "Predicted PAX"].map(label => (
-            <div key={label} className="bg-muted rounded-xl p-4 text-center">
-              <TrendingUp size={20} className="text-muted-foreground/60 mx-auto mb-2" />
-              <p className="text-xs font-semibold text-muted-foreground">{label}</p>
-              <p className="text-lg font-bold text-muted-foreground/60 mt-1">—</p>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* PAX prediction & staffing requirements (live, per-outlet) */}
+      <PaxPredictionCard />
     </div>
   );
 }
