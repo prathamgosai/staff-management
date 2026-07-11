@@ -52,6 +52,18 @@ export function extensionOf(fileName: string): string {
   return dot === -1 ? "" : fileName.slice(dot + 1).toLowerCase();
 }
 
+/**
+ * Normalize a filename so its extension matches the DETECTED/stored MIME type — the bytes
+ * are what we serve, so the download name must agree (a JPEG kept as "scan.webp" would
+ * download as .webp yet be JPEG, breaking extension-keyed viewers). Preserves the base name.
+ */
+export function fileNameForMime(fileName: string, mime: AllowedMime): string {
+  const wantExt = EXT_BY_MIME[mime][0];
+  const dot = fileName.lastIndexOf(".");
+  const base = (dot === -1 ? fileName : fileName.slice(0, dot)).trim();
+  return `${base || "document"}.${wantExt}`;
+}
+
 export interface SignatureCheck {
   ok: boolean;
   /** Machine reason on failure — safe for logs (no PII). */

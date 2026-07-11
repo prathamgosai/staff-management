@@ -45,7 +45,8 @@ export async function fileToAvatarDataUrl(
  * mime_type column (the API strips the data-URL prefix before storing).
  */
 export const DOCUMENT_ACCEPT = "application/pdf,image/jpeg,image/png,image/webp";
-const MAX_DOC_BYTES = 2 * 1024 * 1024; // mirrors the API's 2 MB decoded cap
+export const MAX_DOC_MB = 10; // must match the API's MAX_DOCUMENT_BYTES (10 MB decoded)
+const MAX_DOC_BYTES = MAX_DOC_MB * 1024 * 1024;
 
 export interface PreparedDocument {
   contentBase64: string; // full data URL; the API keeps only the base64 payload
@@ -60,7 +61,7 @@ export async function prepareDocumentForUpload(
 ): Promise<PreparedDocument> {
   if (file.type === "application/pdf") {
     if (file.size > MAX_DOC_BYTES) {
-      throw new Error("This PDF is over 2 MB. Please upload a smaller scan.");
+      throw new Error(`This PDF is over ${MAX_DOC_MB} MB. Please upload a smaller scan.`);
     }
     return { contentBase64: await readAsDataUrl(file), mimeType: "application/pdf", fileName: file.name };
   }

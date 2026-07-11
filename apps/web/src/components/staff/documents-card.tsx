@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "@/components/ui/sonner";
-import { prepareDocumentForUpload, DOCUMENT_ACCEPT } from "@/lib/image";
+import { prepareDocumentForUpload, DOCUMENT_ACCEPT, MAX_DOC_MB } from "@/lib/image";
 import {
   FileText, Upload, Trash2, Eye, X, Loader2, ShieldAlert, AlertTriangle,
   Download, History, EyeOff, RefreshCw,
@@ -302,6 +302,15 @@ function UploadModal({ staffId, onClose, onUploaded }: { staffId: string; onClos
   const [busy, setBusy] = useState(false);
   const selected = types.find((t) => t.key === docType);
 
+  // Keep the selected type valid: once the active types load, if the current value isn't
+  // among them (e.g. an admin renamed/deactivated the default 'aadhaar'), snap to the first
+  // available type so the dropdown never shows one value while submitting another.
+  useEffect(() => {
+    if (types.length && !types.some((t) => t.key === docType)) {
+      setDocType(types[0].key);
+    }
+  }, [types, docType]);
+
   async function submit() {
     setErr(null);
     if (!file) { setErr("Please choose a file."); return; }
@@ -323,7 +332,7 @@ function UploadModal({ staffId, onClose, onUploaded }: { staffId: string; onClos
       const resp = (e as { response?: { status?: number; data?: { message?: string | string[] } } }).response;
       const m = resp?.data?.message;
       setErr(
-        resp?.status === 413 ? "File is too large (max 10 MB)." :
+        resp?.status === 413 ? `File is too large (max ${MAX_DOC_MB} MB).` :
         Array.isArray(m) ? m.join(", ") :
         m ?? (e as Error).message ?? "Upload failed. Please try again.",
       );
@@ -372,7 +381,7 @@ function UploadModal({ staffId, onClose, onUploaded }: { staffId: string; onClos
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1.5">File (PDF, JPG, PNG — max 10 MB)</label>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1.5">File (PDF, JPG, PNG, WEBP — max {MAX_DOC_MB} MB)</label>
             <input type="file" accept={DOCUMENT_ACCEPT} onChange={(e) => { setFile(e.target.files?.[0] ?? null); setErr(null); }}
               className="w-full text-sm text-muted-foreground file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-muted file:text-foreground file:text-xs file:font-semibold hover:file:bg-border" />
           </div>

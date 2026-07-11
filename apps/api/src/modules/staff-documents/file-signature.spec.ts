@@ -1,4 +1,4 @@
-import { sniffMime, validateSignature, extensionOf } from "./file-signature";
+import { sniffMime, validateSignature, extensionOf, fileNameForMime } from "./file-signature";
 
 const PDF = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0, 0, 0, 0]); // %PDF-1.4
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 0]);
@@ -54,5 +54,21 @@ describe("file-signature: extensionOf", () => {
     expect(extensionOf("A.PDF")).toBe("pdf");
     expect(extensionOf("noext")).toBe("");
     expect(extensionOf("a.b.JPG")).toBe("jpg");
+  });
+});
+
+describe("file-signature: fileNameForMime", () => {
+  it("rewrites the extension to match the detected type (e.g. a re-encoded scan.jpg -> scan.webp)", () => {
+    expect(fileNameForMime("scan.jpg", "image/webp")).toBe("scan.webp");
+    expect(fileNameForMime("aadhaar.png", "application/pdf")).toBe("aadhaar.pdf");
+    expect(fileNameForMime("photo", "image/jpeg")).toBe("photo.jpg");
+  });
+  it("preserves multi-dot base names and only swaps the final extension", () => {
+    expect(fileNameForMime("a.b.c.jpeg", "image/webp")).toBe("a.b.c.webp");
+  });
+  it("falls back to a placeholder base for empty / dot-only names", () => {
+    expect(fileNameForMime("", "image/png")).toBe("document.png");
+    expect(fileNameForMime(".gitignore", "image/webp")).toBe("document.webp");
+    expect(fileNameForMime("   ", "application/pdf")).toBe("document.pdf");
   });
 });

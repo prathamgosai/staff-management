@@ -12,7 +12,7 @@ import { CreateDocumentDto } from "./dto/create-document.dto";
 import { UpsertDocumentTypeDto } from "./dto/document-type.dto";
 import { DocumentCryptoService } from "./document-crypto.service";
 import { DocumentStorageService } from "./document-storage.service";
-import { sniffMime, AllowedMime } from "./file-signature";
+import { sniffMime, AllowedMime, fileNameForMime } from "./file-signature";
 import { deriveStatus, maskNumber } from "./document-rules";
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB decoded (configurable via MAX_DOCUMENT_BYTES)
@@ -212,26 +212,46 @@ export class StaffDocumentsService {
       return this.replaceInto(user, existing.rows[0], dto, buffer, mime, masked, fullNumber, status, audit);
     }
 
-    // Fresh insert. Persist bytes at version 1.
+    // Fresh insert. Persist bytes at version 1. Store the filename with an extension that
+    // matches the detected bytes, so later downloads open in the right viewer.
+    const fileName = fileNameForMime(dto.fileName, mime);
     const docId = (await this.db.query("SELECT uuid_generate_v4() AS id")).rows[0].id as string;
     const store = await this.persistBytes(user.tenantId, staffId, docId, 1, buffer, mime);
     const numberEnc = fullNumber && this.crypto.isEnabled() ? this.crypto.encryptString(fullNumber) : null;
 
-    const res = await this.db.query(
-      `INSERT INTO staff_documents
-         (id, tenant_id, staff_id, doc_type, document_type_id, doc_number_masked, doc_number_encrypted,
-          expires_on, status, current_version, notes, file_name, mime_type, size_bytes,
-          storage_key, content_encrypted, content_base64, uploaded_by, updated_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$10,$11,$12,$13,$14,$15,$16,$17,$17)
-       RETURNING id, staff_id, doc_type, document_type_id, doc_number_masked, expires_on, status,
-                 current_version, notes, file_name, mime_type, size_bytes, uploaded_by, updated_by,
-                 created_at, updated_at`,
-      [
-        docId, user.tenantId, staffId, dto.docType, type.id, masked, numberEnc,
-        dto.expiresOn ?? null, status, dto.notes ?? null, dto.fileName, mime, buffer.length,
-        store.storageKey, store.contentEncrypted, store.contentBase64, user.id,
-      ],
-    );
+    let res;
+    try {
+      res = await this.db.query(
+        `INSERT INTO staff_documents
+           (id, tenant_id, staff_id, doc_type, document_type_id, doc_number_masked, doc_number_encrypted,
+            expires_on, status, current_version, notes, file_name, mime_type, size_bytes,
+            storage_key, content_encrypted, content_base64, uploaded_by, updated_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$10,$11,$12,$13,$14,$15,$16,$17,$17)
+         RETURNING id, staff_id, doc_type, document_type_id, doc_number_masked, expires_on, status,
+                   current_version, notes, file_name, mime_type, size_bytes, uploaded_by, updated_by,
+                   created_at, updated_at`,
+        [
+          docId, user.tenantId, staffId, dto.docType, type.id, masked, numberEnc,
+          dto.expiresOn ?? null, status, dto.notes ?? null, fileName, mime, buffer.length,
+          store.storageKey, store.contentEncrypted, store.contentBase64, user.id,
+        ],
+      );
+    } catch (e) {
+      // A concurrent upload of this same (previously absent) type won the race and created
+      // the active row first (unique index uq_staff_documents_active_type). Treat this upload
+      // as a replace — archive their row as a version — instead of failing with a raw 500.
+      if ((e as { code?: string }).code === "23505") {
+        const now = await this.db.query(
+          `SELECT * FROM staff_documents
+           WHERE staff_id=$1 AND tenant_id=$2 AND document_type_id=$3 AND deleted_at IS NULL`,
+          [staffId, user.tenantId, type.id],
+        );
+        if (now.rows[0]) {
+          return this.replaceInto(user, now.rows[0], dto, buffer, mime, masked, fullNumber, status, audit);
+        }
+      }
+      throw e;
+    }
     await this.logAccess(user.tenantId, docId, staffId, user.id, "upload", audit);
     return { data: this.mapMeta({ ...res.rows[0], type_name: type.name }) };
   }
@@ -255,6 +275,7 @@ export class StaffDocumentsService {
       ],
     );
     const nextVersion = versionNo + 1;
+    const fileName = fileNameForMime(dto.fileName, mime);
     const store = await this.persistBytes(user.tenantId, current.staff_id, docId, nextVersion, buffer, mime);
     const numberEnc = fullNumber && this.crypto.isEnabled() ? this.crypto.encryptString(fullNumber) : null;
 
@@ -269,7 +290,7 @@ export class StaffDocumentsService {
                  created_at, updated_at`,
       [
         masked, numberEnc, dto.expiresOn ?? null, status, nextVersion, dto.notes ?? null,
-        dto.fileName, mime, buffer.length, store.storageKey, store.contentEncrypted,
+        fileName, mime, buffer.length, store.storageKey, store.contentEncrypted,
         store.contentBase64, user.id, docId, user.tenantId,
       ],
     );
