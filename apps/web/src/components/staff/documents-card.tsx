@@ -61,7 +61,8 @@ export function DocumentsCard({
   source, canManage, canReveal = false,
 }: { source: Source; canManage: boolean; canReveal?: boolean }) {
   const qc = useQueryClient();
-  const [showUpload, setShowUpload] = useState(false);
+  // null = closed; {} = new document; {replace: doc} = new version of that document.
+  const [uploadFor, setUploadFor] = useState<{ replace?: DocMeta } | null>(null);
   const [preview, setPreview] = useState<DocMeta | null>(null);
   const [versionsOf, setVersionsOf] = useState<DocMeta | null>(null);
 
@@ -88,7 +89,7 @@ export function DocumentsCard({
         </p>
         {canManage && source.kind === "staff" && (
           <button
-            onClick={() => setShowUpload(true)}
+            onClick={() => setUploadFor({})}
             className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground transition"
           >
             <Upload size={12} /> Upload
@@ -146,6 +147,12 @@ export function DocumentsCard({
                   </button>
                 )}
                 {canManage && source.kind === "staff" && (
+                  <button onClick={() => setUploadFor({ replace: doc })} title="Replace with a new version"
+                    className="p-2 rounded-lg hover:bg-card text-muted-foreground hover:text-foreground transition shrink-0">
+                    <RefreshCw size={15} />
+                  </button>
+                )}
+                {canManage && source.kind === "staff" && (
                   <button
                     onClick={() => { if (confirm(`Delete "${doc.fileName}"? It will be archived, not permanently erased.`)) del.mutate(doc.id); }}
                     disabled={del.isPending}
@@ -161,8 +168,13 @@ export function DocumentsCard({
         </div>
       )}
 
-      {showUpload && source.kind === "staff" && (
-        <UploadModal staffId={source.staffId} onClose={() => setShowUpload(false)} onUploaded={() => qc.invalidateQueries({ queryKey: listKey })} />
+      {uploadFor && source.kind === "staff" && (
+        <UploadModal
+          staffId={source.staffId}
+          replaceDoc={uploadFor.replace}
+          onClose={() => setUploadFor(null)}
+          onUploaded={() => qc.invalidateQueries({ queryKey: listKey })}
+        />
       )}
       {preview && <PreviewLightbox doc={preview} onClose={() => setPreview(null)} />}
       {versionsOf && <VersionsDrawer doc={versionsOf} onClose={() => setVersionsOf(null)} />}
@@ -286,7 +298,10 @@ function VersionsDrawer({ doc, onClose }: { doc: DocMeta; onClose: () => void })
 }
 
 /* ─── upload modal ────────────────────────────────────────────────────────── */
-function UploadModal({ staffId, onClose, onUploaded }: { staffId: string; onClose: () => void; onUploaded: () => void }) {
+function UploadModal({
+  staffId, replaceDoc, onClose, onUploaded,
+}: { staffId: string; replaceDoc?: DocMeta; onClose: () => void; onUploaded: () => void }) {
+  const isReplace = !!replaceDoc;
   const { data: typesData } = useQuery<{ data: DocType[] }>({
     queryKey: ["document-types"],
     queryFn: () => apiClient.get("/settings/document-types").then((r) => r.data),
@@ -294,22 +309,23 @@ function UploadModal({ staffId, onClose, onUploaded }: { staffId: string; onClos
   });
   const types = (typesData?.data ?? []).filter((t) => t.isActive);
 
-  const [docType, setDocType] = useState("aadhaar");
+  const [docType, setDocType] = useState(replaceDoc?.docType ?? "aadhaar");
   const [docNumber, setDocNumber] = useState("");
-  const [expiresOn, setExpiresOn] = useState("");
+  const [expiresOn, setExpiresOn] = useState(replaceDoc?.expiresOn ? replaceDoc.expiresOn.slice(0, 10) : "");
   const [file, setFile] = useState<File | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const selected = types.find((t) => t.key === docType);
 
-  // Keep the selected type valid: once the active types load, if the current value isn't
-  // among them (e.g. an admin renamed/deactivated the default 'aadhaar'), snap to the first
-  // available type so the dropdown never shows one value while submitting another.
+  // Keep the selected type valid for NEW documents: once the active types load, if the current
+  // value isn't among them (e.g. an admin renamed/deactivated the default 'aadhaar'), snap to the
+  // first available type so the dropdown never shows one value while submitting another. In
+  // replace mode the type is fixed to the document being versioned, so leave it alone.
   useEffect(() => {
-    if (types.length && !types.some((t) => t.key === docType)) {
+    if (!isReplace && types.length && !types.some((t) => t.key === docType)) {
       setDocType(types[0].key);
     }
-  }, [types, docType]);
+  }, [isReplace, types, docType]);
 
   async function submit() {
     setErr(null);
@@ -324,8 +340,9 @@ function UploadModal({ staffId, onClose, onUploaded }: { staffId: string; onClos
         contentBase64: prepared.contentBase64,
         docNumber: docNumber.trim() || undefined,
         expiresOn: expiresOn || undefined,
+        replaceDocumentId: replaceDoc?.id,
       });
-      toast.success("Document uploaded.");
+      toast.success(isReplace ? "New version uploaded." : "Document uploaded.");
       onUploaded();
       onClose();
     } catch (e) {
@@ -344,19 +361,25 @@ function UploadModal({ staffId, onClose, onUploaded }: { staffId: string; onClos
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-card rounded-2xl shadow-2xl w-96 max-w-[calc(100vw-2rem)] p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-foreground">Upload document</h3>
+          <h3 className="font-bold text-foreground">{isReplace ? "Upload new version" : "Upload document"}</h3>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted"><X size={16} /></button>
         </div>
 
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Type</label>
-            <select value={docType} onChange={(e) => setDocType(e.target.value)}
-              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-card text-foreground outline-none focus:ring-2 focus:ring-ring">
-              {(types.length ? types : [{ key: "aadhaar", name: "Aadhaar" }]).map((d) => (
-                <option key={d.key} value={d.key}>{d.name}</option>
-              ))}
-            </select>
+            {isReplace ? (
+              <div className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-muted text-foreground">
+                {replaceDoc?.typeName ?? replaceDoc?.docType}
+              </div>
+            ) : (
+              <select value={docType} onChange={(e) => setDocType(e.target.value)}
+                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-card text-foreground outline-none focus:ring-2 focus:ring-ring">
+                {(types.length ? types : [{ key: "aadhaar", name: "Aadhaar" }]).map((d) => (
+                  <option key={d.key} value={d.key}>{d.name}</option>
+                ))}
+              </select>
+            )}
             {selected?.isMandatory && <p className="mt-1 text-[11px] text-muted-foreground">Mandatory document type.</p>}
           </div>
 
@@ -368,7 +391,7 @@ function UploadModal({ staffId, onClose, onUploaded }: { staffId: string; onClos
               placeholder={docType === "aadhaar" ? "12-digit Aadhaar" : "e.g. ABCDE1234F"}
               className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-card text-foreground outline-none focus:ring-2 focus:ring-ring" />
             <p className="mt-1.5 text-[11px] text-muted-foreground inline-flex items-center gap-1">
-              <ShieldAlert size={11} /> Stored encrypted; masked in the UI (reveal is permissioned & audited).
+              <ShieldAlert size={11} /> {isReplace ? "Re-enter to keep a number on the new version." : "Stored encrypted; masked in the UI (reveal is permissioned & audited)."}
             </p>
           </div>
 
@@ -391,9 +414,14 @@ function UploadModal({ staffId, onClose, onUploaded }: { staffId: string; onClos
 
         <button onClick={submit} disabled={busy || !file}
           className="mt-5 w-full bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground font-semibold py-2.5 rounded-xl text-sm transition flex items-center justify-center gap-2">
-          {busy ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Upload
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} {isReplace ? "Upload new version" : "Upload"}
         </button>
-        {docType && <p className="mt-2 text-[11px] text-muted-foreground text-center inline-flex items-center gap-1 w-full justify-center"><RefreshCw size={10} /> Re-uploading an existing type keeps the old file as a version.</p>}
+        <p className="mt-2 text-[11px] text-muted-foreground text-center inline-flex items-center gap-1 w-full justify-center">
+          <RefreshCw size={10} />
+          {isReplace
+            ? "Adds a new version; the current file moves to history."
+            : "Each upload is a separate document — use ↻ on a document to add a new version."}
+        </p>
       </div>
     </div>
   );

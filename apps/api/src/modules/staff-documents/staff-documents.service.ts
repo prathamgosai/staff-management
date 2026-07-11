@@ -197,20 +197,29 @@ export class StaffDocumentsService {
     await this.authorizeStaff(user, staffId, "write");
 
     const { buffer, mime } = this.decodeAndValidate(dto);
+
+    // Explicit "new version of THIS document" — archive its current file, keep its type/identity.
+    // (New uploads without replaceDocumentId always become their own listed document; multiple
+    // documents of the same type are allowed once migration 024 drops the one-per-type index.)
+    if (dto.replaceDocumentId) {
+      const target = await this.db.query(
+        `SELECT * FROM staff_documents
+         WHERE id=$1 AND staff_id=$2 AND tenant_id=$3 AND deleted_at IS NULL`,
+        [dto.replaceDocumentId, staffId, user.tenantId],
+      );
+      const current = target.rows[0];
+      if (!current) throw new NotFoundException("The document to replace was not found.");
+      const rType = await this.resolveType(user.tenantId, current.doc_type);
+      const rFullNumber = dto.docNumber?.trim() || null;
+      const rMasked = maskNumber(current.doc_type, rFullNumber);
+      const rStatus = deriveStatus(rType, rFullNumber, dto.expiresOn ?? null, istTodayStr());
+      return this.replaceInto(user, current, dto, buffer, mime, rMasked, rFullNumber, rStatus, audit);
+    }
+
     const type = await this.resolveType(user.tenantId, dto.docType);
     const fullNumber = dto.docNumber?.trim() || null;
     const masked = maskNumber(dto.docType, fullNumber);
     const status = deriveStatus(type, fullNumber, dto.expiresOn ?? null, istTodayStr());
-
-    // Existing ACTIVE document of this type → replace (archive current as a version).
-    const existing = await this.db.query(
-      `SELECT * FROM staff_documents
-       WHERE staff_id=$1 AND tenant_id=$2 AND document_type_id=$3 AND deleted_at IS NULL`,
-      [staffId, user.tenantId, type.id],
-    );
-    if (existing.rows[0]) {
-      return this.replaceInto(user, existing.rows[0], dto, buffer, mime, masked, fullNumber, status, audit);
-    }
 
     // Fresh insert. Persist bytes at version 1. Store the filename with an extension that
     // matches the detected bytes, so later downloads open in the right viewer.
@@ -237,9 +246,12 @@ export class StaffDocumentsService {
         ],
       );
     } catch (e) {
-      // A concurrent upload of this same (previously absent) type won the race and created
-      // the active row first (unique index uq_staff_documents_active_type). Treat this upload
-      // as a replace — archive their row as a version — instead of failing with a raw 500.
+      // Unique-index (uq_staff_documents_active_type) collision on (staff, type). This fires
+      // (a) BEFORE migration 024 is applied — the one-per-type index still exists, so a same-type
+      // upload legitimately collapses into a new version (legacy behavior); and (b) on a genuine
+      // concurrent first-upload race. Either way, fall back to versioning the existing active row
+      // instead of returning a raw 500. After 024 drops the index this branch never runs and each
+      // upload is its own listed document.
       if ((e as { code?: string }).code === "23505") {
         const now = await this.db.query(
           `SELECT * FROM staff_documents

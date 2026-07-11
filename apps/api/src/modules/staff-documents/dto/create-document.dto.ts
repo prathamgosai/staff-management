@@ -1,4 +1,4 @@
-import { IsString, IsIn, IsOptional, MaxLength, IsDateString } from "class-validator";
+import { IsString, IsIn, IsOptional, MaxLength, IsDateString, IsUUID } from "class-validator";
 
 // Machine keys the API ships seeded (see document_types). HR can add more at runtime, so the
 // service validates docType against the document_types table — the DTO only bounds length.
@@ -44,4 +44,13 @@ export class CreateDocumentDto {
   @IsString()
   @MaxLength(500)
   notes?: string;
+
+  /**
+   * When set, this upload becomes a NEW VERSION of the given existing document (its current file
+   * is archived to history) instead of a separate listed document. Omit it to add a brand-new
+   * document — multiple documents of the same type are allowed. Must belong to the same staff.
+   */
+  @IsOptional()
+  @IsUUID()
+  replaceDocumentId?: string;
 }
