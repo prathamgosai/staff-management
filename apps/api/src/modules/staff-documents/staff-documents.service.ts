@@ -1,6 +1,6 @@
 import {
   Injectable, Inject, NotFoundException, ForbiddenException,
-  BadRequestException, PayloadTooLargeException,
+  BadRequestException, PayloadTooLargeException, Logger,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Pool } from "pg";
@@ -46,6 +46,7 @@ interface StaffRow {
  */
 @Injectable()
 export class StaffDocumentsService {
+  private readonly logger = new Logger(StaffDocumentsService.name);
   private readonly maxBytes: number;
   private readonly apiPrefix: string;
 
@@ -209,7 +210,7 @@ export class StaffDocumentsService {
       );
       const current = target.rows[0];
       if (!current) throw new NotFoundException("The document to replace was not found.");
-      const rType = await this.resolveType(user.tenantId, current.doc_type);
+      const rType = await this.resolveTypeForExisting(user.tenantId, current.document_type_id, current.doc_type);
       const rFullNumber = dto.docNumber?.trim() || null;
       const rMasked = maskNumber(current.doc_type, rFullNumber);
       const rStatus = deriveStatus(rType, rFullNumber, dto.expiresOn ?? null, istTodayStr());
@@ -253,6 +254,10 @@ export class StaffDocumentsService {
       // instead of returning a raw 500. After 024 drops the index this branch never runs and each
       // upload is its own listed document.
       if ((e as { code?: string }).code === "23505") {
+        // The INSERT failed, but persistBytes may already have uploaded bytes under this (now
+        // unused) docId — remove that orphan before re-versioning under the winning row. remove()
+        // is best-effort and a no-op when Storage isn't configured.
+        if (store.storageKey) await this.storage.remove(store.storageKey);
         const now = await this.db.query(
           `SELECT * FROM staff_documents
            WHERE staff_id=$1 AND tenant_id=$2 AND document_type_id=$3 AND deleted_at IS NULL`,
@@ -557,8 +562,18 @@ export class StaffDocumentsService {
       const ciphertext = this.crypto.encrypt(buffer);
       if (this.storage.isConfigured()) {
         const key = this.storage.buildKey(tenantId, staffId, docId, versionNo);
-        await this.storage.upload(key, ciphertext);
-        return { storageKey: key, contentEncrypted: null as Buffer | null, contentBase64: null as string | null };
+        try {
+          await this.storage.upload(key, ciphertext);
+          return { storageKey: key, contentEncrypted: null as Buffer | null, contentBase64: null as string | null };
+        } catch (e) {
+          // Storage is configured but the bucket is missing / misconfigured / unreachable. Rather
+          // than 500 the whole upload, fall back to storing the (still-encrypted) bytes in the DB.
+          this.logger.warn(
+            `Supabase Storage upload failed (${(e as Error).message}); storing bytes encrypted-in-DB instead. ` +
+            "Check SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / the documents bucket exists and is private.",
+          );
+          return { storageKey: null, contentEncrypted: ciphertext, contentBase64: null };
+        }
       }
       return { storageKey: null, contentEncrypted: ciphertext, contentBase64: null };
     }
@@ -584,6 +599,25 @@ export class StaffDocumentsService {
     );
     if (!res.rows[0]) throw new BadRequestException(`Unknown document type "${key}".`);
     return res.rows[0];
+  }
+
+  /**
+   * Type flags for an EXISTING document being versioned — looked up by id and NOT filtered on
+   * is_active/deleted_at, so re-uploading a new version of a document whose type was later
+   * deactivated still works (resolveType would wrongly reject it). Falls back to permissive flags
+   * if the type row is gone entirely, so a replace never hard-fails on type resolution.
+   */
+  private async resolveTypeForExisting(
+    tenantId: string, typeId: string, key: string,
+  ): Promise<{ id: string; name: string; is_mandatory: boolean; requires_number: boolean; requires_expiry: boolean }> {
+    const res = await this.db.query(
+      `SELECT id, name, is_mandatory, requires_number, requires_expiry
+       FROM document_types WHERE tenant_id=$1 AND id=$2`,
+      [tenantId, typeId],
+    );
+    return res.rows[0] ?? {
+      id: typeId, name: key, is_mandatory: false, requires_number: false, requires_expiry: false,
+    };
   }
 
   /** Best-effort audit write — never throws (a logging failure must not block the operation). */

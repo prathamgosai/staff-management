@@ -311,7 +311,11 @@ function UploadModal({
 
   const [docType, setDocType] = useState(replaceDoc?.docType ?? "aadhaar");
   const [docNumber, setDocNumber] = useState("");
-  const [expiresOn, setExpiresOn] = useState(replaceDoc?.expiresOn ? replaceDoc.expiresOn.slice(0, 10) : "");
+  // Prefill via the LOCAL calendar day (matching the expiry badge). The API returns expires_on as a
+  // full ISO datetime; a naive .slice(0,10) would take the UTC day and drift a day earlier east of UTC.
+  const [expiresOn, setExpiresOn] = useState(
+    replaceDoc?.expiresOn ? format(new Date(replaceDoc.expiresOn), "yyyy-MM-dd") : "",
+  );
   const [file, setFile] = useState<File | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

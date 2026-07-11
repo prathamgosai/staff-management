@@ -86,6 +86,21 @@ describe("StaffDocumentsService.create", () => {
     expect(calls.some((c) => c.sql.includes("INSERT INTO staff_documents"))).toBe(false);
   });
 
+  it("replace still works when the document's type was deactivated/removed (lenient type lookup)", async () => {
+    const { svc, calls } = makeService(async (sql) => {
+      if (sql.includes("FROM staff WHERE id")) return STAFF;
+      if (sql.includes("id=$1 AND staff_id=$2")) return { rows: [archivedRow] };
+      if (sql.includes("FROM document_types WHERE")) return { rows: [] }; // type gone / inactive
+      if (sql.includes("INSERT INTO staff_document_versions")) return { rows: [] };
+      if (sql.includes("UPDATE staff_documents")) return { rows: [{ id: "doc-x", staff_id: "s1", current_version: 2 }] };
+      return { rows: [] };
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const out = await svc.create(USER, "s1", dto({ replaceDocumentId: "doc-x" }) as any);
+    expect(out.data.id).toBe("doc-x");
+    expect(calls.some((c) => c.sql.includes("UPDATE staff_documents"))).toBe(true);
+  });
+
   it("throws NotFound when replaceDocumentId does not resolve to a live document", async () => {
     const { svc } = makeService(async (sql) => {
       if (sql.includes("FROM staff WHERE id")) return STAFF;
