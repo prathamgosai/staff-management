@@ -12,7 +12,7 @@ import { CreateDocumentDto } from "./dto/create-document.dto";
 import { UpsertDocumentTypeDto } from "./dto/document-type.dto";
 import { DocumentCryptoService } from "./document-crypto.service";
 import { DocumentStorageService } from "./document-storage.service";
-import { validateSignature } from "./file-signature";
+import { sniffMime, AllowedMime } from "./file-signature";
 import { deriveStatus, maskNumber } from "./document-rules";
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB decoded (configurable via MAX_DOCUMENT_BYTES)
@@ -196,7 +196,7 @@ export class StaffDocumentsService {
   async create(user: AuthUser, staffId: string, dto: CreateDocumentDto, audit?: AuditCtx) {
     await this.authorizeStaff(user, staffId, "write");
 
-    const buffer = this.decodeAndValidate(dto);
+    const { buffer, mime } = this.decodeAndValidate(dto);
     const type = await this.resolveType(user.tenantId, dto.docType);
     const fullNumber = dto.docNumber?.trim() || null;
     const masked = maskNumber(dto.docType, fullNumber);
@@ -209,12 +209,12 @@ export class StaffDocumentsService {
       [staffId, user.tenantId, type.id],
     );
     if (existing.rows[0]) {
-      return this.replaceInto(user, existing.rows[0], dto, buffer, masked, fullNumber, status, audit);
+      return this.replaceInto(user, existing.rows[0], dto, buffer, mime, masked, fullNumber, status, audit);
     }
 
     // Fresh insert. Persist bytes at version 1.
     const docId = (await this.db.query("SELECT uuid_generate_v4() AS id")).rows[0].id as string;
-    const store = await this.persistBytes(user.tenantId, staffId, docId, 1, buffer, dto.mimeType);
+    const store = await this.persistBytes(user.tenantId, staffId, docId, 1, buffer, mime);
     const numberEnc = fullNumber && this.crypto.isEnabled() ? this.crypto.encryptString(fullNumber) : null;
 
     const res = await this.db.query(
@@ -228,7 +228,7 @@ export class StaffDocumentsService {
                  created_at, updated_at`,
       [
         docId, user.tenantId, staffId, dto.docType, type.id, masked, numberEnc,
-        dto.expiresOn ?? null, status, dto.notes ?? null, dto.fileName, dto.mimeType, buffer.length,
+        dto.expiresOn ?? null, status, dto.notes ?? null, dto.fileName, mime, buffer.length,
         store.storageKey, store.contentEncrypted, store.contentBase64, user.id,
       ],
     );
@@ -237,7 +237,7 @@ export class StaffDocumentsService {
   }
 
   private async replaceInto(
-    user: AuthUser, current: Record<string, any>, dto: CreateDocumentDto, buffer: Buffer,
+    user: AuthUser, current: Record<string, any>, dto: CreateDocumentDto, buffer: Buffer, mime: AllowedMime,
     masked: string | null, fullNumber: string | null, status: string, audit?: AuditCtx,
   ) {
     const docId = current.id as string;
@@ -255,7 +255,7 @@ export class StaffDocumentsService {
       ],
     );
     const nextVersion = versionNo + 1;
-    const store = await this.persistBytes(user.tenantId, current.staff_id, docId, nextVersion, buffer, dto.mimeType);
+    const store = await this.persistBytes(user.tenantId, current.staff_id, docId, nextVersion, buffer, mime);
     const numberEnc = fullNumber && this.crypto.isEnabled() ? this.crypto.encryptString(fullNumber) : null;
 
     const res = await this.db.query(
@@ -269,7 +269,7 @@ export class StaffDocumentsService {
                  created_at, updated_at`,
       [
         masked, numberEnc, dto.expiresOn ?? null, status, nextVersion, dto.notes ?? null,
-        dto.fileName, dto.mimeType, buffer.length, store.storageKey, store.contentEncrypted,
+        dto.fileName, mime, buffer.length, store.storageKey, store.contentEncrypted,
         store.contentBase64, user.id, docId, user.tenantId,
       ],
     );
@@ -498,7 +498,7 @@ export class StaffDocumentsService {
     return res.rows[0];
   }
 
-  private decodeAndValidate(dto: CreateDocumentDto): Buffer {
+  private decodeAndValidate(dto: CreateDocumentDto): { buffer: Buffer; mime: AllowedMime } {
     const commaIdx = dto.contentBase64.indexOf(",");
     const base64 = dto.contentBase64.startsWith("data:") && commaIdx !== -1
       ? dto.contentBase64.slice(commaIdx + 1) : dto.contentBase64;
@@ -507,15 +507,15 @@ export class StaffDocumentsService {
     if (buffer.length > this.maxBytes) {
       throw new PayloadTooLargeException(`File is too large. Maximum size is ${Math.round(this.maxBytes / 1024 / 1024)} MB.`);
     }
-    const check = validateSignature(buffer, dto.mimeType, dto.fileName);
-    if (!check.ok) {
-      throw new BadRequestException(
-        check.reason === "mime_mismatch" || check.reason === "extension_mismatch"
-          ? `File content does not match its declared type (${dto.mimeType}).`
-          : "Unsupported or unrecognised file type. Allowed: PDF, JPG, PNG, WEBP.",
-      );
+    // Security check on the ACTUAL bytes, not the client-declared MIME (which browsers often get
+    // wrong after re-encoding). Only genuine PDF/JPG/PNG/WEBP content is accepted — a disguised
+    // file (e.g. a script) sniffs to null and is rejected. The DETECTED type becomes the stored
+    // mime, so a JPEG mislabelled as webp uploads correctly instead of being falsely rejected.
+    const mime = sniffMime(buffer);
+    if (!mime) {
+      throw new BadRequestException("Unsupported or unrecognised file. Allowed: PDF, JPG, PNG, WEBP.");
     }
-    return buffer;
+    return { buffer, mime };
   }
 
   /** Encrypt + persist bytes to Supabase Storage (preferred) or encrypted-in-DB, or plaintext (dev). */
