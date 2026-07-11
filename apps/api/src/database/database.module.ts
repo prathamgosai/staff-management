@@ -28,7 +28,11 @@ const TRANSIENT_DB_ERRORS = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]);
           // Names this API in pg_stat_activity / the Supabase dashboard, so its
           // connections (and any runaway query) can be attributed and killed.
           application_name: "workforceiq-api",
-          max: config.get<number>("DB_POOL_MAX", 20),
+          // Default MUST stay under the Supabase session-pooler cap (15 clients): if `max`
+          // exceeds it, bursts of concurrent queries error with EMAXCONNSESSION instead of
+          // queuing on the pool. 10 leaves headroom for the keep-warm socket + any stray
+          // session. Deployments on a larger pooler/direct connection can raise DB_POOL_MAX.
+          max: config.get<number>("DB_POOL_MAX", 10),
           // Cap any single query so a hung cross-region statement can't pin one of
           // the few (8 in prod) session-pooler connections indefinitely.
           // statement_timeout kills the backend server-side; query_timeout frees the
