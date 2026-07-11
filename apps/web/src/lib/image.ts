@@ -84,7 +84,18 @@ export async function prepareDocumentForUpload(
   const webp = canvas.toDataURL("image/webp", quality);
   const isWebp = webp.startsWith("data:image/webp");
   const dataUrl = isWebp ? webp : canvas.toDataURL("image/jpeg", quality);
-  return { contentBase64: dataUrl, mimeType: isWebp ? "image/webp" : "image/jpeg", fileName: file.name };
+  const mimeType = isWebp ? "image/webp" : "image/jpeg";
+  // The bytes were re-encoded, so rename the file to match the new type — this keeps the
+  // extension, declared MIME and actual bytes consistent (a scan uploaded as "aadhaar.jpg"
+  // becomes "aadhaar.webp"), so strict server-side signature checks never falsely reject it.
+  return { contentBase64: dataUrl, mimeType, fileName: withExtension(file.name, isWebp ? "webp" : "jpg") };
+}
+
+/** Replace (or append) a filename's extension, preserving the base name. */
+function withExtension(name: string, ext: string): string {
+  const dot = name.lastIndexOf(".");
+  const base = dot === -1 ? name : name.slice(0, dot);
+  return `${base || "document"}.${ext}`;
 }
 
 /* ─── shared helpers ─────────────────────────────────────────────────────── */
