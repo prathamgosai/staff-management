@@ -3,6 +3,7 @@ import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import { isAdminRole, type AuthUser } from "@workforceiq/shared";
 import { allowedOutletIds } from "../../common/auth/outlet-scope";
+import { AuditService } from "../../common/audit/audit.service";
 import type { CreateStaffDto } from "./dto/create-staff.dto";
 import type { UpdateStaffDto } from "./dto/update-staff.dto";
 import type { StaffQueryDto } from "./dto/staff-query.dto";
@@ -12,7 +13,10 @@ const SELF_EDITABLE_FIELDS = new Set(["phone", "email", "whatsapp"]);
 
 @Injectable()
 export class StaffService {
-  constructor(@Inject(DB_POOL) private readonly db: Pool) {}
+  constructor(
+    @Inject(DB_POOL) private readonly db: Pool,
+    private readonly audit: AuditService,
+  ) {}
 
   async findAll(tenantId: string, query: StaffQueryDto, outletFilter: string[] | null) {
     const { page = 1, limit = 20, search, status, departmentId, positionId } = query;
@@ -176,11 +180,14 @@ export class StaffService {
     }
   }
 
-  async softDelete(tenantId: string, id: string): Promise<void> {
-    await this.db.query(
-      "UPDATE staff SET employment_status = 'terminated', updated_at = NOW() WHERE id = $1 AND tenant_id = $2",
-      [id, tenantId],
+  async softDelete(user: AuthUser, id: string): Promise<void> {
+    const res = await this.db.query(
+      "UPDATE staff SET employment_status = 'terminated', updated_at = NOW() WHERE id = $1 AND tenant_id = $2 RETURNING id",
+      [id, user.tenantId],
     );
+    if (res.rowCount) {
+      await this.audit.record(user, { action: "staff.terminate", entityType: "staff", entityId: id });
+    }
   }
 
   /** 404s unless `staffId` is in the caller's tenant AND an outlet they may see. */

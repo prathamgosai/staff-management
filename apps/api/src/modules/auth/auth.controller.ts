@@ -87,8 +87,8 @@ export class AuthController {
   @Put("registrations/:id/review")
   @ApiBearerAuth()
   @ApiOperation({ summary: "Approve or reject a pending staff registration (requires accounts:manage)" })
-  reviewRegistration(@Param("id") id: string, @Body() body: ReviewRegistrationDto) {
-    return this.authService.reviewRegistration(id, body.action);
+  reviewRegistration(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: ReviewRegistrationDto) {
+    return this.authService.reviewRegistration(user, id, body.action);
   }
 
   @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -137,6 +137,6 @@ export class AuthController {
     @CurrentUser() user: AuthUser,
     @Body() body: ChangeAccountRolesDto,
   ) {
-    return this.authService.changeRoles(user.tenantId, body?.userIds ?? [], body?.role);
+    return this.authService.changeRoles(user, body?.userIds ?? [], body?.role);
   }
 }

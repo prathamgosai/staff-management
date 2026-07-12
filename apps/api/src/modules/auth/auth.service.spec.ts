@@ -23,8 +23,9 @@ function makeService(queryImpl: QueryImpl) {
   const config = { get: jest.fn((_k: string, d?: unknown) => d) };
   const roles = { getPermissionsForRole: jest.fn(async () => ["*"]) };
   const notifications = { emit: jest.fn(async () => undefined) };
+  const audit = { record: jest.fn(async () => undefined) };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const svc = new AuthService(db as any, jwt as any, config as any, roles as any, notifications as any);
+  const svc = new AuthService(db as any, jwt as any, config as any, roles as any, notifications as any, audit as any);
   return { svc, calls };
 }
 
