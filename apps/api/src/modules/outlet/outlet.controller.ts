@@ -7,6 +7,7 @@ import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "@workforceiq/shared";
+import { CreateOutletDto, UpdateCapacityDto } from "./dto/outlet.dto";
 
 @ApiTags("Outlets")
 @ApiBearerAuth()
@@ -33,11 +34,7 @@ export class OutletController {
   @Post()
   @RequirePermission("outlet:write")
   @ApiOperation({ summary: "Create a new outlet" })
-  create(@CurrentUser() user: AuthUser, @Body() body: {
-    brandId?: string; brandName?: string; code: string; name: string; type: string;
-    address: Record<string, string>; contact: Record<string, string>;
-    seatingCapacity?: number;
-  }) {
+  create(@CurrentUser() user: AuthUser, @Body() body: CreateOutletDto) {
     return this.outletService.create(user.tenantId, body);
   }
 
@@ -69,7 +66,7 @@ export class OutletController {
   updateCapacity(
     @CurrentUser() user: AuthUser,
     @Param("id") id: string,
-    @Body() body: { totalTables?: number | null; maxPax?: number | null },
+    @Body() body: UpdateCapacityDto,
   ) {
     return this.outletService.updateCapacity(user, id, body);
   }

@@ -6,6 +6,7 @@ import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "@workforceiq/shared";
+import { GenerateForecastDto, IngestPaxDataDto } from "./dto/forecasting.dto";
 
 @ApiTags("Forecasting")
 @ApiBearerAuth()
@@ -19,7 +20,7 @@ export class ForecastingController {
   @ApiOperation({ summary: "Trigger demand forecast generation for an outlet" })
   generate(
     @CurrentUser() user: AuthUser,
-    @Body() body: { outletId: string; startDate: string; endDate: string; model?: string },
+    @Body() body: GenerateForecastDto,
   ) {
     return this.forecastingService.generateForecast(user, body);
   }
@@ -41,7 +42,7 @@ export class ForecastingController {
   @ApiOperation({ summary: "Ingest PAX / cover count data" })
   ingestPaxData(
     @CurrentUser() user: AuthUser,
-    @Body() body: { outletId: string; data: Array<{ date: string; hour: number; paxCount: number; revenue?: number }> },
+    @Body() body: IngestPaxDataDto,
   ) {
     return this.forecastingService.ingestPaxData(user, body.outletId, body.data);
   }

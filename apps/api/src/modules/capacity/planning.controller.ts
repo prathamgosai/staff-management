@@ -6,6 +6,7 @@ import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "@workforceiq/shared";
+import { StaffingProjectionDto } from "./dto/planning.dto";
 
 /**
  * New-outlet planning. Stateless projection gated by allocation:read (admin/hr/head_of_house),
@@ -23,7 +24,7 @@ export class PlanningController {
   @ApiOperation({ summary: "Project staff needed for a planned outlet (from pax or tables)" })
   projection(
     @CurrentUser() user: AuthUser,
-    @Body() body: { plannedPax?: number; plannedTables?: number },
+    @Body() body: StaffingProjectionDto,
   ) {
     return this.capacityService.getStaffingProjection(user, body ?? {});
   }

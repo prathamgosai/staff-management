@@ -5,6 +5,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { resolveOutletFilter } from "../../common/auth/outlet-scope";
 import type { AuthUser } from "@workforceiq/shared";
+import { ApplyLeaveDto, ReviewLeaveDto } from "./dto/leave.dto";
 
 @ApiTags("Leave")
 @ApiBearerAuth()
@@ -30,7 +31,7 @@ export class LeaveController {
   @ApiOperation({ summary: "Submit a leave request" })
   applyLeave(
     @CurrentUser() user: AuthUser,
-    @Body() body: { staffId: string; leaveTypeId: string; startDate: string; endDate: string; halfDayOption?: string; reason?: string },
+    @Body() body: ApplyLeaveDto,
   ) {
     return this.leaveService.applyLeave(body, user);
   }
@@ -40,7 +41,7 @@ export class LeaveController {
   reviewLeave(
     @CurrentUser() user: AuthUser,
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: { action: "approve" | "reject"; notes?: string },
+    @Body() body: ReviewLeaveDto,
   ) {
     return this.leaveService.reviewLeave(user, id, body);
   }

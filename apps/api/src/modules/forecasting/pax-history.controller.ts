@@ -6,6 +6,7 @@ import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "@workforceiq/shared";
+import { ImportPaxHistoryDto } from "./dto/pax-history.dto";
 
 /**
  * Daily covers (pax) history import + read. Import writes are gated by outlet:write
@@ -24,7 +25,7 @@ export class PaxHistoryController {
   @ApiOperation({ summary: "Bulk-import daily covers (upsert on outlet + date)" })
   import(
     @CurrentUser() user: AuthUser,
-    @Body() body: { rows: Array<{ outletId?: string; outletName?: string; date: string; pax: number; revenue?: number | null }> },
+    @Body() body: ImportPaxHistoryDto,
   ) {
     return this.forecastingService.importDailyPax(user, body?.rows ?? []);
   }

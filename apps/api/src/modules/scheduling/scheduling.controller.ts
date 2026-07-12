@@ -10,6 +10,7 @@ import { RequirePermission } from "../../common/decorators/require-permission.de
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { assertOutletAllowed, resolveOutletFilter } from "../../common/auth/outlet-scope";
 import type { AuthUser } from "@workforceiq/shared";
+import { GenerateScheduleDto, AssignStaffDto, UpdateTemplateDto, MoveStaffDto, RequestSwapDto } from "./dto/scheduling.dto";
 
 @ApiTags("Scheduling")
 @ApiBearerAuth()
@@ -47,7 +48,7 @@ export class SchedulingController {
   @ApiOperation({ summary: "Auto-generate a schedule for the week" })
   generateSchedule(
     @CurrentUser() user: AuthUser,
-    @Body() body: { outletId: string; weekStartDate: string },
+    @Body() body: GenerateScheduleDto,
   ) {
     assertOutletAllowed(user, body.outletId);
     return this.schedulingService.triggerAutoGenerate(user.tenantId, body.outletId, body.weekStartDate, user.id);
@@ -88,7 +89,7 @@ export class SchedulingController {
   assignStaff(
     @CurrentUser() user: AuthUser,
     @Param("shiftId", ParseUUIDPipe) shiftId: string,
-    @Body() body: { staffIds: string[] },
+    @Body() body: AssignStaffDto,
   ) {
     return this.schedulingService.assignStaff(user, shiftId, body.staffIds);
   }
@@ -114,7 +115,7 @@ export class SchedulingController {
   updateTemplate(
     @CurrentUser() user: AuthUser,
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: { startTime: string; endTime: string; breakMinutes?: number; fromWeekStartDate?: string },
+    @Body() body: UpdateTemplateDto,
   ) {
     return this.schedulingService.updateShiftTemplate(user, id, body);
   }
@@ -131,7 +132,7 @@ export class SchedulingController {
   @ApiOperation({ summary: "Move one staff member onto a specific shift (this week onward)" })
   moveStaff(
     @CurrentUser() user: AuthUser,
-    @Body() body: { outletId: string; staffId: string; templateId: string; weekStartDate: string },
+    @Body() body: MoveStaffDto,
   ) {
     assertOutletAllowed(user, body.outletId);
     return this.schedulingService.moveStaffToShift(user.tenantId, user.id, body);
@@ -161,7 +162,7 @@ export class SchedulingController {
 
   @Post("swap-requests")
   @ApiOperation({ summary: "Request a shift swap" })
-  requestSwap(@CurrentUser() user: AuthUser, @Body() body: { requesterShiftId: string; targetStaffId?: string; targetShiftId?: string; reason?: string }) {
+  requestSwap(@CurrentUser() user: AuthUser, @Body() body: RequestSwapDto) {
     return this.schedulingService.requestSwap(user.id, body);
   }
 }
