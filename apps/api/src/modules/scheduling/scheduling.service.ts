@@ -9,6 +9,7 @@ import type { AuthUser } from "@workforceiq/shared";
 import { NotificationService } from "../notification/notification.service";
 import { getMondayStr, toLocalDateStr } from "../../common/utils/week.util";
 import { formatError } from "../../common/utils/format-error";
+import { computeRotationPlan } from "./rotation";
 
 // Week number from a fixed epoch for consistent rotation
 function weekIndex(dateStr: string): number {
@@ -140,87 +141,72 @@ export class SchedulingService {
       const staff = staffResult.rows;
       if (staff.length === 0) throw new BadRequestException("No active staff assigned to this outlet — assign staff before generating a roster.");
 
-      // 4. Split staff into 3 rotation groups
-      const groupSize = Math.ceil(staff.length / 3);
-      const groups: string[][] = [
-        staff.slice(0, groupSize).map((s: { id: string }) => s.id),
-        staff.slice(groupSize, groupSize * 2).map((s: { id: string }) => s.id),
-        staff.slice(groupSize * 2).map((s: { id: string }) => s.id),
-      ];
-
-      // 5. Determine rotation offset for this week (each week shifts by 1)
+      // 4-5. Pure rotation math (extracted + unit-tested in rotation.spec.ts): split
+      //      staff into 3 groups and map each group → this week's template.
       const wk = weekIndex(weekStartDate);
-      // groups[0] gets templates[(0 + wk) % 3], groups[1] gets [(1+wk)%3], etc.
-      const groupShiftMap: Record<number, typeof templates[0]> = {
-        0: templates[wk % 3],
-        1: templates[(wk + 1) % 3],
-        2: templates[(wk + 2) % 3],
-      };
+      const templateIds = templates.map((t: { id: string }) => t.id);
+      const templatesById = new Map<string, (typeof templates)[number]>(templates.map((t: { id: string }) => [t.id, t]));
+      const { groups, groupShiftMap, staffTemplateId } = computeRotationPlan(
+        staff.map((s: { id: string }) => s.id),
+        templateIds,
+        wk,
+        pinRows,
+      );
 
-      // 6. Create schedule_shifts for each day × each shift template.
-      //    Keyed by template id so a manual per-staff pin (below) can look up its
-      //    target shift regardless of which rotation group normally gets it.
       const days: string[] = [];
       for (let i = 0; i < 7; i++) {
         const d = new Date(weekStart);
         d.setDate(d.getDate() + i);
-        days.push(d.toISOString().split("T")[0]);
+        days.push(toLocalDateStr(d));
       }
 
+      // 6. Create every schedule_shift (rostered template × day) in ONE round-trip,
+      //    copying each template's fields — was 21 sequential INSERTs. RETURNING lets us
+      //    rebuild shiftByTemplateDay[templateId][YYYY-MM-DD] = shiftId for step 8.
+      const shiftRes = await client.query(
+        `INSERT INTO schedule_shifts
+           (schedule_id, template_id, outlet_id, date, start_time, end_time,
+            break_minutes, is_overnight, min_staff, target_staff, status)
+         SELECT $1, t.id, $3, d.day, t.start_time, t.end_time,
+                t.break_minutes, t.is_overnight, t.min_staff, t.target_staff, 'published'
+         FROM shift_templates t
+         CROSS JOIN unnest($4::date[]) AS d(day)
+         WHERE t.id = ANY($2::uuid[])
+         RETURNING id, template_id, date`,
+        [scheduleId, templateIds, outletId, days],
+      );
       const shiftByTemplateDay: Record<string, Record<string, string>> = {};
-      for (const day of days) {
-        for (let g = 0; g < 3; g++) {
-          const tmpl = groupShiftMap[g];
-          const ins = await client.query(
-            `INSERT INTO schedule_shifts
-               (schedule_id, template_id, outlet_id, date, start_time, end_time,
-                break_minutes, is_overnight, min_staff, target_staff, status)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'published') RETURNING id`,
-            [
-              scheduleId, tmpl.id, outletId, day,
-              tmpl.start_time, tmpl.end_time,
-              tmpl.break_minutes, tmpl.is_overnight,
-              tmpl.min_staff, tmpl.target_staff,
-            ],
-          );
-          if (!shiftByTemplateDay[tmpl.id]) shiftByTemplateDay[tmpl.id] = {};
-          shiftByTemplateDay[tmpl.id][day] = ins.rows[0].id;
-        }
+      for (const row of shiftRes.rows) {
+        const day = toLocalDateStr(row.date);
+        (shiftByTemplateDay[row.template_id] ??= {})[day] = row.id;
       }
 
-      // 7. Decide each staff member's target shift template for the week:
-      //    default = their rotation group's template. A manual "pin" (a staff
-      //    who was moved to a specific shift) overrides that, so the move
-      //    survives the weekly rotation.
-      const staffTemplateId: Record<string, string> = {};
-      for (let g = 0; g < 3; g++) {
-        for (const staffId of groups[g]) staffTemplateId[staffId] = groupShiftMap[g].id;
-      }
-
-      // Apply manual pins (loaded before the transaction). Only honour a pin for
-      // staff actually rostered here this week and pointing at one of the 3
-      // shifts in play, so an override can never orphan an assignment.
-      const scheduledTemplateIds = new Set(templates.map((t: { id: string }) => t.id));
-      for (const pin of pinRows) {
-        if (staffTemplateId[pin.staff_id] && scheduledTemplateIds.has(pin.template_id)) {
-          staffTemplateId[pin.staff_id] = pin.template_id;
-        }
-      }
-
-      // 8. Assign each staff member to their target template's shift every day.
+      // 8. Assign each staff member to their template's shift every day — collected into a
+      //    single set-based INSERT (was staff×7 sequential INSERTs). De-dup guards the
+      //    ON CONFLICT DO UPDATE against a repeated (shift, staff) pair.
+      const seen = new Set<string>();
+      const shiftIds: string[] = [];
+      const assignStaffIds: string[] = [];
       for (const staffId of Object.keys(staffTemplateId)) {
         const dayMap = shiftByTemplateDay[staffTemplateId[staffId]];
         if (!dayMap) continue;
         for (const day of days) {
           const shiftId = dayMap[day];
           if (!shiftId) continue;
-          await client.query(
-            `INSERT INTO shift_assignments (shift_id, staff_id, status)
-             VALUES ($1, $2, 'published')
-             ON CONFLICT (shift_id, staff_id) DO UPDATE SET status='published'`,
-            [shiftId, staffId],
-          );
+          const k = `${shiftId}|${staffId}`;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          shiftIds.push(shiftId);
+          assignStaffIds.push(staffId);
         }
+      }
+      if (shiftIds.length > 0) {
+        await client.query(
+          `INSERT INTO shift_assignments (shift_id, staff_id, status)
+           SELECT s, st, 'published' FROM unnest($1::uuid[], $2::uuid[]) AS x(s, st)
+           ON CONFLICT (shift_id, staff_id) DO UPDATE SET status='published'`,
+          [shiftIds, assignStaffIds],
+        );
       }
 
       await client.query("COMMIT");
@@ -233,7 +219,7 @@ export class SchedulingService {
           weekNumber: wk,
           rotationOffset: wk % 3,
           totalStaff: staff.length,
-          groups: groups.map((g, i) => ({ group: ["A", "B", "C"][i], count: g.length, shift: groupShiftMap[i].name })),
+          groups: groups.map((g, i) => ({ group: ["A", "B", "C"][i], count: g.length, shift: templatesById.get(groupShiftMap[i])?.name })),
         },
       };
     } catch (err) {
