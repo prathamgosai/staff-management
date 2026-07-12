@@ -83,11 +83,45 @@ Done & verified: **A** (CI, migration 025, dark-mode tokens, week-key test), **B
 guards), **C1** (RBAC outlet-scoping + permission gates + atomic `reviewTransfer`), **E2/E3**
 (IST timezone bucketing, slow-query logging).
 
-Remaining (larger, tracked): **D1** batch the schedule-generation write loops
-(`autoGenerateRotation` ~240 round-trips → a few — needs the rotation math unit-tested
-first), **D2** Redis read-cache for the staffing dashboard, **E1** audit logging into the
-mutating paths, **C2** class-validator DTOs for the inline `@Body()` handlers, **F1** radix
-`Dialog` for the hand-rolled modals, **F2** an e2e + RBAC-scoping test harness.
+Also done since: **D1** (set-based schedule generation), **D2** (staffing read-cache),
+**E1** (audit logging), **C2** (class-validator DTOs for all inline `@Body()` handlers),
+**F2** (RBAC scope contract tests).
+
+### F1 — accessible modals (foundation shipped, per-page rollout needs browser QA)
+
+`apps/web/src/components/ui/modal.tsx` is a new accessible `Modal` wrapper over the radix
+`Dialog` primitive, with the same `open` / `onClose` / `title` API the 7 hand-rolled modals
+already use — so each migration is a small, safe diff that adds a focus trap, Escape-to-close,
+`aria-modal`, scroll-lock and focus restoration.
+
+Rollout (do on a **Node 20** dev server so you can eyeball each one):
+
+```tsx
+// before
+{isOpen && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+    <div className="relative bg-card …"> …header… …form… …footer… </div>
+  </div>
+)}
+// after
+<Modal open={isOpen} onClose={onClose} title="…" description="…">
+  …form… …footer…
+</Modal>
+```
+
+Files with hand-rolled overlays to migrate + re-test (open / submit / close) one at a time:
+`outlets/page.tsx`, `staff/page.tsx`, `staff/[id]/page.tsx`, `accounts/page.tsx`,
+`allocation/page.tsx`, `leave/page.tsx`, `dashboard/page.tsx`. I stopped short of migrating
+these blind because the web dev server can't run here (Node 24) and the visual/interaction
+result must be verified in a browser.
+
+### Full app-boot e2e (F2 extension)
+
+The pool-mocked `outlet-scope.spec.ts` locks the RBAC contract. A full Supertest e2e (boot the
+app, seed two tenants, mint JWTs, assert an outlet-A user is 403/404 on outlet B) needs the
+local portable Postgres (`.services/pgsql`) stood up as a test DB with `DB_*` env overridden —
+do NOT point e2e writes at the live `.env`.
 
 > **Deploy note:** this branch is intentionally **not merged to `main` yet** — `main`
 > auto-deploys the live web app. Review the diff, then merge when ready (ideally after the
