@@ -53,6 +53,24 @@ export function assertOutletAllowed(user: AuthUser, outletId: string): void {
 }
 
 /**
+ * DB-backed scope check: 404s unless `outletId` belongs to the caller's tenant AND
+ * (for non-admins) is one of their outlets. Shared by the outlet-addressed reads
+ * (headcount, labor cost, detail) that previously queried by a raw client outletId
+ * with no tenant filter — a cross-tenant leak. 404 (not 403) so cross-tenant
+ * existence isn't leaked. Admins (scope = null) still get the tenant check.
+ */
+export async function assertOutletInScope(db: Pool, user: AuthUser, outletId: string): Promise<void> {
+  const scope = allowedOutletIds(user);
+  const res = await db.query(
+    `SELECT 1 FROM outlets
+      WHERE id = $1 AND tenant_id = $2
+        AND ($3::uuid[] IS NULL OR id = ANY($3))`,
+    [outletId, user.tenantId, scope],
+  );
+  if (!res.rows[0]) throw new NotFoundException("Outlet not found");
+}
+
+/**
  * DB-backed scope check: 404s unless `staffId` belongs to the caller's tenant AND
  * an outlet they may access. Shared by the endpoints that address a staff member
  * by id (leave balances, personal reads, …). Uses 404 (not 403) so existence

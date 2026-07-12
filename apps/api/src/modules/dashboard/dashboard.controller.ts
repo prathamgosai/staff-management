@@ -30,7 +30,7 @@ export class DashboardController {
     @Query("outletId") outletId: string,
     @Query("departmentId") departmentId: string,
   ) {
-    return this.dashboardService.getStaffHierarchy(user.tenantId, outletId, departmentId);
+    return this.dashboardService.getStaffHierarchy(user, outletId, departmentId);
   }
 
   @Get("outlet-breakdown")
@@ -46,32 +46,35 @@ export class DashboardController {
     @Query("startDate") startDate: string,
     @Query("endDate") endDate: string,
   ) {
-    return this.dashboardService.getOutletKpis(user.tenantId, outletId, startDate, endDate);
+    return this.dashboardService.getOutletKpis(user, outletId, startDate, endDate);
   }
 
   @Get("staff-performance")
   staffPerformance(
+    @CurrentUser() user: AuthUser,
     @Query("outletId") outletId: string,
     @Query("startDate") startDate: string,
     @Query("endDate") endDate: string,
   ) {
-    return this.dashboardService.getStaffPerformance(outletId, startDate, endDate);
+    return this.dashboardService.getStaffPerformance(user, outletId, startDate, endDate);
   }
 
   @Get("labor-cost-trend")
   laborCostTrend(
+    @CurrentUser() user: AuthUser,
     @Query("outletId") outletId: string,
     @Query("startDate") startDate: string,
     @Query("endDate") endDate: string,
   ) {
-    return this.dashboardService.getLaborCostTrend(outletId, startDate, endDate);
+    return this.dashboardService.getLaborCostTrend(user, outletId, startDate, endDate);
   }
 
   @Get("coverage-heatmap")
   coverageHeatmap(
+    @CurrentUser() user: AuthUser,
     @Query("outletId") outletId: string,
     @Query("weekStartDate") weekStartDate: string,
   ) {
-    return this.dashboardService.getCoverageHeatmap(outletId, weekStartDate);
+    return this.dashboardService.getCoverageHeatmap(user, outletId, weekStartDate);
   }
 }

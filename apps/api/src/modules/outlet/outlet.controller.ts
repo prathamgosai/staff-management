@@ -10,7 +10,7 @@ import type { AuthUser } from "@workforceiq/shared";
 
 @ApiTags("Outlets")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller("outlets")
 export class OutletController {
   constructor(
@@ -31,6 +31,7 @@ export class OutletController {
   }
 
   @Post()
+  @RequirePermission("outlet:write")
   @ApiOperation({ summary: "Create a new outlet" })
   create(@CurrentUser() user: AuthUser, @Body() body: {
     brandId?: string; brandName?: string; code: string; name: string; type: string;
@@ -58,7 +59,7 @@ export class OutletController {
 
   @Get(":id")
   findOne(@CurrentUser() user: AuthUser, @Param("id") id: string) {
-    return this.outletService.findOne(user.tenantId, id);
+    return this.outletService.findOne(user, id);
   }
 
   @Put(":id/capacity")
@@ -74,6 +75,7 @@ export class OutletController {
   }
 
   @Delete(":id")
+  @RequirePermission("outlet:write")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Deactivate (soft-delete) an outlet" })
   deactivate(@CurrentUser() user: AuthUser, @Param("id") id: string) {
@@ -87,16 +89,17 @@ export class OutletController {
     @Param("id") id: string,
     @Query("date") date: string,
   ) {
-    return this.outletService.getHeadcountStatus(id, date);
+    return this.outletService.getHeadcountStatus(user, id, date);
   }
 
   @Get(":id/labor-cost")
   @ApiOperation({ summary: "Labor cost summary for an outlet" })
   laborCost(
+    @CurrentUser() user: AuthUser,
     @Param("id") id: string,
     @Query("startDate") startDate: string,
     @Query("endDate") endDate: string,
   ) {
-    return this.outletService.getLaborCostSummary(id, startDate, endDate);
+    return this.outletService.getLaborCostSummary(user, id, startDate, endDate);
   }
 }

@@ -1,6 +1,8 @@
 import { Injectable, Inject } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
+import { assertOutletInScope } from "../../common/auth/outlet-scope";
+import type { AuthUser } from "@workforceiq/shared";
 
 @Injectable()
 export class DashboardService {
@@ -43,7 +45,8 @@ export class DashboardService {
     };
   }
 
-  async getOutletKpis(tenantId: string, outletId: string, startDate: string, endDate: string) {
+  async getOutletKpis(user: AuthUser, outletId: string, startDate: string, endDate: string) {
+    await assertOutletInScope(this.db, user, outletId); // was queried by raw outletId, no tenant filter
     const [coverage, labor, attendance, pendingLeave] = await Promise.all([
       this.db.query(
         `SELECT
@@ -99,9 +102,10 @@ export class DashboardService {
     };
   }
 
-  async getStaffHierarchy(tenantId: string, outletId?: string, departmentId?: string) {
+  async getStaffHierarchy(user: AuthUser, outletId?: string, departmentId?: string) {
+    if (outletId) await assertOutletInScope(this.db, user, outletId);
     const conditions = ["s.tenant_id = $1", "s.employment_status = 'active'"];
-    const params: unknown[] = [tenantId];
+    const params: unknown[] = [user.tenantId];
     let i = 2;
     if (outletId)     { conditions.push(`s.current_outlet_id = $${i++}`); params.push(outletId); }
     if (departmentId) { conditions.push(`s.department_id = $${i++}`);     params.push(departmentId); }
@@ -187,7 +191,8 @@ export class DashboardService {
     };
   }
 
-  async getStaffPerformance(outletId: string, startDate: string, endDate: string) {
+  async getStaffPerformance(user: AuthUser, outletId: string, startDate: string, endDate: string) {
+    await assertOutletInScope(this.db, user, outletId);
     const result = await this.db.query(
       `SELECT
          s.id, s.name, s.employee_id, p.name AS position_name,
@@ -207,7 +212,8 @@ export class DashboardService {
     return { data: result.rows };
   }
 
-  async getLaborCostTrend(outletId: string, startDate: string, endDate: string) {
+  async getLaborCostTrend(user: AuthUser, outletId: string, startDate: string, endDate: string) {
+    await assertOutletInScope(this.db, user, outletId);
     const result = await this.db.query(
       `SELECT
          DATE_TRUNC('week', ar.date)::date AS week,
@@ -222,7 +228,8 @@ export class DashboardService {
     return { data: result.rows };
   }
 
-  async getCoverageHeatmap(outletId: string, weekStartDate: string) {
+  async getCoverageHeatmap(user: AuthUser, outletId: string, weekStartDate: string) {
+    await assertOutletInScope(this.db, user, outletId);
     const result = await this.db.query(
       `SELECT
          ss.date,
