@@ -7,6 +7,7 @@ import { ConfigService } from "@nestjs/config";
 import helmet from "helmet";
 import * as compression from "compression";
 import { AppModule } from "./app.module";
+import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -60,6 +61,11 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
+
+  // Map raw Postgres errors to correct HTTP statuses and stamp a request id on every
+  // error response (see AllExceptionsFilter). Registered after the pipe so ValidationPipe
+  // 400s still pass through untouched.
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle("WorkforceIQ API")

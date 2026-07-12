@@ -5,6 +5,7 @@ import { ScheduleModule } from "@nestjs/schedule";
 import { BullModule } from "@nestjs/bull";
 import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
+import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { AuthModule } from "./modules/auth/auth.module";
 import { StaffModule } from "./modules/staff/staff.module";
 import { StaffDocumentsModule } from "./modules/staff-documents/staff-documents.module";
@@ -82,6 +83,14 @@ import { DatabaseModule } from "./database/database.module";
   providers: [
     // Apply rate limiting across the whole API.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Fail-CLOSED authentication: require a valid JWT on every route unless it is
+    // explicitly marked @Public(). Previously auth was opt-in per controller, so any
+    // handler that forgot @UseGuards(JwtAuthGuard) shipped silently unauthenticated.
+    // Runs after ThrottlerGuard and before controller/route guards, so it populates
+    // request.user before PermissionsGuard/RolesGuard evaluate. Permission + outlet
+    // resolution is in-memory-cached (RolesService), so this adds no DB round-trip
+    // even where an explicit JwtAuthGuard also remains on the controller.
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
 })
 export class AppModule {}

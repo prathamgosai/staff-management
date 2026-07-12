@@ -7,6 +7,7 @@ import { Throttle } from "@nestjs/throttler";
 import type { Response } from "express";
 import { StaffDocumentsService, AuditCtx } from "./staff-documents.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { Public } from "../../common/decorators/public.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "@workforceiq/shared";
 
@@ -89,6 +90,7 @@ export class DocumentsController {
   }
 
   @Get(":id/file")
+  @Public() // signed HMAC token is the auth (see class doc) — exempt from the global JwtAuthGuard
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @ApiOperation({ summary: "Token-gated file stream (no JWT — validated by the signed URL token)" })
   async file(

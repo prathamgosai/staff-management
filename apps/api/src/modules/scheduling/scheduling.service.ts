@@ -461,18 +461,20 @@ export class SchedulingService {
 
   async assignStaff(user: AuthUser, shiftId: string, staffIds: string[]) {
     await this.assertShiftInScope(user, shiftId);
-    const inserted = [];
-    for (const staffId of staffIds) {
-      const result = await this.db.query(
-        `INSERT INTO shift_assignments (shift_id, staff_id, status)
-         VALUES ($1, $2, 'published')
-         ON CONFLICT (shift_id, staff_id) DO UPDATE SET status = 'published'
-         RETURNING *`,
-        [shiftId, staffId],
-      );
-      inserted.push(result.rows[0]);
-    }
-    return { data: inserted };
+    if (staffIds.length === 0) return { data: [] };
+    // One set-based upsert instead of a query-per-staff loop: assigning 10 staff was
+    // ~10 sequential Sydney round-trips (~5s); this is a single round-trip. De-dup the
+    // ids first — a repeated (shift_id, staff_id) in one INSERT trips Postgres'
+    // "ON CONFLICT DO UPDATE cannot affect row a second time" error.
+    const uniqueIds = [...new Set(staffIds)];
+    const result = await this.db.query(
+      `INSERT INTO shift_assignments (shift_id, staff_id, status)
+       SELECT $1, s, 'published' FROM unnest($2::uuid[]) AS s
+       ON CONFLICT (shift_id, staff_id) DO UPDATE SET status = 'published'
+       RETURNING *`,
+      [shiftId, uniqueIds],
+    );
+    return { data: result.rows };
   }
 
   async removeAssignment(user: AuthUser, shiftId: string, staffId: string): Promise<void> {

@@ -8,6 +8,7 @@ import { KioskService, KioskDevice } from "./kiosk.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { KioskDeviceGuard } from "../../common/guards/kiosk-device.guard";
+import { Public } from "../../common/decorators/public.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { CurrentKiosk } from "../../common/decorators/kiosk-device.decorator";
@@ -64,6 +65,7 @@ export class KioskAdminController {
  * a PIN, and every punch is stamped source='kiosk', scoped to the device's outlet.
  */
 @ApiTags("Kiosk")
+@Public() // device-token auth (KioskDeviceGuard), not user JWT — exempt from the global JwtAuthGuard
 @UseGuards(KioskDeviceGuard)
 @Controller("kiosk")
 export class KioskController {
