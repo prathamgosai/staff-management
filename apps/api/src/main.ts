@@ -1,3 +1,9 @@
+// Pin the process timezone BEFORE anything computes a Date. The week-key / date helpers
+// format from LOCAL components to match the web client (India). On a UTC host (Render)
+// that local was UTC, so a just-after-IST-midnight moment could land on the wrong day.
+// Aligns the Node process with the DB session TZ (see database.module APP_TZ).
+process.env.TZ = process.env.TZ || process.env.APP_TZ || "Asia/Kolkata";
+
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, VersioningType } from "@nestjs/common";

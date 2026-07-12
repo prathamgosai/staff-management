@@ -18,6 +18,14 @@ const TRANSIENT_DB_ERRORS = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]);
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const logger = new Logger("Database");
+        // Business timezone. The DB (Supabase) defaults its session to UTC, so
+        // CURRENT_DATE / ::date / EXTRACT(DOW FROM ...) bucketed a just-after-IST-midnight
+        // clock-in into the PREVIOUS day (and could collide the UNIQUE(staff_id, date) key).
+        // Pin every pooled connection to IST so date bucketing matches the India business.
+        const appTz = config.get<string>("APP_TZ", "Asia/Kolkata");
+        // Log any single query slower than this (default 1.5s — above the ~470ms Sydney
+        // baseline so it flags genuinely slow statements, not every round-trip).
+        const slowMs = config.get<number>("DB_SLOW_QUERY_MS", 1500);
         const pool = new Pool({
           host: config.get("DB_HOST", "localhost"),
           port: config.get<number>("DB_PORT", 5432),
@@ -56,6 +64,15 @@ const TRANSIENT_DB_ERRORS = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]);
         });
         pool.on("error", (err) => logger.error(`Unexpected PG pool error: ${err.message}`));
 
+        // Pin the session timezone on every new physical connection (E2). SET TIME ZONE
+        // persists for the life of the pooled session, so all later CURRENT_DATE/::date
+        // resolve in IST. Best-effort: a failure here must not take the connection down.
+        pool.on("connect", (client) => {
+          client.query(`SET TIME ZONE '${appTz}'`).catch((e) =>
+            logger.warn(`Could not set session timezone to ${appTz}: ${(e as Error).message}`),
+          );
+        });
+
         // Survive a transient DNS/connect blip to the remote DB: a single failed
         // getaddrinfo (ENOTFOUND) otherwise 500s the request (e.g. login) even though
         // the DB is fine a second later. Bounded to 3 quick attempts; only connect-time
@@ -66,11 +83,25 @@ const TRANSIENT_DB_ERRORS = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]);
           if (typeof args[args.length - 1] === "function") {
             return (originalQuery as (...a: unknown[]) => unknown)(...args);
           }
+          const startedAt = Date.now();
+          const sqlText =
+            typeof args[0] === "string" ? args[0] : (args[0] as { text?: string })?.text ?? "";
+          const logIfSlow = () => {
+            const ms = Date.now() - startedAt;
+            if (ms >= slowMs) {
+              // First line of the statement, whitespace-collapsed — enough to identify it
+              // without dumping a multi-line query (or any bound parameter values).
+              const preview = sqlText.replace(/\s+/g, " ").trim().slice(0, 120);
+              logger.warn(`Slow query ${ms}ms: ${preview}`);
+            }
+          };
           return (async () => {
             let lastErr: unknown;
             for (let attempt = 1; attempt <= 3; attempt++) {
               try {
-                return await (originalQuery as (...a: unknown[]) => Promise<unknown>)(...args);
+                const res = await (originalQuery as (...a: unknown[]) => Promise<unknown>)(...args);
+                logIfSlow();
+                return res;
               } catch (e) {
                 lastErr = e;
                 const code = (e as { code?: string })?.code;
