@@ -34,11 +34,15 @@ export function computeRotationPlan(
     staffIds.slice(groupSize * 2),
   ];
 
-  // Each week shifts the mapping by 1. Mirrors the original templates[(g+wk)%3] indexing.
+  // Each week shifts the mapping by 1. Modulo the ACTUAL template count (not a hard-coded 3)
+  // so an outlet with 1–2 active templates never maps a group to templateIds[undefined] —
+  // which would leave that whole group unrostered (a silent partial roster). With <3
+  // templates two groups simply share a template.
+  const n = templateIds.length || 1;
   const groupShiftMap: Record<number, string> = {
-    0: templateIds[weekIndex % 3],
-    1: templateIds[(weekIndex + 1) % 3],
-    2: templateIds[(weekIndex + 2) % 3],
+    0: templateIds[weekIndex % n],
+    1: templateIds[(weekIndex + 1) % n],
+    2: templateIds[(weekIndex + 2) % n],
   };
 
   const staffTemplateId: Record<string, string> = {};

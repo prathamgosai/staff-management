@@ -201,10 +201,20 @@ beforeAll(async () => {
   try {
     await pool.query("SELECT 1");
     dbUp = true;
-  } catch {
-    // eslint-disable-next-line no-console
-    console.warn("[rbac.e2e] local Postgres not reachable — skipping e2e (start .services/pgsql on 5433).");
-    return;
+  } catch (e) {
+    // HARD-FAIL by default: this suite is opt-in (pnpm test:e2e) and is the ONLY proof the
+    // RBAC scope fixes hold through the HTTP stack. Silently "passing" with 0 assertions when
+    // Postgres is down would be false confidence — a reintroduced leak would still show green.
+    // Set SKIP_E2E_IF_NO_DB=1 to deliberately skip when no DB is available.
+    if (process.env.SKIP_E2E_IF_NO_DB === "1") {
+      // eslint-disable-next-line no-console
+      console.warn("[rbac.e2e] Postgres unreachable and SKIP_E2E_IF_NO_DB=1 — skipping.");
+      return;
+    }
+    throw new Error(
+      `[rbac.e2e] Postgres not reachable at ${process.env.DB_HOST}:${process.env.DB_PORT}. ` +
+      `Start .services/pgsql on 5433 first, or set SKIP_E2E_IF_NO_DB=1 to skip. (${(e as Error).message})`,
+    );
   }
   await cleanup(); // clear any leftovers from a failed prior run
   await seed();
@@ -332,6 +342,23 @@ describe("RBAC e2e (allocation outlet-scope)", () => {
     if (!dbUp) return;
     const r = await api(`/scheduling/swap-requests/${ids.swap}/review`, { method: "PUT", token: adminTok(), body: { action: "reject" } });
     expect(r.status).toBe(400);
+  });
+
+  // Fix #3: a decided transfer can't be re-reviewed (the approve in the 4th test stands).
+  it("rejects re-reviewing an already-decided transfer", async () => {
+    if (!dbUp) return;
+    const r = await api(`/allocation/transfers/${ids.transfer}/review`, { method: "PUT", token: adminTok(), body: { action: "reject" } });
+    expect(r.status).toBe(400);
+  });
+
+  // Fix #1: /dashboard/staff-hierarchy with NO outletId must still be outlet-scoped.
+  it("scopes staff-hierarchy to the caller's outlets even when outletId is omitted", async () => {
+    if (!dbUp) return;
+    const r = await api("/dashboard/staff-hierarchy", { token: hohTok() });
+    expect(r.status).toBe(200);
+    const rows = (r.json as { data: Array<{ outlet_id: string }> }).data;
+    expect(rows.length).toBeGreaterThan(0); // staff2 is at outlet A → not vacuously true
+    expect(rows.every((x) => x.outlet_id === ids.outletA)).toBe(true); // never leaks outlet B / relocated staff
   });
 
   // Payroll CSV export — reports:export (admin has it via fallback; head_of_house doesn't).

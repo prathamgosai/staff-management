@@ -35,7 +35,7 @@ export class AttendanceService {
     return { data: result.rows };
   }
 
-  async clockIn(user: AuthUser, body: { staffId: string; outletId: string; shiftId?: string; method: string; gpsLat?: number; gpsLng?: number }) {
+  async clockIn(user: AuthUser, body: { staffId: string; outletId: string; shiftId?: string; method?: string; gpsLat?: number; gpsLng?: number }) {
     assertOutletAllowed(user, body.outletId);
     const today = new Date().toISOString().split("T")[0];
     const existing = await this.db.query(
@@ -48,12 +48,12 @@ export class AttendanceService {
       `INSERT INTO attendance_records (staff_id, outlet_id, shift_id, date, clock_in, status, clock_in_method)
        VALUES ($1, $2, $3, $4, NOW(), 'present', $5)
        RETURNING *`,
-      [body.staffId, body.outletId, body.shiftId ?? null, today, body.method],
+      [body.staffId, body.outletId, body.shiftId ?? null, today, body.method ?? null],
     );
     return { data: result.rows[0] };
   }
 
-  async clockOut(user: AuthUser, body: { attendanceId: string; method: string; gpsLat?: number; gpsLng?: number }) {
+  async clockOut(user: AuthUser, body: { attendanceId: string; method?: string; gpsLat?: number; gpsLng?: number }) {
     await this.assertAttendanceInScope(user, body.attendanceId);
     const record = await this.db.query(
       "SELECT * FROM attendance_records WHERE id = $1 AND clock_out IS NULL",
@@ -73,7 +73,7 @@ export class AttendanceService {
        SET clock_out = NOW(), clock_out_method = $2,
            regular_hours = $3, overtime_hours = $4, updated_at = NOW()
        WHERE id = $1 RETURNING *`,
-      [body.attendanceId, body.method, regularHours.toFixed(2), overtimeHours.toFixed(2)],
+      [body.attendanceId, body.method ?? null, regularHours.toFixed(2), overtimeHours.toFixed(2)],
     );
     return { data: result.rows[0] };
   }

@@ -16,7 +16,7 @@ export class ForecastingController {
   constructor(private readonly forecastingService: ForecastingService) {}
 
   @Post("generate")
-  @RequirePermission("forecast:read")
+  @RequirePermission("forecast:write")
   @ApiOperation({ summary: "Trigger demand forecast generation for an outlet" })
   generate(
     @CurrentUser() user: AuthUser,

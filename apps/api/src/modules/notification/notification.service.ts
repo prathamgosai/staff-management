@@ -380,6 +380,10 @@ export class NotificationService {
        LEFT JOIN document_types dt ON dt.id = d.document_type_id
        WHERE d.deleted_at IS NULL AND d.expires_on IS NOT NULL AND d.status <> 'expired'
          AND s.employment_status = 'active' AND s.current_outlet_id IS NOT NULL
+         -- Only staff with an app login: the dedup anchors on the in-app notification row,
+         -- which is only written for a user. A login-less staff member at a head-less outlet
+         -- would otherwise have no row to dedup against and be re-emailed every night.
+         AND s.user_id IS NOT NULL
          AND d.expires_on >= (NOW() AT TIME ZONE 'Asia/Kolkata')::date
          AND d.expires_on <= ((NOW() AT TIME ZONE 'Asia/Kolkata')::date + ($1::int))
        ORDER BY d.expires_on ASC`,

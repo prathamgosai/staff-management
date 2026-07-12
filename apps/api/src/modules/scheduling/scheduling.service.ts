@@ -892,6 +892,21 @@ export class SchedulingService {
         if (!swap.target_staff_id || !swap.target_shift_id) {
           throw new BadRequestException("This request has no target shift to swap with — it can't be approved.");
         }
+        // Lock BOTH assignment rows and re-verify they still belong to the requester/target.
+        // Locking serializes two pending swaps that share an assignment (no lost update); the
+        // re-verify rejects a swap that went stale (an assignment was reassigned since the
+        // request). A UNIQUE(shift_id, staff_id) collision surfaces as 409 via the pg filter.
+        const asg = await client.query(
+          "SELECT id, staff_id FROM shift_assignments WHERE id = ANY($1::uuid[]) FOR UPDATE",
+          [[swap.requester_shift_id, swap.target_shift_id]],
+        );
+        const staffByAssignment = new Map(asg.rows.map((r) => [r.id as string, r.staff_id as string]));
+        if (
+          staffByAssignment.get(swap.requester_shift_id) !== swap.requester_id ||
+          staffByAssignment.get(swap.target_shift_id) !== swap.target_staff_id
+        ) {
+          throw new BadRequestException("These shifts have changed since the swap was requested; it can no longer be approved.");
+        }
         // Swap the two staff onto each other's assignments.
         await client.query("UPDATE shift_assignments SET staff_id = $2 WHERE id = $1", [swap.requester_shift_id, swap.target_staff_id]);
         await client.query("UPDATE shift_assignments SET staff_id = $2 WHERE id = $1", [swap.target_shift_id, swap.requester_id]);
