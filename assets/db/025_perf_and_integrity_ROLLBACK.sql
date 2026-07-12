@@ -9,6 +9,7 @@ DROP INDEX IF EXISTS idx_users_lower_email;
 DROP INDEX IF EXISTS idx_staff_lower_employee_id;
 DROP INDEX IF EXISTS idx_refresh_tokens_token_hash;
 DROP INDEX IF EXISTS idx_refresh_tokens_user;
+DROP INDEX IF EXISTS idx_audit_tenant_created;
 
 ALTER TABLE IF EXISTS staffing_ratios                  DROP CONSTRAINT IF EXISTS chk_staffing_ratios_pax_pos;
 ALTER TABLE IF EXISTS labor_ratio_configs              DROP CONSTRAINT IF EXISTS chk_labor_ratio_pax_pos;

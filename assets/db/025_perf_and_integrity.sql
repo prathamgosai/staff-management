@@ -32,6 +32,8 @@ CREATE INDEX IF NOT EXISTS idx_users_lower_email        ON users (lower(email));
 CREATE INDEX IF NOT EXISTS idx_staff_lower_employee_id  ON staff (lower(employee_id));
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash ON refresh_tokens (token_hash);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user       ON refresh_tokens (user_id);
+-- Audit trail is read newest-first per tenant (GET /audit).
+CREATE INDEX IF NOT EXISTS idx_audit_tenant_created      ON audit_logs (tenant_id, created_at DESC);
 
 -- ── 2. Divisor CHECK constraints (idempotent via pg_constraint guard) ──────────
 DO $$

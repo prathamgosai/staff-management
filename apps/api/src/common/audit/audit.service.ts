@@ -26,6 +26,35 @@ export class AuditService {
   private readonly logger = new Logger("Audit");
   constructor(@Inject(DB_POOL) private readonly db: Pool) {}
 
+  /**
+   * Read the audit trail for the caller's tenant, newest first. Tenant-scoped (never
+   * crosses tenants) with optional filters + pagination. Backs the "who changed what" view.
+   */
+  async list(
+    tenantId: string,
+    filters: { action?: string; entityType?: string; entityId?: string; limit?: number; offset?: number },
+  ) {
+    const conditions = ["a.tenant_id = $1"];
+    const params: unknown[] = [tenantId];
+    let i = 2;
+    if (filters.action) { conditions.push(`a.action = $${i++}`); params.push(filters.action); }
+    if (filters.entityType) { conditions.push(`a.entity_type = $${i++}`); params.push(filters.entityType); }
+    if (filters.entityId) { conditions.push(`a.entity_id = $${i++}`); params.push(filters.entityId); }
+    const limit = Math.min(Math.max(Number(filters.limit) || 50, 1), 200);
+    const offset = Math.max(Number(filters.offset) || 0, 0);
+    const res = await this.db.query(
+      `SELECT a.id, a.action, a.entity_type, a.entity_id, a.old_values, a.new_values,
+              a.created_at, a.user_id, u.name AS user_name, u.email AS user_email
+       FROM audit_logs a
+       LEFT JOIN users u ON u.id = a.user_id
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY a.created_at DESC
+       LIMIT $${i++} OFFSET $${i}`,
+      [...params, limit, offset],
+    );
+    return { data: res.rows };
+  }
+
   async record(user: Pick<AuthUser, "id" | "tenantId">, entry: AuditEntry): Promise<void> {
     try {
       await this.db.query(

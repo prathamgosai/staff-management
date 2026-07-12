@@ -199,4 +199,20 @@ describe("RBAC e2e (allocation outlet-scope)", () => {
     expect(st.rows[0].status).toBe("approved");
     expect(st.rows[0].approved_by).toBe(ids.admin);
   });
+
+  it("exposes the audit trail (GET /audit) to accounts:manage and shows the approval", async () => {
+    if (!dbUp) return;
+    // The admin approve above wrote a transfer.approve audit row (E1). accounts:manage
+    // comes from the admin role's fallback permissions.
+    const r = await api("/audit?entityType=staff_transfer", { token: adminTok() });
+    expect(r.status).toBe(200);
+    const rows = (r.json as { data: Array<{ action: string; entity_id: string }> }).data;
+    expect(rows.some((x) => x.action === "transfer.approve" && x.entity_id === ids.transfer)).toBe(true);
+  });
+
+  it("denies the audit trail to a role without accounts:manage (head_of_house)", async () => {
+    if (!dbUp) return;
+    const r = await api("/audit", { token: hohTok() });
+    expect(r.status).toBe(403);
+  });
 });
