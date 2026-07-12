@@ -3,6 +3,7 @@ import { Pool, PoolClient } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import { allowedOutletIds } from "../../common/auth/outlet-scope";
 import { istTodayStr } from "../../common/utils/date.util";
+import { TtlCache } from "../../common/cache/ttl-cache";
 import type { AuthUser } from "@workforceiq/shared";
 import {
   computeStaffing, EngineThresholds, DEFAULT_THRESHOLDS, RoleInput, OutletStaffingResult,
@@ -30,6 +31,20 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 @Injectable()
 export class StaffingService {
   constructor(@Inject(DB_POOL) private readonly db: Pool) {}
+
+  // buildResults fires 11 concurrent queries against a pool capped at 10, so a single
+  // dashboard load can saturate the pool and starve cheap requests (e.g. login). Cache the
+  // computed result per (tenant, scope, date) for a short TTL — repeated dashboard loads
+  // and the per-outlet card + company view then share one computation. The cron
+  // (writeSnapshots) intentionally bypasses this and always computes fresh.
+  private readonly resultCache = new TtlCache<OutletComputed[]>(
+    Number(process.env.STAFFING_CACHE_TTL_MS) || 30_000,
+  );
+
+  private cachedBuild(tenantId: string, scope: string[] | null, date: string): Promise<OutletComputed[]> {
+    const key = `${tenantId}|${scope ? [...scope].sort().join(",") : "*"}|${date}`;
+    return this.resultCache.getOrCompute(key, () => this.buildResults(tenantId, scope, date));
+  }
 
   private normalizeDate(date?: string): string {
     if (!date) return istTodayStr();
@@ -190,7 +205,7 @@ export class StaffingService {
   /** All outlets — card-grid summary. */
   async getRequirements(user: AuthUser, date?: string) {
     const d = this.normalizeDate(date);
-    const results = await this.buildResults(user.tenantId, allowedOutletIds(user), d);
+    const results = await this.cachedBuild(user.tenantId, allowedOutletIds(user), d);
     return {
       data: {
         date: d,
@@ -209,7 +224,7 @@ export class StaffingService {
   /** One outlet — per-role breakdown. */
   async getOutletRequirements(user: AuthUser, outletId: string, date?: string) {
     const d = this.normalizeDate(date);
-    const results = await this.buildResults(user.tenantId, allowedOutletIds(user), d);
+    const results = await this.cachedBuild(user.tenantId, allowedOutletIds(user), d);
     const one = results.find((r) => r.outletId === outletId);
     if (!one) throw new NotFoundException("Outlet not found or not in scope.");
     return {
@@ -225,7 +240,7 @@ export class StaffingService {
     const d = this.normalizeDate(date);
     const scope = allowedOutletIds(user);
     const [results, counts] = await Promise.all([
-      this.buildResults(user.tenantId, scope, d),
+      this.cachedBuild(user.tenantId, scope, d),
       this.companyCounts(user.tenantId, scope, d),
     ]);
 
