@@ -39,6 +39,10 @@ const ids = {
   transfer: randomUUID(),
   admin: randomUUID(),
   hoh: randomUUID(),
+  // A SECOND tenant, to prove cross-tenant reads are blocked (the C1 tenant-scope fix).
+  tenantB: randomUUID(),
+  brandB: randomUUID(),
+  outletInB: randomUUID(),
 };
 
 let app: INestApplication;
@@ -82,12 +86,22 @@ async function seed() {
     "INSERT INTO users (id, tenant_id, email, name, role, outlet_ids, is_active) VALUES ($1,$2,$3,'E2E HoH','head_of_house'::user_role,$4,true)",
     [ids.hoh, ids.tenant, `e2e-hoh-${ids.hoh.slice(0, 8)}@example.com`, [ids.outletA]],
   );
+
+  // Second tenant with its own outlet — used to prove that tenant A's admin (whose scope is
+  // "all outlets in tenant A") still cannot read tenant B's outlet-addressed data.
+  await pool.query("INSERT INTO tenants (id, name, slug) VALUES ($1,$2,$3)", [ids.tenantB, "E2E Tenant B", `e2e-b-${ids.tenantB.slice(0, 8)}`]);
+  await pool.query("INSERT INTO brands (id, tenant_id, name) VALUES ($1,$2,$3)", [ids.brandB, ids.tenantB, "E2E Brand B"]);
+  await pool.query(
+    `INSERT INTO outlets (id, tenant_id, brand_id, code, name, type, address, contact, operating_hours, headcount_targets, is_active)
+     VALUES ($1,$2,$3,'E2E-B-OUT','Outlet in B','dine_in','{}','{}','{}','{}',true)`,
+    [ids.outletInB, ids.tenantB, ids.brandB],
+  );
 }
 
 async function cleanup() {
   // Name-based so it also sweeps strays from any earlier interrupted run. Explicit
   // child-first delete (don't rely on cascade being present on every FK).
-  const t = await pool.query("SELECT id FROM tenants WHERE name = 'E2E Tenant'").catch(() => ({ rows: [] as { id: string }[] }));
+  const t = await pool.query("SELECT id FROM tenants WHERE name LIKE 'E2E Tenant%'").catch(() => ({ rows: [] as { id: string }[] }));
   const tids = t.rows.map((r) => r.id);
   if (tids.length === 0) return;
   // audit_logs (written by the E1 audit on admin approve) has no ON DELETE CASCADE and
@@ -214,5 +228,32 @@ describe("RBAC e2e (allocation outlet-scope)", () => {
     if (!dbUp) return;
     const r = await api("/audit", { token: hohTok() });
     expect(r.status).toBe(403);
+  });
+
+  // Cross-tenant: tenant-A admin has "all outlets" scope, but only within tenant A. These
+  // outlet-addressed reads used to query by a raw outletId with NO tenant filter (the C1
+  // leak); assertOutletInScope now 404s an outlet from another tenant.
+  it("blocks tenant-A admin from reading tenant-B outlet headcount (cross-tenant leak fix)", async () => {
+    if (!dbUp) return;
+    const r = await api(`/outlets/${ids.outletInB}/headcount-status?date=2026-07-12`, { token: adminTok() });
+    expect(r.status).toBe(404);
+  });
+
+  it("blocks tenant-A admin from reading tenant-B outlet KPIs on the dashboard", async () => {
+    if (!dbUp) return;
+    const r = await api(`/dashboard/outlet-kpis?outletId=${ids.outletInB}&startDate=2026-07-01&endDate=2026-07-12`, { token: adminTok() });
+    expect(r.status).toBe(404);
+  });
+
+  it("blocks tenant-A admin from reading a tenant-B outlet's detail", async () => {
+    if (!dbUp) return;
+    const r = await api(`/outlets/${ids.outletInB}`, { token: adminTok() });
+    expect(r.status).toBe(404);
+  });
+
+  it("still lets tenant-A admin read its OWN outlet's detail (scope isn't over-broad)", async () => {
+    if (!dbUp) return;
+    const r = await api(`/outlets/${ids.outletA}`, { token: adminTok() });
+    expect(r.status).toBe(200);
   });
 });
