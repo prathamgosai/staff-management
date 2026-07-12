@@ -294,7 +294,7 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-2xl font-black text-foreground">{o.total_staff}</span>
               </div>
-              <div className="px-4 pb-3 flex items-center justify-between border-t border-gray-50 pt-2.5">
+              <div className="px-4 pb-3 flex items-center justify-between border-t border-border pt-2.5">
                 <div className="flex gap-3 text-xs text-muted-foreground">
                   <span><b className="text-foreground">{o.full_time}</b> FT</span>
                   <span><b className="text-foreground">{o.part_time}</b> PT</span>
@@ -343,13 +343,13 @@ export default function DashboardPage() {
 
               {(expandedOutlet === null || expandedOutlet === outletName) && Object.entries(depts).map(([deptName, members]) => (
                 <div key={deptName}>
-                  <div className="px-6 py-1.5 bg-card border-b border-gray-50 flex items-center gap-2">
+                  <div className="px-6 py-1.5 bg-card border-b border-border flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
                     <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">{deptName}</span>
                     <span className="text-xs text-muted-foreground">({members.length})</span>
                   </div>
                   {members.map(s => (
-                    <div key={s.id} className="flex items-center gap-3 px-5 py-2.5 border-b border-gray-50 hover:bg-muted/60 transition">
+                    <div key={s.id} className="flex items-center gap-3 px-5 py-2.5 border-b border-border hover:bg-muted/60 transition">
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 text-white text-xs font-bold flex items-center justify-center shrink-0">
                         {s.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
                       </div>
@@ -386,7 +386,7 @@ export default function DashboardPage() {
                       </div>
                       {isAdmin && (
                         <button onClick={() => setEditing(s)} title="Change designation"
-                          className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-blue-600 hover:bg-blue-50 transition shrink-0">
+                          className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition shrink-0">
                           <Pencil size={14} />
                         </button>
                       )}

@@ -1,8 +1,9 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from "@nestjs/common";
-import { Pool, PoolClient } from "pg";
+import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import { allowedOutletIds } from "../../common/auth/outlet-scope";
 import { istTodayStr } from "../../common/utils/date.util";
+import { TtlCache } from "../../common/cache/ttl-cache";
 import type { AuthUser } from "@workforceiq/shared";
 import {
   computeStaffing, EngineThresholds, DEFAULT_THRESHOLDS, RoleInput, OutletStaffingResult,
@@ -30,6 +31,20 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 @Injectable()
 export class StaffingService {
   constructor(@Inject(DB_POOL) private readonly db: Pool) {}
+
+  // buildResults fires 11 concurrent queries against a pool capped at 10, so a single
+  // dashboard load can saturate the pool and starve cheap requests (e.g. login). Cache the
+  // computed result per (tenant, scope, date) for a short TTL — repeated dashboard loads
+  // and the per-outlet card + company view then share one computation. The cron
+  // (writeSnapshots) intentionally bypasses this and always computes fresh.
+  private readonly resultCache = new TtlCache<OutletComputed[]>(
+    Number(process.env.STAFFING_CACHE_TTL_MS) || 30_000,
+  );
+
+  private cachedBuild(tenantId: string, scope: string[] | null, date: string): Promise<OutletComputed[]> {
+    const key = `${tenantId}|${scope ? [...scope].sort().join(",") : "*"}|${date}`;
+    return this.resultCache.getOrCompute(key, () => this.buildResults(tenantId, scope, date));
+  }
 
   private normalizeDate(date?: string): string {
     if (!date) return istTodayStr();
@@ -190,7 +205,7 @@ export class StaffingService {
   /** All outlets — card-grid summary. */
   async getRequirements(user: AuthUser, date?: string) {
     const d = this.normalizeDate(date);
-    const results = await this.buildResults(user.tenantId, allowedOutletIds(user), d);
+    const results = await this.cachedBuild(user.tenantId, allowedOutletIds(user), d);
     return {
       data: {
         date: d,
@@ -209,7 +224,7 @@ export class StaffingService {
   /** One outlet — per-role breakdown. */
   async getOutletRequirements(user: AuthUser, outletId: string, date?: string) {
     const d = this.normalizeDate(date);
-    const results = await this.buildResults(user.tenantId, allowedOutletIds(user), d);
+    const results = await this.cachedBuild(user.tenantId, allowedOutletIds(user), d);
     const one = results.find((r) => r.outletId === outletId);
     if (!one) throw new NotFoundException("Outlet not found or not in scope.");
     return {
@@ -225,7 +240,7 @@ export class StaffingService {
     const d = this.normalizeDate(date);
     const scope = allowedOutletIds(user);
     const [results, counts] = await Promise.all([
-      this.buildResults(user.tenantId, scope, d),
+      this.cachedBuild(user.tenantId, scope, d),
       this.companyCounts(user.tenantId, scope, d),
     ]);
 
@@ -306,40 +321,40 @@ export class StaffingService {
   /** Upsert per-outlet, per-role snapshots for `date` across a tenant. Idempotent. */
   async writeSnapshots(tenantId: string, date: string): Promise<number> {
     const results = await this.buildResults(tenantId, null, date);
-    const client = await this.db.connect();
-    let written = 0;
-    try {
-      await client.query("BEGIN");
-      for (const o of results) {
-        for (const r of o.result.roles) {
-          await this.upsertSnapshot(client, tenantId, o.outletId, date, r);
-          written++;
-        }
-      }
-      await client.query("COMMIT");
-    } catch (e) {
-      await client.query("ROLLBACK");
-      throw e;
-    } finally {
-      client.release();
-    }
-    return written;
-  }
 
-  private async upsertSnapshot(client: PoolClient, tenantId: string, outletId: string, date: string, r: OutletStaffingResult["roles"][number]) {
-    await client.query(
+    // Flatten every outlet×role snapshot into one batch. The conflict key
+    // (outlet_id, snapshot_date, position_id) is unique across these rows (one row per
+    // position per outlet), so a single multi-row upsert replaces ~325 sequential ones.
+    const COLS = 15;
+    const params: unknown[] = [];
+    for (const o of results) {
+      for (const r of o.result.roles) {
+        params.push(
+          tenantId, o.outletId, date, r.positionId, r.required, r.current, r.present, r.onLeave,
+          r.transferredIn, r.transferredOut, r.available, r.shortage, r.excess, r.vacant, r.status,
+        );
+      }
+    }
+    const rowCount = params.length / COLS;
+    if (rowCount === 0) return 0;
+
+    const valuesSql = Array.from({ length: rowCount }, (_, i) =>
+      `(${Array.from({ length: COLS }, (_, j) => `$${i * COLS + j + 1}`).join(",")})`,
+    ).join(",");
+
+    await this.db.query(
       `INSERT INTO staffing_snapshots
          (tenant_id, outlet_id, snapshot_date, position_id, required, current_staff, present, on_leave,
           transferred_in, transferred_out, available, shortage, excess, vacant, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       VALUES ${valuesSql}
        ON CONFLICT (outlet_id, snapshot_date, position_id) DO UPDATE SET
          required = EXCLUDED.required, current_staff = EXCLUDED.current_staff, present = EXCLUDED.present,
          on_leave = EXCLUDED.on_leave, transferred_in = EXCLUDED.transferred_in, transferred_out = EXCLUDED.transferred_out,
          available = EXCLUDED.available, shortage = EXCLUDED.shortage, excess = EXCLUDED.excess,
          vacant = EXCLUDED.vacant, status = EXCLUDED.status`,
-      [tenantId, outletId, date, r.positionId, r.required, r.current, r.present, r.onLeave,
-       r.transferredIn, r.transferredOut, r.available, r.shortage, r.excess, r.vacant, r.status],
+      params,
     );
+    return rowCount;
   }
 
   /** Trend series for a single outlet from persisted snapshots (30/90-day charts). */

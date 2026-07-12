@@ -1,6 +1,7 @@
 import { Controller, Get } from "@nestjs/common";
 import { SkipThrottle } from "@nestjs/throttler";
 import { ApiTags, ApiOperation } from "@nestjs/swagger";
+import { Public } from "../../common/decorators/public.decorator";
 
 /**
  * Liveness probe at GET /api/v1/health.
@@ -12,6 +13,7 @@ import { ApiTags, ApiOperation } from "@nestjs/swagger";
  * frequent pinger never trips the global rate limiter (429).
  */
 @ApiTags("Health")
+@Public()
 @SkipThrottle()
 @Controller("health")
 export class HealthController {

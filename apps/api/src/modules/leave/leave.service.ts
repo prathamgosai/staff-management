@@ -5,6 +5,7 @@ import { assertOutletAllowed, assertStaffInScope } from "../../common/auth/outle
 import { NotificationEvent } from "@workforceiq/shared";
 import type { AuthUser } from "@workforceiq/shared";
 import { NotificationService } from "../notification/notification.service";
+import { AuditService } from "../../common/audit/audit.service";
 import { toLocalDateStr } from "../../common/utils/week.util";
 import { formatError } from "../../common/utils/format-error";
 
@@ -15,6 +16,7 @@ export class LeaveService {
   constructor(
     @Inject(DB_POOL) private readonly db: Pool,
     private readonly notifications: NotificationService,
+    private readonly audit: AuditService,
   ) {}
 
   async getRequests(filters: { tenantId: string; outletFilter?: string[] | null; status?: string; staffId?: string; startDate?: string; endDate?: string }) {
@@ -109,6 +111,14 @@ export class LeaveService {
         [leave.staff_id, leave.leave_type_id, leave.total_days],
       );
     }
+
+    // Record the decision (who approved/rejected whose leave). Fail-safe.
+    await this.audit.record(user, {
+      action: `leave.${body.action}`,
+      entityType: "leave_request",
+      entityId: id,
+      newValues: { status: newStatus, staffId: leave.staff_id, notes: body.notes ?? null },
+    });
 
     // Tell the requester the decision (+ the outlet head for coverage planning).
     void this.notifyLeaveDecided(id, leave.staff_id, newStatus, leave, user.id);

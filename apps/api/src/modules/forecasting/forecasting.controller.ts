@@ -9,65 +9,78 @@ import type { AuthUser } from "@workforceiq/shared";
 
 @ApiTags("Forecasting")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller("forecasting")
 export class ForecastingController {
   constructor(private readonly forecastingService: ForecastingService) {}
 
   @Post("generate")
+  @RequirePermission("forecast:read")
   @ApiOperation({ summary: "Trigger demand forecast generation for an outlet" })
   generate(
+    @CurrentUser() user: AuthUser,
     @Body() body: { outletId: string; startDate: string; endDate: string; model?: string },
   ) {
-    return this.forecastingService.generateForecast(body);
+    return this.forecastingService.generateForecast(user, body);
   }
 
   @Get("forecasts")
+  @RequirePermission("forecast:read")
   @ApiOperation({ summary: "Get demand forecasts for a date range" })
   getForecasts(
+    @CurrentUser() user: AuthUser,
     @Query("outletId") outletId: string,
     @Query("startDate") startDate: string,
     @Query("endDate") endDate: string,
   ) {
-    return this.forecastingService.getForecasts(outletId, startDate, endDate);
+    return this.forecastingService.getForecasts(user, outletId, startDate, endDate);
   }
 
   @Post("pax-data")
+  @RequirePermission("forecast:write")
   @ApiOperation({ summary: "Ingest PAX / cover count data" })
-  ingestPaxData(@Body() body: { outletId: string; data: Array<{ date: string; hour: number; paxCount: number; revenue?: number }> }) {
-    return this.forecastingService.ingestPaxData(body.outletId, body.data);
+  ingestPaxData(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { outletId: string; data: Array<{ date: string; hour: number; paxCount: number; revenue?: number }> },
+  ) {
+    return this.forecastingService.ingestPaxData(user, body.outletId, body.data);
   }
 
   @Get("pax-data")
+  @RequirePermission("forecast:read")
   getPaxData(
+    @CurrentUser() user: AuthUser,
     @Query("outletId") outletId: string,
     @Query("startDate") startDate: string,
     @Query("endDate") endDate: string,
   ) {
-    return this.forecastingService.getPaxData(outletId, startDate, endDate);
+    return this.forecastingService.getPaxData(user, outletId, startDate, endDate);
   }
 
   @Get("accuracy")
+  @RequirePermission("forecast:read")
   @ApiOperation({ summary: "Forecast accuracy report" })
   accuracy(
+    @CurrentUser() user: AuthUser,
     @Query("outletId") outletId: string,
     @Query("startDate") startDate: string,
     @Query("endDate") endDate: string,
   ) {
-    return this.forecastingService.getAccuracyReport(outletId, startDate, endDate);
+    return this.forecastingService.getAccuracyReport(user, outletId, startDate, endDate);
   }
 
   @Get("headcount-recommendation")
+  @RequirePermission("forecast:read")
   @ApiOperation({ summary: "Get recommended headcount for a date/hour" })
   headcountRec(
+    @CurrentUser() user: AuthUser,
     @Query("outletId") outletId: string,
     @Query("date") date: string,
   ) {
-    return this.forecastingService.getHeadcountRecommendation(outletId, date);
+    return this.forecastingService.getHeadcountRecommendation(user, outletId, date);
   }
 
   @Get("staffing-suggestions")
-  @UseGuards(PermissionsGuard)
   @RequirePermission("forecast:read")
   @ApiOperation({ summary: "Phase-1 day-of-week forecast: suggested vs rostered per day" })
   staffingSuggestions(

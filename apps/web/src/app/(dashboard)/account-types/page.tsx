@@ -196,7 +196,7 @@ export default function AccountTypesPage() {
                 <span className="font-semibold text-sm text-foreground">Users with this account type</span>
                 <span className="ml-auto text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{current.userCount}</span>
               </div>
-              <div className="max-h-64 overflow-y-auto divide-y divide-gray-50">
+              <div className="max-h-64 overflow-y-auto divide-y divide-border">
                 {usersLoading ? (
                   <div className="py-8 text-center"><Loader2 size={18} className="animate-spin mx-auto text-muted-foreground" /></div>
                 ) : users.length === 0 ? (
@@ -285,7 +285,7 @@ export default function AccountTypesPage() {
                           <span className="text-xs text-muted-foreground">{activeCount}/{keys.length}</span>
                         )}
                       </div>
-                      <div className="divide-y divide-gray-50">
+                      <div className="divide-y divide-border">
                         {mod.permissions.map((p) => {
                           const on = draft.includes(p.key);
                           return (

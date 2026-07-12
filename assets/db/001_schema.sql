@@ -139,6 +139,12 @@ CREATE TABLE users (
     avatar_url      TEXT,
     is_active       BOOLEAN DEFAULT TRUE,
     must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Self-registration workflow: a newly-registered account waits for admin approval,
+    -- tracked against the onboarding ticket. These were originally added out-of-band on
+    -- the live DB; declared here so a fresh rebuild matches prod and migration 007
+    -- (which sets pending_approval) can run. See migration 025 for the reconciliation.
+    pending_approval BOOLEAN NOT NULL DEFAULT FALSE,
+    ticket_number   TEXT,
     last_login_at   TIMESTAMPTZ,
     password_reset_token  TEXT,
     password_reset_expiry TIMESTAMPTZ,

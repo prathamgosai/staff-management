@@ -134,7 +134,7 @@ export default function ApprovalsPage() {
             <p className="text-sm text-muted-foreground mt-1">All registration requests have been reviewed.</p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-50">
+          <div className="divide-y divide-border">
             {rows.map(row => (
               <div key={row.id} className="px-5 py-4 hover:bg-muted/60 transition flex items-center gap-4">
                 {/* Avatar */}

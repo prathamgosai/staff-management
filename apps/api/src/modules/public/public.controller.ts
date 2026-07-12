@@ -2,6 +2,7 @@ import { Controller, Get, Param } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { ApiTags, ApiOperation } from "@nestjs/swagger";
 import { PublicService } from "./public.service";
+import { Public } from "../../common/decorators/public.decorator";
 
 /**
  * Unauthenticated, hard-throttled read-only endpoints reached from WhatsApp magic links.
@@ -10,6 +11,7 @@ import { PublicService } from "./public.service";
  * invalid token yields a uniform 404.
  */
 @ApiTags("Public")
+@Public()
 @Controller("public")
 export class PublicController {
   constructor(private readonly publicService: PublicService) {}

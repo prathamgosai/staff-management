@@ -3,7 +3,7 @@ import { Pool } from "pg";
 import { ConfigService } from "@nestjs/config";
 import axios from "axios";
 import { DB_POOL } from "../../database/database.module";
-import { allowedOutletIds } from "../../common/auth/outlet-scope";
+import { allowedOutletIds, assertOutletInScope } from "../../common/auth/outlet-scope";
 import { toLocalDateStr } from "../../common/utils/week.util";
 import { CapacityService } from "../capacity/capacity.service";
 import { SchedulingService } from "../scheduling/scheduling.service";
@@ -22,7 +22,8 @@ export class ForecastingService {
     this.mlServiceUrl = config.get("ML_SERVICE_URL", "http://localhost:8000");
   }
 
-  async generateForecast(body: { outletId: string; startDate: string; endDate: string; model?: string }) {
+  async generateForecast(user: AuthUser, body: { outletId: string; startDate: string; endDate: string; model?: string }) {
+    await assertOutletInScope(this.db, user, body.outletId); // was unscoped — any tenant's outlet
     const enableML = this.config.get("ENABLE_ML_FORECASTING") === "true";
 
     if (enableML) {
@@ -53,7 +54,8 @@ export class ForecastingService {
     };
   }
 
-  async getForecasts(outletId: string, startDate: string, endDate: string) {
+  async getForecasts(user: AuthUser, outletId: string, startDate: string, endDate: string) {
+    await assertOutletInScope(this.db, user, outletId);
     const result = await this.db.query(
       `SELECT * FROM demand_forecasts
        WHERE outlet_id = $1 AND forecast_date BETWEEN $2 AND $3
@@ -63,7 +65,8 @@ export class ForecastingService {
     return { data: result.rows };
   }
 
-  async ingestPaxData(outletId: string, data: Array<{ date: string; hour: number; paxCount: number; revenue?: number }>) {
+  async ingestPaxData(user: AuthUser, outletId: string, data: Array<{ date: string; hour: number; paxCount: number; revenue?: number }>) {
+    await assertOutletInScope(this.db, user, outletId); // was unscoped — cross-tenant data write
     const values = data.map((_, i) => `($${i * 6 + 1},$${i * 6 + 2},$${i * 6 + 3},$${i * 6 + 4},$${i * 6 + 5},$${i * 6 + 6})`).join(",");
     const params = data.flatMap((d) => [
       outletId,
@@ -82,7 +85,8 @@ export class ForecastingService {
     return { data: { inserted: data.length } };
   }
 
-  async getPaxData(outletId: string, startDate: string, endDate: string) {
+  async getPaxData(user: AuthUser, outletId: string, startDate: string, endDate: string) {
+    await assertOutletInScope(this.db, user, outletId);
     const result = await this.db.query(
       `SELECT date, hour, pax_count, revenue, day_of_week, is_public_holiday, special_event
        FROM pax_data
@@ -93,7 +97,8 @@ export class ForecastingService {
     return { data: result.rows };
   }
 
-  async getAccuracyReport(outletId: string, startDate: string, endDate: string) {
+  async getAccuracyReport(user: AuthUser, outletId: string, startDate: string, endDate: string) {
+    await assertOutletInScope(this.db, user, outletId);
     const result = await this.db.query(
       `SELECT model, AVG(accuracy) AS avg_accuracy, COUNT(*) AS sample_count
        FROM demand_forecasts
@@ -277,7 +282,8 @@ export class ForecastingService {
     return { data: { outletId, weekStart, coversPerOnDutyStaff: covers, days } };
   }
 
-  async getHeadcountRecommendation(outletId: string, date: string) {
+  async getHeadcountRecommendation(user: AuthUser, outletId: string, date: string) {
+    await assertOutletInScope(this.db, user, outletId);
     const forecast = await this.db.query(
       `SELECT hourly_forecasts, daily_summary
        FROM demand_forecasts

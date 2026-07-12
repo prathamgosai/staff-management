@@ -155,7 +155,7 @@ function RequestTransferModal({ open, onClose, onSuccess, outlets }: {
                       <button key={s.id} type="button"
                         onMouseDown={e => e.preventDefault()}
                         onClick={() => pickStaff(s)}
-                        className="w-full text-left px-3 py-2.5 hover:bg-blue-50 text-sm flex items-center gap-3 border-b border-gray-50 last:border-0">
+                        className="w-full text-left px-3 py-2.5 hover:bg-muted text-sm flex items-center gap-3 border-b border-border last:border-0">
                         <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center justify-center shrink-0">
                           {s.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
                         </div>
@@ -289,7 +289,7 @@ function CityStaffPanel({ city, cityOutlets }: { city: string; cityOutlets: Outl
       </div>
 
       {/* Outlet filter chips */}
-      <div className="px-5 py-3 flex gap-2 flex-wrap border-b border-gray-50">
+      <div className="px-5 py-3 flex gap-2 flex-wrap border-b border-border">
         <button onClick={() => setSelectedOutletId(null)}
           className={`text-xs font-semibold px-3 py-1.5 rounded-xl transition ${!selectedOutletId ? "bg-blue-600 text-white" : "bg-muted text-muted-foreground hover:bg-border"}`}>
           All ({allStaff.length})
@@ -306,7 +306,7 @@ function CityStaffPanel({ city, cityOutlets }: { city: string; cityOutlets: Outl
       </div>
 
       {/* Staff list */}
-      <div className="divide-y divide-gray-50">
+      <div className="divide-y divide-border">
         {results.isLoading ? (
           <div className="px-5 py-8 text-center text-sm text-muted-foreground">Loading staff…</div>
         ) : filtered.length === 0 ? (
@@ -438,7 +438,7 @@ export default function AllocationPage() {
                   <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-border">
                 {isLoading ? (
                   Array.from({ length: 4 }).map((_, i) => (
                     <tr key={i}>{Array.from({ length: 7 }).map((_, j) => (

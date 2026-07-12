@@ -87,7 +87,7 @@ function StaffPicker({ staff, value, onChange }: {
             ) : filtered.map(s => (
               <button key={s.id} type="button"
                 onClick={() => { onChange(s.id); setOpen(false); setQuery(""); }}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center justify-between gap-2 ${s.id === value ? "bg-blue-50 dark:bg-blue-500/15" : ""}`}>
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between gap-2 ${s.id === value ? "bg-blue-50 dark:bg-blue-500/15" : ""}`}>
                 <span className="font-medium text-foreground truncate">{s.name}</span>
                 {s.employeeId && <span className="text-xs text-muted-foreground shrink-0">#{s.employeeId}</span>}
               </button>

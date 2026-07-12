@@ -36,7 +36,10 @@ export class CapacityService {
         "SELECT value FROM tenant_settings WHERE tenant_id = $1 AND key = 'covers_per_on_duty_staff'",
         [tenantId],
       );
-      return res.rows[0] ? Number(res.rows[0].value) : 10;
+      // Clamp to a positive value: this is a DIVISOR downstream (forecast pax / covers).
+      // A stray 0 (legacy row predating the 025 CHECK) would yield Infinity staff.
+      const v = res.rows[0] ? Number(res.rows[0].value) : 10;
+      return Number.isFinite(v) && v > 0 ? v : 10;
     } catch {
       return 10; // tenant_settings not migrated yet
     }
@@ -230,7 +233,9 @@ export class CapacityService {
       const cats = new Set<string>([...ratioMap.keys(), ...(actual.get(oid)?.keys() ?? [])]);
       const categories = [...cats].sort(catSort).map((category) => {
         const r = ratioMap.get(category);
-        const required = r ? Math.max(r.minStaff, Math.ceil(maxPax / r.paxPerStaff)) : 0;
+        // Guard the divisor: a 0/negative pax_per_staff (legacy row before the 025 CHECK)
+        // would make Math.ceil(maxPax / 0) = Infinity and corrupt every total. Fall back to min_staff.
+        const required = r ? (r.paxPerStaff > 0 ? Math.max(r.minStaff, Math.ceil(maxPax / r.paxPerStaff)) : r.minStaff) : 0;
         const act = actual.get(oid)?.get(category) ?? 0;
         return { category, required, actual: act, variance: act - required };
       });
@@ -316,7 +321,9 @@ export class CapacityService {
       .map((r) => {
         const paxPerStaff = Number(r.pax_per_staff);
         const minStaff = Number(r.min_staff);
-        return { category: r.category as string, required: Math.max(minStaff, Math.ceil(pax / paxPerStaff)) };
+        // Guard the divisor (see getCapacityAnalysis): 0 pax_per_staff → Infinity.
+        const required = paxPerStaff > 0 ? Math.max(minStaff, Math.ceil(pax / paxPerStaff)) : minStaff;
+        return { category: r.category as string, required };
       })
       .sort((a, b) => rank(a.category) - rank(b.category) || a.category.localeCompare(b.category));
     const requiredTotal = categories.reduce((s, c) => s + c.required, 0);

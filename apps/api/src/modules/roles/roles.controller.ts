@@ -34,6 +34,6 @@ export class RolesController {
     @Param("role") role: string,
     @Body() body: { permissions: string[] },
   ) {
-    return this.rolesService.updateRolePermissions(user.tenantId, role, body?.permissions ?? []);
+    return this.rolesService.updateRolePermissions(user, role, body?.permissions ?? []);
   }
 }

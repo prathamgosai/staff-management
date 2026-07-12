@@ -164,7 +164,7 @@ function ApplyLeaveModal({ open, onClose, onSuccess }: { open: boolean; onClose:
                       <button key={s.id} type="button"
                         onMouseDown={e => e.preventDefault()}
                         onClick={() => { set("staffId", s.id); setSearch(""); setDropdownOpen(false); }}
-                        className="w-full text-left px-3 py-2.5 hover:bg-blue-50 text-sm flex items-center gap-3 border-b border-gray-50 last:border-0">
+                        className="w-full text-left px-3 py-2.5 hover:bg-muted text-sm flex items-center gap-3 border-b border-border last:border-0">
                         <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center justify-center shrink-0">
                           {s.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
                         </div>
@@ -348,7 +348,7 @@ export default function LeavePage() {
                 <th className="text-left px-5 py-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-border">
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>

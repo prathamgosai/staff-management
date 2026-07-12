@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, Inject } from "@nes
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import { isAdminRole, type Role, type AuthUser } from "@workforceiq/shared";
-import { assertOutletAllowed } from "../../common/auth/outlet-scope";
+import { assertOutletAllowed, assertOutletInScope } from "../../common/auth/outlet-scope";
 
 @Injectable()
 export class OutletService {
@@ -32,13 +32,14 @@ export class OutletService {
     return { data: result.rows };
   }
 
-  async findOne(tenantId: string, id: string) {
+  async findOne(user: AuthUser, id: string) {
+    await assertOutletInScope(this.db, user, id); // tenant + outlet scope (404 out-of-scope)
     const result = await this.db.query(
       `SELECT o.*, b.name AS brand_name, b.logo_url AS brand_logo
        FROM outlets o
        JOIN brands b ON b.id = o.brand_id
        WHERE o.id = $1 AND o.tenant_id = $2`,
-      [id, tenantId],
+      [id, user.tenantId],
     );
     if (!result.rows[0]) throw new NotFoundException(`Outlet ${id} not found`);
     const departments = await this.db.query(
@@ -81,7 +82,8 @@ export class OutletService {
     return { data: result.rows[0] };
   }
 
-  async getHeadcountStatus(outletId: string, date: string) {
+  async getHeadcountStatus(user: AuthUser, outletId: string, date: string) {
+    await assertOutletInScope(this.db, user, outletId); // was queried by raw outletId, no tenant filter
     const result = await this.db.query(
       `SELECT
          sc.week_start_date,
@@ -162,7 +164,8 @@ export class OutletService {
     }
   }
 
-  async getLaborCostSummary(outletId: string, startDate: string, endDate: string) {
+  async getLaborCostSummary(user: AuthUser, outletId: string, startDate: string, endDate: string) {
+    await assertOutletInScope(this.db, user, outletId); // was queried by raw outletId, no tenant filter
     const result = await this.db.query(
       `SELECT
          SUM(ar.regular_hours * s.hourly_rate) AS regular_cost,

@@ -1,3 +1,9 @@
+// Pin the process timezone BEFORE anything computes a Date. The week-key / date helpers
+// format from LOCAL components to match the web client (India). On a UTC host (Render)
+// that local was UTC, so a just-after-IST-midnight moment could land on the wrong day.
+// Aligns the Node process with the DB session TZ (see database.module APP_TZ).
+process.env.TZ = process.env.TZ || process.env.APP_TZ || "Asia/Kolkata";
+
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, VersioningType } from "@nestjs/common";
@@ -7,6 +13,7 @@ import { ConfigService } from "@nestjs/config";
 import helmet from "helmet";
 import * as compression from "compression";
 import { AppModule } from "./app.module";
+import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -60,6 +67,11 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
+
+  // Map raw Postgres errors to correct HTTP statuses and stamp a request id on every
+  // error response (see AllExceptionsFilter). Registered after the pipe so ValidationPipe
+  // 400s still pass through untouched.
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle("WorkforceIQ API")
