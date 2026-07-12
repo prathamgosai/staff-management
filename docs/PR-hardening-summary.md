@@ -42,8 +42,13 @@ extensions — from an adversarially-verified improvement review. **88 files, ~2
   local Postgres; proves within- AND cross-tenant scope, atomic transfer, audit read/write). `c8b1627`, `911e8b2`, `b148fe0`
 
 ## Verification
-- API `tsc` clean · web `tsc` clean · **99 unit + 14 contract + 10 e2e tests green** · API
+- API `tsc` clean · web `tsc` clean · **101 unit + 17 full app-boot e2e tests green** · API
   boots and behaves correctly on manual probes · D1 SQL validated against the real engine.
+- **Adversarial review pass:** the whole branch was independently reviewed across 8 risk
+  dimensions (each high/critical finding re-verified against the code). It surfaced 12 real
+  defects — incl. a cross-outlet leak in `staff-hierarchy`, a `reviewTransfer` reject-after-approve
+  integrity hole, a nightly document-reminder email loop, and an e2e suite that passed with 0
+  assertions when the DB was down — **all fixed** (commit `2daedc6`) and covered by new tests.
 
 ## Deploy / migration notes (see `docs/OWNER-ACTIONS-ROADMAP.md`)
 - Apply `docs/APPLY-024` + `APPLY-025` in Supabase (idempotent).
