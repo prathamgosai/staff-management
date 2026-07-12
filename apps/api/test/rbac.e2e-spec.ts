@@ -85,14 +85,22 @@ async function seed() {
 }
 
 async function cleanup() {
-  // Explicit child-first delete (don't rely on cascade being present on every FK).
-  await pool.query("DELETE FROM staff_transfers WHERE id = $1", [ids.transfer]).catch(() => {});
-  await pool.query("DELETE FROM staff WHERE tenant_id = $1", [ids.tenant]).catch(() => {});
-  await pool.query("DELETE FROM users WHERE tenant_id = $1", [ids.tenant]).catch(() => {});
-  await pool.query("DELETE FROM role_permissions WHERE tenant_id = $1", [ids.tenant]).catch(() => {});
-  await pool.query("DELETE FROM outlets WHERE tenant_id = $1", [ids.tenant]).catch(() => {});
-  await pool.query("DELETE FROM brands WHERE tenant_id = $1", [ids.tenant]).catch(() => {});
-  await pool.query("DELETE FROM tenants WHERE id = $1", [ids.tenant]).catch(() => {});
+  // Name-based so it also sweeps strays from any earlier interrupted run. Explicit
+  // child-first delete (don't rely on cascade being present on every FK).
+  const t = await pool.query("SELECT id FROM tenants WHERE name = 'E2E Tenant'").catch(() => ({ rows: [] as { id: string }[] }));
+  const tids = t.rows.map((r) => r.id);
+  if (tids.length === 0) return;
+  // audit_logs (written by the E1 audit on admin approve) has no ON DELETE CASCADE and
+  // references both tenant and user, so it must be cleared first. Tolerate its absence
+  // on an older local schema.
+  await pool.query("DELETE FROM audit_logs WHERE tenant_id = ANY($1)", [tids]).catch(() => {});
+  await pool.query("DELETE FROM staff_transfers WHERE staff_id IN (SELECT id FROM staff WHERE tenant_id = ANY($1))", [tids]).catch(() => {});
+  await pool.query("DELETE FROM staff WHERE tenant_id = ANY($1)", [tids]).catch(() => {});
+  await pool.query("DELETE FROM users WHERE tenant_id = ANY($1)", [tids]).catch(() => {});
+  await pool.query("DELETE FROM role_permissions WHERE tenant_id = ANY($1)", [tids]).catch(() => {});
+  await pool.query("DELETE FROM outlets WHERE tenant_id = ANY($1)", [tids]).catch(() => {});
+  await pool.query("DELETE FROM brands WHERE tenant_id = ANY($1)", [tids]).catch(() => {});
+  await pool.query("DELETE FROM tenants WHERE id = ANY($1)", [tids]).catch(() => {});
 }
 
 function token(user: { id: string; email: string; role: string; outletIds: string[] }): string {
@@ -148,8 +156,12 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
-  if (app) await app.close();
+  // Clean up BEFORE closing the app: app.close() can stall on open handles (keep-warm
+  // interval, socket.io), and cleanup must run regardless so the tenant never leaks.
   if (dbUp) await cleanup();
+  if (app) {
+    try { await app.close(); } catch { /* ignore shutdown errors */ }
+  }
   if (pool) await pool.end();
 });
 
