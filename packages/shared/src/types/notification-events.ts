@@ -27,6 +27,7 @@ export enum NotificationEvent {
   LEAVE_DECIDED = "leave_decided",
   ACCOUNT_PENDING_APPROVAL = "account_pending_approval",
   SYSTEM_ALERT = "system_alert",
+  DOCUMENT_EXPIRING = "document_expiring",
 }
 
 // Delivery channels use the canonical `NotificationChannel` enum from
@@ -109,6 +110,15 @@ export interface SystemAlertPayload {
   outletId?: UUID;
 }
 
+export interface DocumentExpiringPayload {
+  tenantId: UUID;
+  outletId: UUID; // the staff member's current outlet (drives the outlet-head recipients)
+  staffId: UUID;
+  documentId: UUID; // used to make the reminder idempotent (one reminder per document)
+  typeName: string; // human label of the document type, e.g. "Aadhaar", "Visa"
+  expiresOn: DateString;
+}
+
 /** Maps each event to its payload type, enabling a type-safe `emit(event, payload)`. */
 export interface NotificationPayloadMap {
   [NotificationEvent.ROSTER_PUBLISHED]: RosterPublishedPayload;
@@ -118,6 +128,7 @@ export interface NotificationPayloadMap {
   [NotificationEvent.LEAVE_DECIDED]: LeaveDecidedPayload;
   [NotificationEvent.ACCOUNT_PENDING_APPROVAL]: AccountPendingApprovalPayload;
   [NotificationEvent.SYSTEM_ALERT]: SystemAlertPayload;
+  [NotificationEvent.DOCUMENT_EXPIRING]: DocumentExpiringPayload;
 }
 
 export type NotificationPayload = NotificationPayloadMap[NotificationEvent];
