@@ -98,9 +98,15 @@ async function seed() {
   // Shift-swap fixtures (all within tenant A / outlet A): staff1 works shift1, staff2 works
   // shift2, and a pending swap offers to trade them.
   await pool.query(
-    `INSERT INTO staff (id, tenant_id, employee_id, name, phone, primary_outlet_id, current_outlet_id, employment_status, join_date)
-     VALUES ($1,$2,'E2E-EMP-2','E2E Staff 2','+910000000001',$3,$3,'active', CURRENT_DATE)`,
+    `INSERT INTO staff (id, tenant_id, employee_id, name, phone, primary_outlet_id, current_outlet_id, employment_status, join_date, hourly_rate)
+     VALUES ($1,$2,'E2E-EMP-2','E2E Staff 2','+910000000001',$3,$3,'active', CURRENT_DATE, 100)`,
     [ids.staff2, ids.tenant, ids.outletA],
+  );
+  // An attendance record (8 regular + 2 OT hours) for the payroll-export test.
+  await pool.query(
+    `INSERT INTO attendance_records (staff_id, outlet_id, date, status, regular_hours, overtime_hours)
+     VALUES ($1,$2,'2026-07-15','present',8,2)`,
+    [ids.staff2, ids.outletA],
   );
   await pool.query(
     "INSERT INTO schedules (id, outlet_id, week_start_date, week_end_date, status) VALUES ($1,$2,'2026-07-06','2026-07-12','published')",
@@ -145,6 +151,7 @@ async function cleanup() {
   // Scheduling fixtures (swap -> assignments -> shifts -> schedules), FK-safe order.
   await pool.query("DELETE FROM shift_swap_requests WHERE requester_id IN (SELECT id FROM staff WHERE tenant_id = ANY($1))", [tids]).catch(() => {});
   await pool.query("DELETE FROM shift_assignments WHERE staff_id IN (SELECT id FROM staff WHERE tenant_id = ANY($1))", [tids]).catch(() => {});
+  await pool.query("DELETE FROM attendance_records WHERE staff_id IN (SELECT id FROM staff WHERE tenant_id = ANY($1))", [tids]).catch(() => {});
   await pool.query("DELETE FROM schedule_shifts WHERE outlet_id IN (SELECT id FROM outlets WHERE tenant_id = ANY($1))", [tids]).catch(() => {});
   await pool.query("DELETE FROM schedules WHERE outlet_id IN (SELECT id FROM outlets WHERE tenant_id = ANY($1))", [tids]).catch(() => {});
   await pool.query("DELETE FROM staff WHERE tenant_id = ANY($1)", [tids]).catch(() => {});
@@ -178,6 +185,11 @@ async function api(path: string, opts: { method?: string; token?: string; body?:
   let json: unknown = null;
   try { json = await res.json(); } catch { /* no body */ }
   return { status: res.status, json };
+}
+
+async function apiText(path: string, token?: string) {
+  const res = await fetch(`${base}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  return { status: res.status, text: await res.text() };
 }
 
 beforeAll(async () => {
@@ -320,5 +332,22 @@ describe("RBAC e2e (allocation outlet-scope)", () => {
     if (!dbUp) return;
     const r = await api(`/scheduling/swap-requests/${ids.swap}/review`, { method: "PUT", token: adminTok(), body: { action: "reject" } });
     expect(r.status).toBe(400);
+  });
+
+  // Payroll CSV export — reports:export (admin has it via fallback; head_of_house doesn't).
+  it("exports a payroll-summary CSV with correctly computed pay", async () => {
+    if (!dbUp) return;
+    const r = await apiText(`/reports/payroll-summary.csv?startDate=2026-07-01&endDate=2026-07-31`, adminTok());
+    expect(r.status).toBe(200);
+    expect(r.text).toContain("Employee ID,Name,Outlet");
+    expect(r.text).toContain("E2E-EMP-2");
+    // 8h x 100 (regular) + 2h x 100 x 1.5 (overtime) = 800 + 300 = 1100.00
+    expect(r.text).toContain("1100.00");
+  });
+
+  it("denies CSV export to a role without reports:export", async () => {
+    if (!dbUp) return;
+    const r = await apiText(`/reports/payroll-summary.csv?startDate=2026-07-01&endDate=2026-07-31`, hohTok());
+    expect(r.status).toBe(403);
   });
 });

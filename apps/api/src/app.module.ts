@@ -29,6 +29,7 @@ import { MeModule } from "./modules/me/me.module";
 import { PublicModule } from "./modules/public/public.module";
 import { KioskModule } from "./modules/kiosk/kiosk.module";
 import { HealthModule } from "./modules/health/health.module";
+import { ReportsModule } from "./modules/reports/reports.module";
 import { DatabaseModule } from "./database/database.module";
 
 @Module({
@@ -81,6 +82,7 @@ import { DatabaseModule } from "./database/database.module";
     PublicModule,
     KioskModule,
     HealthModule,
+    ReportsModule,
   ],
   providers: [
     // Apply rate limiting across the whole API.
