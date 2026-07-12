@@ -573,7 +573,7 @@ export default function SchedulingPage() {
                       <p className="flex-1 truncate text-sm font-bold text-foreground">{shift.shiftName.split("(")[0].trim()}</p>
                       <span className="shrink-0 text-xs text-muted-foreground">{staff.length}</span>
                     </div>
-                    <ul className="divide-y divide-black/5 border-t border-black/5">
+                    <ul className="divide-y divide-border border-t border-border">
                       {staff.map(s => (
                         <li key={s.staffId} className="flex items-center gap-2.5 px-4 py-2.5">
                           <div className={`w-8 h-8 rounded-full ${badge} text-white text-xs font-bold flex items-center justify-center shrink-0`}>
@@ -647,9 +647,9 @@ export default function SchedulingPage() {
                             ))}
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-black/5">
+                        <tbody className="divide-y divide-border">
                           {staffList.map(staff => (
-                            <tr key={staff.staffId} className="hover:bg-black/5 transition">
+                            <tr key={staff.staffId} className="hover:bg-muted transition">
                               <td className="py-2.5 pr-4">
                                 <div className="flex items-center gap-2.5">
                                   <div className={`w-8 h-8 rounded-full ${badge} text-white text-xs font-bold flex items-center justify-center shrink-0`}>

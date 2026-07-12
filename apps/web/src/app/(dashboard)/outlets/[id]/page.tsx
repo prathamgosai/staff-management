@@ -112,7 +112,7 @@ function DeptSection({ dept, members }: { dept: string; members: StaffRow[] }) {
           const position = f(staff, "position_name",   "positionName");
 
           return (
-            <div key={staff.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-blue-50/30 transition group">
+            <div key={staff.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/50 transition group">
               {/* avatar */}
               <div className={`w-9 h-9 rounded-full ${avatarColor(staff.name)} text-white flex items-center justify-center font-bold text-xs shrink-0`}>
                 {initials(staff.name)}

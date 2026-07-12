@@ -524,7 +524,7 @@ export default function StaffPage() {
                     const outlet = f(staff, "outlet_name", "outletName");
                     const position = f(staff, "position_name", "positionName");
                     return (
-                      <tr key={staff.id} className="hover:bg-blue-50/30 transition-colors group">
+                      <tr key={staff.id} className="hover:bg-muted/50 transition-colors group">
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-3">
                             {staff.avatarUrl || staff.avatar_url ? (

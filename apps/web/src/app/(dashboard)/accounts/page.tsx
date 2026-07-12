@@ -389,7 +389,7 @@ export default function AccountsPage() {
                   rows.map(a => {
                     const st = statusOf(a);
                     return (
-                      <tr key={a.id} className={`hover:bg-blue-50/30 transition-colors ${selectedIds.has(a.id) ? "bg-indigo-50 dark:bg-indigo-500/15/40" : ""}`}>
+                      <tr key={a.id} className={`hover:bg-muted/50 transition-colors ${selectedIds.has(a.id) ? "bg-accent" : ""}`}>
                         {canAssign && (
                           <td className="px-4 py-3.5">
                             <input type="checkbox"
@@ -439,7 +439,7 @@ export default function AccountsPage() {
                               </span>
                             ) : (
                               <button onClick={() => setResetting(a)}
-                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-blue-200 dark:border-blue-500/30 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition">
+                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-blue-200 dark:border-blue-500/30 hover:bg-blue-50 dark:hover:bg-blue-500/10 px-3 py-1.5 rounded-lg transition">
                                 <KeyRound size={12} /> Reset password
                               </button>
                             )}
