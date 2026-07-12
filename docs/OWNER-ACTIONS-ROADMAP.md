@@ -116,12 +116,25 @@ Files with hand-rolled overlays to migrate + re-test (open / submit / close) one
 these blind because the web dev server can't run here (Node 24) and the visual/interaction
 result must be verified in a browser.
 
-### Full app-boot e2e (F2 extension)
+### Full app-boot e2e (DONE — runnable)
 
-The pool-mocked `outlet-scope.spec.ts` locks the RBAC contract. A full Supertest e2e (boot the
-app, seed two tenants, mint JWTs, assert an outlet-A user is 403/404 on outlet B) needs the
-local portable Postgres (`.services/pgsql`) stood up as a test DB with `DB_*` env overridden —
-do NOT point e2e writes at the live `.env`.
+`apps/api/test/rbac.e2e-spec.ts` boots the REAL app (AppModule — global guards live) against a
+local Postgres, seeds an isolated throwaway tenant with two outlets + an outlet-A-scoped
+head_of_house + an admin, and asserts through the full HTTP stack: unauthenticated → 401,
+in-scope read → 200, **head_of_house approving a cross-outlet transfer → 403 (staff NOT moved)**,
+admin approve → 200 (staff atomically moved). It cleans up the tenant afterwards and NEVER
+touches the live `.env` DB (self-skips if the local DB isn't reachable).
+
+To run it:
+```
+# 1. start the bundled portable Postgres on 5433 (has the app schema) + local Redis
+.services/pgsql/bin/pg_ctl -D .services/pgdata -o "-p 5433" -l .services/pg.log start
+node apps/api/scripts/ensure-redis.js
+# 2.
+pnpm --filter @workforceiq/api test:e2e
+```
+Override the target with `E2E_DB_HOST/E2E_DB_PORT/E2E_DB_NAME/E2E_DB_USER/E2E_DB_PASSWORD`.
+It stays OUT of `pnpm test` (unit) / CI, since it needs a live DB.
 
 > **Deploy note:** this branch is intentionally **not merged to `main` yet** — `main`
 > auto-deploys the live web app. Review the diff, then merge when ready (ideally after the
