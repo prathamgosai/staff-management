@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsUUID, IsDateString, IsNumber, IsArray } from "class-validator";
+import { IsString, IsOptional, IsUUID, IsDateString, IsNumber, IsArray, IsIn } from "class-validator";
 
 export class GenerateScheduleDto {
   @IsUUID()
@@ -59,4 +59,9 @@ export class RequestSwapDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+export class ReviewSwapDto {
+  @IsIn(["approve", "reject"])
+  action: "approve" | "reject";
 }

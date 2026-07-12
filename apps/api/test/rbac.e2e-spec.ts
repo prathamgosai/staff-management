@@ -43,6 +43,14 @@ const ids = {
   tenantB: randomUUID(),
   brandB: randomUUID(),
   outletInB: randomUUID(),
+  // Shift-swap fixtures: a 2nd staff + a schedule with two shifts + two assignments + a swap.
+  staff2: randomUUID(),
+  schedule: randomUUID(),
+  shift1: randomUUID(),
+  shift2: randomUUID(),
+  assign1: randomUUID(),
+  assign2: randomUUID(),
+  swap: randomUUID(),
 };
 
 let app: INestApplication;
@@ -87,6 +95,31 @@ async function seed() {
     [ids.hoh, ids.tenant, `e2e-hoh-${ids.hoh.slice(0, 8)}@example.com`, [ids.outletA]],
   );
 
+  // Shift-swap fixtures (all within tenant A / outlet A): staff1 works shift1, staff2 works
+  // shift2, and a pending swap offers to trade them.
+  await pool.query(
+    `INSERT INTO staff (id, tenant_id, employee_id, name, phone, primary_outlet_id, current_outlet_id, employment_status, join_date)
+     VALUES ($1,$2,'E2E-EMP-2','E2E Staff 2','+910000000001',$3,$3,'active', CURRENT_DATE)`,
+    [ids.staff2, ids.tenant, ids.outletA],
+  );
+  await pool.query(
+    "INSERT INTO schedules (id, outlet_id, week_start_date, week_end_date, status) VALUES ($1,$2,'2026-07-06','2026-07-12','published')",
+    [ids.schedule, ids.outletA],
+  );
+  for (const sid of [ids.shift1, ids.shift2]) {
+    await pool.query(
+      "INSERT INTO schedule_shifts (id, schedule_id, outlet_id, date, start_time, end_time) VALUES ($1,$2,$3,'2026-07-06','12:00','21:00')",
+      [sid, ids.schedule, ids.outletA],
+    );
+  }
+  await pool.query("INSERT INTO shift_assignments (id, shift_id, staff_id, status) VALUES ($1,$2,$3,'published')", [ids.assign1, ids.shift1, ids.staff]);
+  await pool.query("INSERT INTO shift_assignments (id, shift_id, staff_id, status) VALUES ($1,$2,$3,'published')", [ids.assign2, ids.shift2, ids.staff2]);
+  await pool.query(
+    `INSERT INTO shift_swap_requests (id, requester_id, requester_shift_id, target_staff_id, target_shift_id, status)
+     VALUES ($1,$2,$3,$4,$5,'pending')`,
+    [ids.swap, ids.staff, ids.assign1, ids.staff2, ids.assign2],
+  );
+
   // Second tenant with its own outlet — used to prove that tenant A's admin (whose scope is
   // "all outlets in tenant A") still cannot read tenant B's outlet-addressed data.
   await pool.query("INSERT INTO tenants (id, name, slug) VALUES ($1,$2,$3)", [ids.tenantB, "E2E Tenant B", `e2e-b-${ids.tenantB.slice(0, 8)}`]);
@@ -109,6 +142,11 @@ async function cleanup() {
   // on an older local schema.
   await pool.query("DELETE FROM audit_logs WHERE tenant_id = ANY($1)", [tids]).catch(() => {});
   await pool.query("DELETE FROM staff_transfers WHERE staff_id IN (SELECT id FROM staff WHERE tenant_id = ANY($1))", [tids]).catch(() => {});
+  // Scheduling fixtures (swap -> assignments -> shifts -> schedules), FK-safe order.
+  await pool.query("DELETE FROM shift_swap_requests WHERE requester_id IN (SELECT id FROM staff WHERE tenant_id = ANY($1))", [tids]).catch(() => {});
+  await pool.query("DELETE FROM shift_assignments WHERE staff_id IN (SELECT id FROM staff WHERE tenant_id = ANY($1))", [tids]).catch(() => {});
+  await pool.query("DELETE FROM schedule_shifts WHERE outlet_id IN (SELECT id FROM outlets WHERE tenant_id = ANY($1))", [tids]).catch(() => {});
+  await pool.query("DELETE FROM schedules WHERE outlet_id IN (SELECT id FROM outlets WHERE tenant_id = ANY($1))", [tids]).catch(() => {});
   await pool.query("DELETE FROM staff WHERE tenant_id = ANY($1)", [tids]).catch(() => {});
   await pool.query("DELETE FROM users WHERE tenant_id = ANY($1)", [tids]).catch(() => {});
   await pool.query("DELETE FROM role_permissions WHERE tenant_id = ANY($1)", [tids]).catch(() => {});
@@ -255,5 +293,32 @@ describe("RBAC e2e (allocation outlet-scope)", () => {
     if (!dbUp) return;
     const r = await api(`/outlets/${ids.outletA}`, { token: adminTok() });
     expect(r.status).toBe(200);
+  });
+
+  // Shift-swap review requires schedule:write (admin has it via fallback perms;
+  // head_of_house was seeded with only allocation:* so it lacks it).
+  it("blocks a swap review from a role without schedule:write", async () => {
+    if (!dbUp) return;
+    const r = await api(`/scheduling/swap-requests/${ids.swap}/review`, { method: "PUT", token: hohTok(), body: { action: "approve" } });
+    expect(r.status).toBe(403);
+  });
+
+  it("approves a shift swap and ATOMICALLY reassigns both shifts", async () => {
+    if (!dbUp) return;
+    const r = await api(`/scheduling/swap-requests/${ids.swap}/review`, { method: "PUT", token: adminTok(), body: { action: "approve" } });
+    expect(r.status).toBe(200);
+    const a1 = await pool.query("SELECT staff_id FROM shift_assignments WHERE id = $1", [ids.assign1]);
+    const a2 = await pool.query("SELECT staff_id FROM shift_assignments WHERE id = $1", [ids.assign2]);
+    expect(a1.rows[0].staff_id).toBe(ids.staff2); // staff2 now works shift1 …
+    expect(a2.rows[0].staff_id).toBe(ids.staff); // … and staff1 now works shift2
+    const sw = await pool.query("SELECT status, reviewed_by FROM shift_swap_requests WHERE id = $1", [ids.swap]);
+    expect(sw.rows[0].status).toBe("approved");
+    expect(sw.rows[0].reviewed_by).toBe(ids.admin);
+  });
+
+  it("rejects re-reviewing an already-decided swap", async () => {
+    if (!dbUp) return;
+    const r = await api(`/scheduling/swap-requests/${ids.swap}/review`, { method: "PUT", token: adminTok(), body: { action: "reject" } });
+    expect(r.status).toBe(400);
   });
 });

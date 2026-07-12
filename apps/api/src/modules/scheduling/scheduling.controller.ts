@@ -10,7 +10,7 @@ import { RequirePermission } from "../../common/decorators/require-permission.de
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { assertOutletAllowed, resolveOutletFilter } from "../../common/auth/outlet-scope";
 import type { AuthUser } from "@workforceiq/shared";
-import { GenerateScheduleDto, AssignStaffDto, UpdateTemplateDto, MoveStaffDto, RequestSwapDto } from "./dto/scheduling.dto";
+import { GenerateScheduleDto, AssignStaffDto, UpdateTemplateDto, MoveStaffDto, RequestSwapDto, ReviewSwapDto } from "./dto/scheduling.dto";
 
 @ApiTags("Scheduling")
 @ApiBearerAuth()
@@ -161,8 +161,25 @@ export class SchedulingController {
   }
 
   @Post("swap-requests")
-  @ApiOperation({ summary: "Request a shift swap" })
+  @ApiOperation({ summary: "Request a shift swap (a staff member offers one of their own shifts)" })
   requestSwap(@CurrentUser() user: AuthUser, @Body() body: RequestSwapDto) {
-    return this.schedulingService.requestSwap(user.id, body);
+    return this.schedulingService.requestSwap(user, body);
+  }
+
+  @Get("swap-requests")
+  @ApiOperation({ summary: "List shift-swap requests for the caller's outlet scope" })
+  listSwapRequests(@CurrentUser() user: AuthUser, @Query("status") status?: string) {
+    return this.schedulingService.listSwapRequests(user, status);
+  }
+
+  @Put("swap-requests/:id/review")
+  @RequirePermission("schedule:write")
+  @ApiOperation({ summary: "Approve or reject a swap; approval reassigns both shifts (schedule:write)" })
+  reviewSwap(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: ReviewSwapDto,
+  ) {
+    return this.schedulingService.reviewSwap(user, id, body.action);
   }
 }
