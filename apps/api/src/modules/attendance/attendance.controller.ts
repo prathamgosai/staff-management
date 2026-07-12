@@ -5,6 +5,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { resolveOutletFilter } from "../../common/auth/outlet-scope";
 import type { AuthUser } from "@workforceiq/shared";
+import { ClockInDto, ClockOutDto, ManualEntryDto, RequestCorrectionDto, ReviewCorrectionDto } from "./dto/attendance.dto";
 
 @ApiTags("Attendance")
 @ApiBearerAuth()
@@ -28,13 +29,13 @@ export class AttendanceController {
 
   @Post("clock-in")
   @ApiOperation({ summary: "Record staff clock-in" })
-  clockIn(@CurrentUser() user: AuthUser, @Body() body: { staffId: string; outletId: string; shiftId?: string; method: string; gpsLat?: number; gpsLng?: number }) {
+  clockIn(@CurrentUser() user: AuthUser, @Body() body: ClockInDto) {
     return this.attendanceService.clockIn(user, body);
   }
 
   @Post("clock-out")
   @ApiOperation({ summary: "Record staff clock-out" })
-  clockOut(@CurrentUser() user: AuthUser, @Body() body: { attendanceId: string; method: string; gpsLat?: number; gpsLng?: number }) {
+  clockOut(@CurrentUser() user: AuthUser, @Body() body: ClockOutDto) {
     return this.attendanceService.clockOut(user, body);
   }
 
@@ -42,7 +43,7 @@ export class AttendanceController {
   @ApiOperation({ summary: "Manually add an attendance record for a specific date" })
   manualEntry(
     @CurrentUser() user: AuthUser,
-    @Body() body: { staffId: string; outletId: string; date: string; clockIn: string; clockOut?: string; status: string; note?: string },
+    @Body() body: ManualEntryDto,
   ) {
     return this.attendanceService.manualEntry(user, body);
   }
@@ -51,7 +52,7 @@ export class AttendanceController {
   @ApiOperation({ summary: "Request attendance correction" })
   requestCorrection(
     @CurrentUser() user: AuthUser,
-    @Body() body: { attendanceId: string; correctedClockIn?: string; correctedClockOut?: string; reason: string },
+    @Body() body: RequestCorrectionDto,
   ) {
     return this.attendanceService.requestCorrection(user, body);
   }
@@ -60,7 +61,7 @@ export class AttendanceController {
   reviewCorrection(
     @CurrentUser() user: AuthUser,
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: { action: "approve" | "reject" },
+    @Body() body: ReviewCorrectionDto,
   ) {
     return this.attendanceService.reviewCorrection(user, id, body.action);
   }

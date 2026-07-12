@@ -11,6 +11,7 @@ import type { LoginDto } from "./dto/login.dto";
 import type { ChangePasswordDto } from "./dto/change-password.dto";
 import { RolesService } from "../roles/roles.service";
 import { NotificationService } from "../notification/notification.service";
+import { AuditService } from "../../common/audit/audit.service";
 
 const TENANT_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -59,6 +60,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly rolesService: RolesService,
     private readonly notifications: NotificationService,
+    private readonly audit: AuditService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<AuthUser | null> {
@@ -204,7 +206,7 @@ export class AuthService {
     return { data: result.rows };
   }
 
-  async reviewRegistration(userId: string, action: "approve" | "reject"): Promise<void> {
+  async reviewRegistration(actor: AuthUser, userId: string, action: "approve" | "reject"): Promise<void> {
     const userResult = await this.db.query("SELECT id, pending_approval FROM users WHERE id = $1", [userId]);
     if (!userResult.rows[0]) throw new BadRequestException("User not found");
     if (!userResult.rows[0].pending_approval) throw new BadRequestException("This account is not pending approval");
@@ -230,6 +232,8 @@ export class AuthService {
       await this.db.query("UPDATE staff SET user_id = NULL WHERE user_id = $1", [userId]);
       await this.db.query("DELETE FROM users WHERE id = $1", [userId]);
     }
+
+    await this.audit.record(actor, { action: `registration.${action}`, entityType: "user", entityId: userId });
   }
 
   /** Super-admin: list every account with login ID, role and status. Never returns passwords. */
@@ -287,6 +291,13 @@ export class AuthService {
       "UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL",
       [userId],
     );
+    // Never log the password itself — only that a reset happened + how.
+    await this.audit.record(actor, {
+      action: "account.password.reset",
+      entityType: "user",
+      entityId: userId,
+      newValues: { generated, forcedChange: true },
+    });
     return { data: generated ? { tempPassword: password } : {} };
   }
 
@@ -302,10 +313,11 @@ export class AuthService {
   ): Promise<{ data: { userId: string; outletIds: string[] } }> {
     const unique = [...new Set((outletIds ?? []).filter(Boolean))];
     const target = await this.db.query(
-      "SELECT id FROM users WHERE id = $1 AND tenant_id = $2",
+      "SELECT id, outlet_ids FROM users WHERE id = $1 AND tenant_id = $2",
       [userId, actor.tenantId],
     );
     if (!target.rows[0]) throw new BadRequestException("Account not found");
+    const previousOutletIds = (target.rows[0].outlet_ids as string[] | null) ?? [];
     if (unique.length > 0) {
       const valid = await this.db.query(
         "SELECT COUNT(*)::int AS c FROM outlets WHERE id = ANY($1::uuid[]) AND tenant_id = $2",
@@ -320,6 +332,13 @@ export class AuthService {
       [unique, userId, actor.tenantId],
     );
     this.rolesService.bustOutletCache(userId);
+    await this.audit.record(actor, {
+      action: "account.outlets.update",
+      entityType: "user",
+      entityId: userId,
+      oldValues: { outletIds: previousOutletIds },
+      newValues: { outletIds: unique },
+    });
     return { data: { userId, outletIds: unique } };
   }
 
@@ -329,7 +348,8 @@ export class AuthService {
    * accounts are protected — they can't be reassigned here. New permissions take
    * effect on each affected user's next request (JwtStrategy reads them live).
    */
-  async changeRoles(tenantId: string, userIds: string[], role: string): Promise<{ data: { updated: number } }> {
+  async changeRoles(actor: AuthUser, userIds: string[], role: string): Promise<{ data: { updated: number } }> {
+    const tenantId = actor.tenantId;
     if (!Array.isArray(userIds) || userIds.length === 0) {
       throw new BadRequestException("No accounts selected.");
     }
@@ -347,6 +367,13 @@ export class AuthService {
       "UPDATE users SET role = $3::user_role, updated_at = NOW() WHERE tenant_id = $1 AND id = ANY($2::uuid[]) AND role <> 'super_admin' RETURNING id",
       [tenantId, userIds, role],
     );
+    // Privilege change — log who reassigned which accounts to what role.
+    await this.audit.record(actor, {
+      action: "account.role.change",
+      entityType: "user",
+      entityId: null,
+      newValues: { userIds: res.rows.map((r) => r.id), role, updated: res.rowCount ?? 0 },
+    });
     return { data: { updated: res.rowCount ?? 0 } };
   }
 

@@ -6,6 +6,7 @@ import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "@workforceiq/shared";
+import { UpdateRatiosDto } from "./dto/settings.dto";
 
 /**
  * Tenant settings that back the capacity model. Read is gated by allocation:read
@@ -31,7 +32,7 @@ export class SettingsController {
   @ApiOperation({ summary: "Update the tenant's staffing ratios + covers-per-on-duty-staff" })
   updateRatios(
     @CurrentUser() user: AuthUser,
-    @Body() body: { ratios?: { category: string; paxPerStaff: number; minStaff: number }[]; coversPerOnDutyStaff?: number },
+    @Body() body: UpdateRatiosDto,
   ) {
     return this.capacityService.updateRatios(user.tenantId, body ?? {});
   }

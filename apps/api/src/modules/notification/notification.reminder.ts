@@ -4,6 +4,7 @@ import { Queue } from "bull";
 import { formatError } from "../../common/utils/format-error";
 import {
   NOTIFICATIONS_QUEUE, REMINDER_CRON_JOB, REMINDER_JOB_ID, REMINDER_CRON, REMINDER_TZ,
+  DOC_EXPIRY_CRON_JOB, DOC_EXPIRY_JOB_ID, DOC_EXPIRY_CRON,
 } from "./notification.constants";
 
 /**
@@ -32,7 +33,19 @@ export class ReminderScheduler implements OnApplicationBootstrap {
           removeOnFail: 20,
         },
       );
-      this.logger.log(`Nightly shift reminders scheduled at "${REMINDER_CRON}" (${REMINDER_TZ})`);
+      await this.queue.add(
+        DOC_EXPIRY_CRON_JOB,
+        {},
+        {
+          repeat: { cron: DOC_EXPIRY_CRON, tz: REMINDER_TZ },
+          jobId: DOC_EXPIRY_JOB_ID,
+          removeOnComplete: true,
+          removeOnFail: 20,
+        },
+      );
+      this.logger.log(
+        `Nightly shift reminders scheduled at "${REMINDER_CRON}" and document-expiry reminders at "${DOC_EXPIRY_CRON}" (${REMINDER_TZ})`,
+      );
     } catch (e) {
       // Almost always "Redis unreachable" — the queue lives in Redis. Non-fatal: the rest
       // of the app runs without it. Start Redis and restart to enable nightly reminders.

@@ -6,6 +6,7 @@ import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "@workforceiq/shared";
+import { UpdatePermissionsDto } from "./dto/roles.dto";
 
 @ApiTags("Roles & Permissions")
 @ApiBearerAuth()
@@ -32,7 +33,7 @@ export class RolesController {
   updatePermissions(
     @CurrentUser() user: AuthUser,
     @Param("role") role: string,
-    @Body() body: { permissions: string[] },
+    @Body() body: UpdatePermissionsDto,
   ) {
     return this.rolesService.updateRolePermissions(user, role, body?.permissions ?? []);
   }

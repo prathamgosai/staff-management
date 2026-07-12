@@ -1,7 +1,7 @@
 import { Injectable, Inject } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
-import { assertOutletInScope } from "../../common/auth/outlet-scope";
+import { assertOutletInScope, allowedOutletIds } from "../../common/auth/outlet-scope";
 import type { AuthUser } from "@workforceiq/shared";
 
 @Injectable()
@@ -104,9 +104,15 @@ export class DashboardService {
 
   async getStaffHierarchy(user: AuthUser, outletId?: string, departmentId?: string) {
     if (outletId) await assertOutletInScope(this.db, user, outletId);
-    const conditions = ["s.tenant_id = $1", "s.employment_status = 'active'"];
-    const params: unknown[] = [user.tenantId];
-    let i = 2;
+    // ALWAYS constrain to the caller's outlet scope — otherwise omitting outletId returned
+    // every active staff member tenant-wide to a scoped manager (cross-outlet leak).
+    const conditions = [
+      "s.tenant_id = $1",
+      "s.employment_status = 'active'",
+      "($2::uuid[] IS NULL OR s.current_outlet_id = ANY($2))",
+    ];
+    const params: unknown[] = [user.tenantId, allowedOutletIds(user)];
+    let i = 3;
     if (outletId)     { conditions.push(`s.current_outlet_id = $${i++}`); params.push(outletId); }
     if (departmentId) { conditions.push(`s.department_id = $${i++}`);     params.push(departmentId); }
 

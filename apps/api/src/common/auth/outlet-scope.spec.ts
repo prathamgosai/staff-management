@@ -74,6 +74,10 @@ describe("outlet-scope", () => {
       const { db, calls } = mockPool([{ "?column?": 1 }]);
       await expect(assertOutletInScope(db, user("head_of_house", [OUTLET_A]), OUTLET_A)).resolves.toBeUndefined();
       expect(calls[0].params).toEqual([OUTLET_A, "t1", [OUTLET_A]]);
+      // The SQL must actually filter by tenant AND the scope array — not just accept the params.
+      expect(calls[0].sql).toMatch(/tenant_id\s*=\s*\$2/);
+      expect(calls[0].sql).toContain("$3::uuid[] IS NULL OR");
+      expect(calls[0].sql).toContain("= ANY($3)");
     });
     it("throws 404 when no row matches (cross-tenant / out-of-scope)", async () => {
       const { db } = mockPool([]);
@@ -95,6 +99,8 @@ describe("outlet-scope", () => {
       const { db, calls } = mockPool([{ "?column?": 1 }]);
       await assertStaffInScope(db, user("head_of_house", [OUTLET_A]), "staff-1");
       expect(calls[0].params).toEqual(["staff-1", "t1", [OUTLET_A]]);
+      expect(calls[0].sql).toMatch(/tenant_id\s*=\s*\$2/);
+      expect(calls[0].sql).toContain("current_outlet_id = ANY($3)");
     });
   });
 });

@@ -3,10 +3,11 @@ import { InjectQueue } from "@nestjs/bull";
 import { Queue } from "bull";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
-import { assertOutletAllowed } from "../../common/auth/outlet-scope";
+import { assertOutletAllowed, allowedOutletIds } from "../../common/auth/outlet-scope";
 import { NotificationEvent } from "@workforceiq/shared";
 import type { AuthUser } from "@workforceiq/shared";
 import { NotificationService } from "../notification/notification.service";
+import { AuditService } from "../../common/audit/audit.service";
 import { getMondayStr, toLocalDateStr } from "../../common/utils/week.util";
 import { formatError } from "../../common/utils/format-error";
 import { computeRotationPlan } from "./rotation";
@@ -26,6 +27,7 @@ export class SchedulingService {
     @Inject(DB_POOL) private readonly db: Pool,
     @InjectQueue("auto-schedule") private readonly scheduleQueue: Queue,
     private readonly notifications: NotificationService,
+    private readonly audit: AuditService,
   ) {}
 
   async getSchedule(tenantId: string, outletId: string, weekStartDate: string) {
@@ -790,12 +792,143 @@ export class SchedulingService {
     return { data: Object.values(byShift) };
   }
 
-  async requestSwap(userId: string, body: { requesterShiftId: string; targetStaffId?: string; targetShiftId?: string; reason?: string }) {
+  /**
+   * A staff member requests to swap one of THEIR OWN shift assignments with a colleague's.
+   * requester_id is the caller's STAFF id (the column is a staff FK — the previous stub
+   * wrongly stored the user id). The requester must own requester_shift_id; an optional
+   * target assignment must be a real assignment in the same outlet.
+   */
+  async requestSwap(
+    user: AuthUser,
+    body: { requesterShiftId: string; targetStaffId?: string; targetShiftId?: string; reason?: string },
+  ) {
+    const me = await this.db.query(
+      "SELECT id FROM staff WHERE user_id = $1 AND tenant_id = $2",
+      [user.id, user.tenantId],
+    );
+    const requesterStaffId = me.rows[0]?.id as string | undefined;
+    if (!requesterStaffId) throw new ForbiddenException("Only a staff member can request a shift swap.");
+
+    // The requester must own the assignment they're offering; capture its outlet for scope.
+    const own = await this.db.query(
+      `SELECT sa.id, ss.outlet_id
+       FROM shift_assignments sa JOIN schedule_shifts ss ON ss.id = sa.shift_id
+       WHERE sa.id = $1 AND sa.staff_id = $2 AND sa.status <> 'cancelled'`,
+      [body.requesterShiftId, requesterStaffId],
+    );
+    if (!own.rows[0]) throw new NotFoundException("That shift is not one of yours to swap.");
+    const outletId = own.rows[0].outlet_id as string;
+
+    // If a specific target assignment is named, it must exist within the same outlet.
+    if (body.targetShiftId) {
+      const tgt = await this.db.query(
+        `SELECT sa.id FROM shift_assignments sa JOIN schedule_shifts ss ON ss.id = sa.shift_id
+         WHERE sa.id = $1 AND ss.outlet_id = $2 AND sa.status <> 'cancelled'`,
+        [body.targetShiftId, outletId],
+      );
+      if (!tgt.rows[0]) throw new BadRequestException("The target shift is not valid for this outlet.");
+    }
+
     const result = await this.db.query(
       `INSERT INTO shift_swap_requests (requester_id, requester_shift_id, target_staff_id, target_shift_id, reason)
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [userId, body.requesterShiftId, body.targetStaffId ?? null, body.targetShiftId ?? null, body.reason ?? null],
+      [requesterStaffId, body.requesterShiftId, body.targetStaffId ?? null, body.targetShiftId ?? null, body.reason ?? null],
     );
     return { data: result.rows[0] };
+  }
+
+  /** Swap requests for shifts in the caller's outlet scope (managers) — newest first. */
+  async listSwapRequests(user: AuthUser, status?: string) {
+    const scope = allowedOutletIds(user);
+    const conditions = ["s.tenant_id = $1", "($2::uuid[] IS NULL OR ss.outlet_id = ANY($2))"];
+    const params: unknown[] = [user.tenantId, scope];
+    let i = 3;
+    if (status) { conditions.push(`sw.status = $${i++}`); params.push(status); }
+    const res = await this.db.query(
+      `SELECT sw.id, sw.status, sw.reason, sw.created_at, sw.reviewed_at,
+              sw.requester_id, s.name AS requester_name,
+              sw.target_staff_id, ts.name AS target_name,
+              ss.date AS requester_date, ss.start_time, ss.end_time, ss.outlet_id, o.name AS outlet_name
+       FROM shift_swap_requests sw
+       JOIN shift_assignments sa ON sa.id = sw.requester_shift_id
+       JOIN schedule_shifts ss ON ss.id = sa.shift_id
+       JOIN staff s ON s.id = sw.requester_id
+       JOIN outlets o ON o.id = ss.outlet_id
+       LEFT JOIN staff ts ON ts.id = sw.target_staff_id
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY sw.created_at DESC`,
+      params,
+    );
+    return { data: res.rows };
+  }
+
+  /**
+   * Manager review of a swap (schedule:write). On approve, ATOMICALLY swaps the two staff
+   * onto each other's shift assignments (requires a named target assignment), stamps the
+   * decision, audits it, and notifies both staff. Outlet-scoped.
+   */
+  async reviewSwap(user: AuthUser, swapId: string, action: "approve" | "reject") {
+    const client = await this.db.connect();
+    try {
+      await client.query("BEGIN");
+      const cur = await client.query(
+        `SELECT sw.id, sw.status, sw.requester_id, sw.requester_shift_id,
+                sw.target_staff_id, sw.target_shift_id, ss.outlet_id, s.tenant_id
+         FROM shift_swap_requests sw
+         JOIN shift_assignments sa ON sa.id = sw.requester_shift_id
+         JOIN schedule_shifts ss ON ss.id = sa.shift_id
+         JOIN staff s ON s.id = sw.requester_id
+         WHERE sw.id = $1 AND s.tenant_id = $2
+         FOR UPDATE OF sw`,
+        [swapId, user.tenantId],
+      );
+      const swap = cur.rows[0];
+      if (!swap) throw new NotFoundException("Swap request not found");
+      if (swap.status !== "pending") throw new BadRequestException("This swap request has already been reviewed.");
+      assertOutletAllowed(user, swap.outlet_id); // manager must manage the shift's outlet
+
+      const status = action === "approve" ? "approved" : "rejected";
+      if (action === "approve") {
+        if (!swap.target_staff_id || !swap.target_shift_id) {
+          throw new BadRequestException("This request has no target shift to swap with — it can't be approved.");
+        }
+        // Lock BOTH assignment rows and re-verify they still belong to the requester/target.
+        // Locking serializes two pending swaps that share an assignment (no lost update); the
+        // re-verify rejects a swap that went stale (an assignment was reassigned since the
+        // request). A UNIQUE(shift_id, staff_id) collision surfaces as 409 via the pg filter.
+        const asg = await client.query(
+          "SELECT id, staff_id FROM shift_assignments WHERE id = ANY($1::uuid[]) FOR UPDATE",
+          [[swap.requester_shift_id, swap.target_shift_id]],
+        );
+        const staffByAssignment = new Map(asg.rows.map((r) => [r.id as string, r.staff_id as string]));
+        if (
+          staffByAssignment.get(swap.requester_shift_id) !== swap.requester_id ||
+          staffByAssignment.get(swap.target_shift_id) !== swap.target_staff_id
+        ) {
+          throw new BadRequestException("These shifts have changed since the swap was requested; it can no longer be approved.");
+        }
+        // Swap the two staff onto each other's assignments.
+        await client.query("UPDATE shift_assignments SET staff_id = $2 WHERE id = $1", [swap.requester_shift_id, swap.target_staff_id]);
+        await client.query("UPDATE shift_assignments SET staff_id = $2 WHERE id = $1", [swap.target_shift_id, swap.requester_id]);
+      }
+      const upd = await client.query(
+        "UPDATE shift_swap_requests SET status = $2, reviewed_by = $3, reviewed_at = NOW() WHERE id = $1 RETURNING *",
+        [swapId, status, user.id],
+      );
+      await client.query("COMMIT");
+
+      await this.audit.record(user, {
+        action: `shift_swap.${action}`,
+        entityType: "shift_swap_request",
+        entityId: swapId,
+        newValues: { status, requesterStaffId: swap.requester_id, targetStaffId: swap.target_staff_id },
+      });
+      return { data: upd.rows[0] };
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
   }
 }

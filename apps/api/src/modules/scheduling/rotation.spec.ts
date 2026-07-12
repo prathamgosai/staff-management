@@ -52,4 +52,20 @@ describe("computeRotationPlan", () => {
     expect(groups).toEqual([["only"], [], []]);
     expect(staffTemplateId).toEqual({ only: "tA" });
   });
+
+  it("never maps a group to undefined when there are FEWER than 3 templates", () => {
+    // With 2 templates, groups must still all map to a REAL template (no undefined ->
+    // no silently-unrostered group). Group 2 shares a template with group 0.
+    for (const wk of [0, 1, 2, 3]) {
+      const { groupShiftMap, staffTemplateId } = computeRotationPlan(["1", "2", "3"], ["tA", "tB"], wk);
+      expect(Object.values(groupShiftMap).every((t) => t === "tA" || t === "tB")).toBe(true);
+      expect(Object.values(staffTemplateId).every((t) => t === "tA" || t === "tB")).toBe(true);
+      expect(Object.values(staffTemplateId)).toHaveLength(3); // every staff rostered
+    }
+  });
+
+  it("handles a single template (all groups share it)", () => {
+    const { staffTemplateId } = computeRotationPlan(["1", "2", "3"], ["tOnly"], 2);
+    expect(staffTemplateId).toEqual({ "1": "tOnly", "2": "tOnly", "3": "tOnly" });
+  });
 });

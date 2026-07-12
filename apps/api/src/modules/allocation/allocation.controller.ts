@@ -6,6 +6,7 @@ import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "@workforceiq/shared";
+import { RequestTransferDto, ReviewTransferDto } from "./dto/allocation.dto";
 
 @ApiTags("Staff Allocation")
 @ApiBearerAuth()
@@ -29,7 +30,7 @@ export class AllocationController {
   @ApiOperation({ summary: "Request a staff transfer between outlets" })
   requestTransfer(
     @CurrentUser() user: AuthUser,
-    @Body() body: { staffId: string; fromOutletId: string; toOutletId: string; effectiveDate: string; endDate?: string; type?: string; reason?: string },
+    @Body() body: RequestTransferDto,
   ) {
     return this.allocationService.requestTransfer(user, body);
   }
@@ -39,7 +40,7 @@ export class AllocationController {
   reviewTransfer(
     @CurrentUser() user: AuthUser,
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: { action: "approve" | "reject" },
+    @Body() body: ReviewTransferDto,
   ) {
     return this.allocationService.reviewTransfer(user, id, body.action);
   }

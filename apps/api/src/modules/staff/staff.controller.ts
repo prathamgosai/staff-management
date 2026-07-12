@@ -66,7 +66,7 @@ export class StaffController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Deactivate a staff member (admins only)" })
   remove(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
-    return this.staffService.softDelete(user.tenantId, id);
+    return this.staffService.softDelete(user, id);
   }
 
   @Get(":id/attendance-summary")

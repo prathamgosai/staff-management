@@ -2,13 +2,16 @@ import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, ParseUUIDPip
 import { ApiTags, ApiBearerAuth, ApiOperation } from "@nestjs/swagger";
 import { LeaveService } from "./leave.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { PermissionsGuard } from "../../common/guards/permissions.guard";
+import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { resolveOutletFilter } from "../../common/auth/outlet-scope";
 import type { AuthUser } from "@workforceiq/shared";
+import { ApplyLeaveDto, ReviewLeaveDto } from "./dto/leave.dto";
 
 @ApiTags("Leave")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller("leave")
 export class LeaveController {
   constructor(private readonly leaveService: LeaveService) {}
@@ -30,17 +33,18 @@ export class LeaveController {
   @ApiOperation({ summary: "Submit a leave request" })
   applyLeave(
     @CurrentUser() user: AuthUser,
-    @Body() body: { staffId: string; leaveTypeId: string; startDate: string; endDate: string; halfDayOption?: string; reason?: string },
+    @Body() body: ApplyLeaveDto,
   ) {
     return this.leaveService.applyLeave(body, user);
   }
 
   @Put("requests/:id/review")
-  @ApiOperation({ summary: "Approve or reject a leave request" })
+  @RequirePermission("leave:approve")
+  @ApiOperation({ summary: "Approve or reject a leave request (leave:approve)" })
   reviewLeave(
     @CurrentUser() user: AuthUser,
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: { action: "approve" | "reject"; notes?: string },
+    @Body() body: ReviewLeaveDto,
   ) {
     return this.leaveService.reviewLeave(user, id, body);
   }

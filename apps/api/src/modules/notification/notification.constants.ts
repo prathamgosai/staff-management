@@ -38,3 +38,11 @@ export const REMINDER_JOB_ID = "shift-reminder-nightly";
 /** 20:00 every day. tz pins it to Asia/Kolkata regardless of the server's TZ (Render=UTC). */
 export const REMINDER_CRON = process.env.SHIFT_REMINDER_CRON || "0 20 * * *";
 export const REMINDER_TZ = process.env.SHIFT_REMINDER_TZ || "Asia/Kolkata";
+
+// ── Daily document-expiry reminder cron (Bull repeatable) ─────────────────────
+export const DOC_EXPIRY_CRON_JOB = "document-expiry-reminder-cron";
+export const DOC_EXPIRY_JOB_ID = "document-expiry-reminder-daily";
+/** 02:30 IST — after the 01:15 expiry status scan. */
+export const DOC_EXPIRY_CRON = process.env.DOC_EXPIRY_REMINDER_CRON || "30 2 * * *";
+/** Notify when a document is within this many days of expiry. */
+export const DOC_EXPIRY_WINDOW_DAYS = Number(process.env.DOC_EXPIRY_REMINDER_DAYS) || 30;

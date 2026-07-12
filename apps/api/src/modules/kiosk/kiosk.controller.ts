@@ -13,6 +13,7 @@ import { RequirePermission } from "../../common/decorators/require-permission.de
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { CurrentKiosk } from "../../common/decorators/kiosk-device.decorator";
 import type { AuthUser } from "@workforceiq/shared";
+import { CreateDeviceDto, SetStaffPinDto, KioskClockDto } from "./dto/kiosk.dto";
 
 /**
  * Manager-facing kiosk administration — enroll / revoke devices and set staff
@@ -29,7 +30,7 @@ export class KioskAdminController {
   @Post("devices")
   @RequirePermission("attendance:write")
   @ApiOperation({ summary: "Enroll a kiosk device on an outlet (returns the token once)" })
-  createDevice(@CurrentUser() user: AuthUser, @Body() body: { outletId: string; label: string }) {
+  createDevice(@CurrentUser() user: AuthUser, @Body() body: CreateDeviceDto) {
     return this.kiosk.createDevice(user, body.outletId, body.label);
   }
 
@@ -53,7 +54,7 @@ export class KioskAdminController {
   setStaffPin(
     @CurrentUser() user: AuthUser,
     @Param("staffId", ParseUUIDPipe) staffId: string,
-    @Body() body: { pin: string | null },
+    @Body() body: SetStaffPinDto,
   ) {
     return this.kiosk.setStaffPin(user, staffId, body.pin);
   }
@@ -81,7 +82,7 @@ export class KioskController {
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Kiosk clock-in (Employee ID + PIN)" })
-  clockIn(@CurrentKiosk() device: KioskDevice, @Body() body: { employeeId: string; pin: string }) {
+  clockIn(@CurrentKiosk() device: KioskDevice, @Body() body: KioskClockDto) {
     return this.kiosk.clockIn(device, body.employeeId, body.pin);
   }
 
@@ -89,7 +90,7 @@ export class KioskController {
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Kiosk clock-out (Employee ID + PIN)" })
-  clockOut(@CurrentKiosk() device: KioskDevice, @Body() body: { employeeId: string; pin: string }) {
+  clockOut(@CurrentKiosk() device: KioskDevice, @Body() body: KioskClockDto) {
     return this.kiosk.clockOut(device, body.employeeId, body.pin);
   }
 }

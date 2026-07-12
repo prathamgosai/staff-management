@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Users, Building2, Calendar, Clock,
   CalendarOff, ArrowLeftRight, BarChart3, Calculator, Upload,
-  ShieldCheck, KeyRound, UserCog, Bell, Settings, Sliders, FileText, Gauge, type LucideIcon,
+  ShieldCheck, KeyRound, UserCog, Bell, Settings, Sliders, FileText, Gauge, History, type LucideIcon,
 } from "lucide-react";
 
 export type NavItem = {
@@ -64,6 +64,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/accounts", label: "Accounts", icon: KeyRound, perm: "accounts:manage" },
       { href: "/account-types", label: "Account Types", icon: UserCog, perm: "roles:manage" },
       { href: "/approvals", label: "Approvals", icon: ShieldCheck, perm: "accounts:manage", badge: true },
+      { href: "/audit", label: "Audit log", icon: History, perm: "accounts:manage" },
     ],
   },
   {

@@ -8,7 +8,7 @@ import { NotificationEvent } from "@workforceiq/shared";
 import type { NotificationPayloadMap, AuthUser } from "@workforceiq/shared";
 import { toLocalDateStr } from "../../common/utils/week.util";
 import { renderMessage, type RecipientKind } from "./notification.messages";
-import { DISPATCH_JOB, DISPATCH_JOB_OPTS, NOTIFICATIONS_QUEUE } from "./notification.constants";
+import { DISPATCH_JOB, DISPATCH_JOB_OPTS, NOTIFICATIONS_QUEUE, DOC_EXPIRY_WINDOW_DAYS } from "./notification.constants";
 import { MagicLinkService } from "../public/magic-link.service";
 
 /** A resolved recipient: a user (in-app target) and/or a staff row (external contact). */
@@ -228,6 +228,25 @@ export class NotificationService {
         return recips.map((u) => ({ userId: u.id, staffId: null, kind: "system_alert" as const, extras: { title: p.title, message: p.message } }));
       }
 
+      case NotificationEvent.DOCUMENT_EXPIRING: {
+        const staffId = p.staffId as string;
+        const outletId = p.outletId as string;
+        const [staff, heads, outletName] = await Promise.all([
+          this.staffById(staffId),
+          this.outletHeads(p.tenantId, outletId),
+          this.outletName(outletId),
+        ]);
+        const base = { typeName: p.typeName, expiresOn: p.expiresOn, documentId: p.documentId };
+        const targets: Target[] = [];
+        // The staff member themself (self-service renewal) …
+        if (staff) targets.push({ userId: staff.user_id, staffId: staff.id, kind: "document_expiring_self", extras: base });
+        // … and their outlet head(s) — same recipient convention as SHIFT_CHANGED.
+        for (const h of heads) {
+          targets.push({ userId: h.id, staffId: null, kind: "document_expiring_head", extras: { ...base, staffName: staff?.name, outletName } });
+        }
+        return targets;
+      }
+
       default:
         return [];
     }
@@ -339,6 +358,60 @@ export class NotificationService {
       sent++;
     }
     this.logger.log(`Shift reminders for ${tomorrow}: ${sent} sent, ${skipped} already notified`);
+    return { sent, skipped };
+  }
+
+  // ── Daily document-expiry reminders ──────────────────────────────────────────
+
+  /**
+   * Emit DOCUMENT_EXPIRING for every active-staff document whose expiry is within
+   * DOC_EXPIRY_WINDOW_DAYS (default 30). Idempotent: a document that already has a
+   * document_expiring notification is skipped, so a given document is reminded once per
+   * expiry cycle (a renewal is a new row → a fresh reminder as it next approaches expiry).
+   * In-app + email only (the message carries no WhatsApp template). Never throws.
+   */
+  async sendDocumentExpiryReminders(): Promise<{ sent: number; skipped: number }> {
+    const rows = await this.db.query(
+      `SELECT d.id AS document_id, d.expires_on,
+              COALESCE(dt.name, d.doc_type) AS type_name,
+              s.id AS staff_id, s.user_id, s.tenant_id, s.current_outlet_id
+       FROM staff_documents d
+       JOIN staff s ON s.id = d.staff_id
+       LEFT JOIN document_types dt ON dt.id = d.document_type_id
+       WHERE d.deleted_at IS NULL AND d.expires_on IS NOT NULL AND d.status <> 'expired'
+         AND s.employment_status = 'active' AND s.current_outlet_id IS NOT NULL
+         -- Only staff with an app login: the dedup anchors on the in-app notification row,
+         -- which is only written for a user. A login-less staff member at a head-less outlet
+         -- would otherwise have no row to dedup against and be re-emailed every night.
+         AND s.user_id IS NOT NULL
+         AND d.expires_on >= (NOW() AT TIME ZONE 'Asia/Kolkata')::date
+         AND d.expires_on <= ((NOW() AT TIME ZONE 'Asia/Kolkata')::date + ($1::int))
+       ORDER BY d.expires_on ASC`,
+      [DOC_EXPIRY_WINDOW_DAYS],
+    );
+
+    let sent = 0;
+    let skipped = 0;
+    for (const r of rows.rows) {
+      const dup = await this.db.query(
+        `SELECT 1 FROM notifications WHERE type = $1 AND data->>'documentId' = $2 LIMIT 1`,
+        [NotificationEvent.DOCUMENT_EXPIRING, r.document_id],
+      );
+      if (dup.rows[0]) {
+        skipped++;
+        continue;
+      }
+      await this.emit(NotificationEvent.DOCUMENT_EXPIRING, {
+        tenantId: r.tenant_id,
+        outletId: r.current_outlet_id,
+        staffId: r.staff_id,
+        documentId: r.document_id,
+        typeName: String(r.type_name ?? "document"),
+        expiresOn: toLocalDateStr(r.expires_on),
+      });
+      sent++;
+    }
+    this.logger.log(`Document-expiry reminders: ${sent} sent, ${skipped} already notified`);
     return { sent, skipped };
   }
 

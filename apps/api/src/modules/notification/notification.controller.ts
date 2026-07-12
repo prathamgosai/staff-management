@@ -4,6 +4,7 @@ import { NotificationService } from "./notification.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "@workforceiq/shared";
+import { UpdatePreferencesDto } from "./dto/notification.dto";
 
 /**
  * The in-app notification centre + per-user channel preferences. Auth-only (any
@@ -41,7 +42,7 @@ export class NotificationController {
   @ApiOperation({ summary: "Update my per-channel notification preferences" })
   updatePreferences(
     @CurrentUser() user: AuthUser,
-    @Body() body: { inAppEnabled?: boolean; whatsappEnabled?: boolean; emailEnabled?: boolean },
+    @Body() body: UpdatePreferencesDto,
   ) {
     return this.notificationService.updatePreferences(user, body);
   }

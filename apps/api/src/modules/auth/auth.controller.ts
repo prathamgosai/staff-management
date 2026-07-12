@@ -5,6 +5,7 @@ import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshTokenDto } from "./dto/refresh-token.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
+import { RegisterDto, ReviewRegistrationDto, ResetPasswordDto, SetAccountOutletsDto, ChangeAccountRolesDto } from "./dto/auth.dto";
 import { Public } from "../../common/decorators/public.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -37,7 +38,7 @@ export class AuthController {
   @Post("register")
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: "Staff self-registration — account pending Head Chef approval" })
-  register(@Body() body: { name: string; email: string; password: string; confirmPassword: string }) {
+  register(@Body() body: RegisterDto) {
     return this.authService.register(body);
   }
 
@@ -86,8 +87,8 @@ export class AuthController {
   @Put("registrations/:id/review")
   @ApiBearerAuth()
   @ApiOperation({ summary: "Approve or reject a pending staff registration (requires accounts:manage)" })
-  reviewRegistration(@Param("id") id: string, @Body() body: { action: "approve" | "reject" }) {
-    return this.authService.reviewRegistration(id, body.action);
+  reviewRegistration(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: ReviewRegistrationDto) {
+    return this.authService.reviewRegistration(user, id, body.action);
   }
 
   @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -107,7 +108,7 @@ export class AuthController {
   resetPassword(
     @CurrentUser() user: AuthUser,
     @Param("id") id: string,
-    @Body() body: { newPassword?: string },
+    @Body() body: ResetPasswordDto,
   ) {
     return this.authService.resetPassword(user, id, body.newPassword);
   }
@@ -120,7 +121,7 @@ export class AuthController {
   setAccountOutlets(
     @CurrentUser() user: AuthUser,
     @Param("id") id: string,
-    @Body() body: { outletIds: string[] },
+    @Body() body: SetAccountOutletsDto,
   ) {
     return this.authService.setAccountOutlets(user, id, body?.outletIds ?? []);
   }
@@ -134,8 +135,8 @@ export class AuthController {
   @ApiOperation({ summary: "Change the account role for one or more staff (super admin / HR only)" })
   changeAccountRoles(
     @CurrentUser() user: AuthUser,
-    @Body() body: { userIds: string[]; role: string },
+    @Body() body: ChangeAccountRolesDto,
   ) {
-    return this.authService.changeRoles(user.tenantId, body?.userIds ?? [], body?.role);
+    return this.authService.changeRoles(user, body?.userIds ?? [], body?.role);
   }
 }

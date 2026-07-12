@@ -16,7 +16,9 @@ export type RecipientKind =
   | "leave_decided_self"
   | "leave_coverage"
   | "account_pending"
-  | "system_alert";
+  | "system_alert"
+  | "document_expiring_self"
+  | "document_expiring_head";
 
 export interface RenderedMessage {
   title: string;
@@ -160,6 +162,29 @@ export function renderMessage(kind: RecipientKind, ctx: Ctx): RenderedMessage {
       return {
         title: s(ctx.title, "System alert"),
         body: s(ctx.message),
+        waTemplate: null,
+        waVars: [],
+      };
+    }
+    case "document_expiring_self": {
+      const type = s(ctx.typeName, "document");
+      const on = s(ctx.expiresOn);
+      return {
+        // In-app / email only (no approved WhatsApp template) — never messaged via WhatsApp.
+        title: "Document expiring soon",
+        body: `Your ${type} expires on ${on}. Please renew it and upload the updated document.`,
+        waTemplate: null,
+        waVars: [],
+      };
+    }
+    case "document_expiring_head": {
+      const type = s(ctx.typeName, "document");
+      const on = s(ctx.expiresOn);
+      const who = s(ctx.staffName, "A staff member");
+      const outlet = s(ctx.outletName, "your outlet");
+      return {
+        title: "Staff document expiring",
+        body: `${who}'s ${type} at ${outlet} expires on ${on}.`,
         waTemplate: null,
         waVars: [],
       };

@@ -6,6 +6,7 @@ import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { ADMIN_ROLES, type AuthUser } from "@workforceiq/shared";
+import { CreateDepartmentDto, CreatePositionDto } from "./dto/department.dto";
 
 @ApiTags("Departments & Positions")
 @ApiBearerAuth()
@@ -21,7 +22,7 @@ export class DepartmentController {
 
   @Post()
   @Roles(...ADMIN_ROLES)
-  createDepartment(@Body() body: { outletId: string; name: string }) {
+  createDepartment(@Body() body: CreateDepartmentDto) {
     return this.svc.createDepartment(body.outletId, body.name);
   }
 
@@ -41,7 +42,7 @@ export class DepartmentController {
   @Roles(...ADMIN_ROLES)
   createPosition(
     @CurrentUser() user: AuthUser,
-    @Body() body: { name: string; level?: number; defaultHoursWeek?: number },
+    @Body() body: CreatePositionDto,
   ) {
     return this.svc.createPosition(user.tenantId, body);
   }

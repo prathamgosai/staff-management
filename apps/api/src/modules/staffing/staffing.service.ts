@@ -327,8 +327,15 @@ export class StaffingService {
     // position per outlet), so a single multi-row upsert replaces ~325 sequential ones.
     const COLS = 15;
     const params: unknown[] = [];
+    // De-dup by the upsert conflict key (outlet_id, position_id): a case-variant post can
+    // fan two roles onto the same positionId, and a multi-row ON CONFLICT that hits the same
+    // key twice errors ("cannot affect row a second time") and rolls back ALL outlets.
+    const seenKeys = new Set<string>();
     for (const o of results) {
       for (const r of o.result.roles) {
+        const key = `${o.outletId}:${r.positionId}`;
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
         params.push(
           tenantId, o.outletId, date, r.positionId, r.required, r.current, r.present, r.onLeave,
           r.transferredIn, r.transferredOut, r.available, r.shortage, r.excess, r.vacant, r.status,

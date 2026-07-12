@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException } from "@nestjs/common";
+import { Injectable, Inject, NotFoundException, BadRequestException } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import {
@@ -64,16 +64,26 @@ export class AllocationService {
       await client.query("BEGIN");
       // Fetch + row-lock the transfer, scoped to the caller's tenant. 404 (not 403) so a
       // cross-tenant id can't be probed for existence.
+      // The two outlet JOINs (matched on the same tenant) guarantee BOTH ends of the move
+      // are real outlets in the caller's tenant — so an admin can't relocate a staff pointer
+      // to an out-of-tenant outlet UUID. A cross-tenant/unknown outlet => no row => 404.
       const cur = await client.query(
-        `SELECT st.id, st.staff_id, st.from_outlet_id, st.to_outlet_id, s.tenant_id
+        `SELECT st.id, st.staff_id, st.from_outlet_id, st.to_outlet_id, st.status, s.tenant_id
          FROM staff_transfers st
          JOIN staff s ON s.id = st.staff_id
+         JOIN outlets fo ON fo.id = st.from_outlet_id AND fo.tenant_id = s.tenant_id
+         JOIN outlets t_o ON t_o.id = st.to_outlet_id AND t_o.tenant_id = s.tenant_id
          WHERE st.id = $1 AND s.tenant_id = $2
          FOR UPDATE OF st`,
         [id, user.tenantId],
       );
       const transfer = cur.rows[0];
       if (!transfer) throw new NotFoundException("Transfer not found");
+      // Idempotency: only a pending transfer can be reviewed. Without this, approve->reject
+      // left the staff physically relocated while the record read 'rejected'.
+      if (transfer.status !== "pending") {
+        throw new BadRequestException("This transfer has already been reviewed.");
+      }
       // A scoped reviewer (head_of_house) must manage BOTH ends of the move; admins/hr
       // have null scope and pass. This is what previously let ANY logged-in user relocate
       // ANY staff member between ANY two outlets.
