@@ -7,11 +7,15 @@ import {
   assertStaffInScope,
   resolveOutletFilter,
 } from "../../common/auth/outlet-scope";
+import { AuditService } from "../../common/audit/audit.service";
 import type { AuthUser } from "@workforceiq/shared";
 
 @Injectable()
 export class AllocationService {
-  constructor(@Inject(DB_POOL) private readonly db: Pool) {}
+  constructor(
+    @Inject(DB_POOL) private readonly db: Pool,
+    private readonly audit: AuditService,
+  ) {}
 
   async getTransfers(user: AuthUser, filters: { status?: string; outletId?: string }) {
     // resolveOutletFilter rejects an out-of-scope outletId (403) and otherwise
@@ -89,6 +93,18 @@ export class AllocationService {
         );
       }
       await client.query("COMMIT");
+      // Audit the staff-relocation decision (fail-safe; only after commit).
+      await this.audit.record(user, {
+        action: `transfer.${action}`,
+        entityType: "staff_transfer",
+        entityId: id,
+        newValues: {
+          status,
+          staffId: transfer.staff_id,
+          fromOutletId: transfer.from_outlet_id,
+          toOutletId: transfer.to_outlet_id,
+        },
+      });
       return { data: updated.rows[0] };
     } catch (e) {
       await client.query("ROLLBACK");

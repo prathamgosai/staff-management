@@ -6,6 +6,7 @@ import { BullModule } from "@nestjs/bull";
 import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
+import { AuditModule } from "./common/audit/audit.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { StaffModule } from "./modules/staff/staff.module";
 import { StaffDocumentsModule } from "./modules/staff-documents/staff-documents.module";
@@ -57,6 +58,7 @@ import { DatabaseModule } from "./database/database.module";
       },
     }),
     DatabaseModule,
+    AuditModule,
     AuthModule,
     StaffModule,
     StaffDocumentsModule,

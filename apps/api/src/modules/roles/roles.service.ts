@@ -3,15 +3,19 @@ import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import {
   ROLES, ROLE_META, ROLE_PERMISSIONS, PERMISSION_CATALOG, ALL_PERMISSIONS,
-  type Role,
+  type Role, type AuthUser,
 } from "@workforceiq/shared";
+import { AuditService } from "../../common/audit/audit.service";
 
 // Every role except super_admin is editable. super_admin always implies "*".
 const EDITABLE_ROLES = Object.values(ROLES).filter((r) => r !== ROLES.SUPER_ADMIN) as Role[];
 
 @Injectable()
 export class RolesService {
-  constructor(@Inject(DB_POOL) private readonly db: Pool) {}
+  constructor(
+    @Inject(DB_POOL) private readonly db: Pool,
+    private readonly audit: AuditService,
+  ) {}
 
   // Permissions change rarely but are read on EVERY authenticated request (JwtStrategy),
   // and each DB round-trip to the remote (Sydney) pooler is ~470ms. Cache per (tenant,
@@ -131,7 +135,8 @@ export class RolesService {
   }
 
   /** Replace a role's permission set. super_admin is immutable; keys are validated. */
-  async updateRolePermissions(tenantId: string, role: string, permissions: string[]) {
+  async updateRolePermissions(user: AuthUser, role: string, permissions: string[]) {
+    const tenantId = user.tenantId;
     if (role === ROLES.SUPER_ADMIN) {
       throw new BadRequestException("Super Admin always has full access and cannot be edited.");
     }
@@ -148,6 +153,13 @@ export class RolesService {
     if (invalid.length > 0) {
       throw new BadRequestException(`Unknown permission(s): ${invalid.join(", ")}`);
     }
+
+    // Capture the pre-change set for the audit trail.
+    const before = await this.db.query(
+      "SELECT permission FROM role_permissions WHERE tenant_id = $1 AND role = $2::user_role",
+      [tenantId, role],
+    );
+    const oldPerms = before.rows.map((r) => r.permission as string).sort();
 
     const client = await (this.db as Pool & { connect(): Promise<{ query: Pool["query"]; release(): void }> }).connect();
     try {
@@ -172,6 +184,16 @@ export class RolesService {
 
     // Bust the cache so the new permissions apply on the very next request.
     this.permCache.delete(`${tenantId}:${role}`);
+
+    // Audit the permission change (who changed which role, from what to what). Fail-safe.
+    await this.audit.record(user, {
+      action: "role.permissions.update",
+      entityType: "role",
+      entityId: null,
+      oldValues: { role, permissions: oldPerms },
+      newValues: { role, permissions: [...unique].sort() },
+    });
+
     return { data: { role, permissions: unique } };
   }
 }
