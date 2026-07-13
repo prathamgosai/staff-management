@@ -21,37 +21,37 @@ export class ReminderScheduler implements OnApplicationBootstrap {
 
   constructor(@InjectQueue(NOTIFICATIONS_QUEUE) private readonly queue: Queue) {}
 
-  async onApplicationBootstrap(): Promise<void> {
+  onApplicationBootstrap(): void {
+    // IMPORTANT: do NOT await here. queue.add() HANGS (it never rejects) when Redis is
+    // unreachable, which would block the HTTP server from ever starting (app.listen runs
+    // after bootstrap hooks). Register in the background, capped by a timeout, so the app
+    // ALWAYS boots and serves requests even with no Redis — reminders just stay disabled.
+    void this.registerRepeatables();
+  }
+
+  private async registerRepeatables(): Promise<void> {
+    const timeout = (ms: number) =>
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Redis unreachable (timed out)")), ms));
     try {
-      await this.queue.add(
-        REMINDER_CRON_JOB,
-        {},
-        {
-          repeat: { cron: REMINDER_CRON, tz: REMINDER_TZ },
-          jobId: REMINDER_JOB_ID,
-          removeOnComplete: true,
-          removeOnFail: 20,
-        },
-      );
-      await this.queue.add(
-        DOC_EXPIRY_CRON_JOB,
-        {},
-        {
-          repeat: { cron: DOC_EXPIRY_CRON, tz: REMINDER_TZ },
-          jobId: DOC_EXPIRY_JOB_ID,
-          removeOnComplete: true,
-          removeOnFail: 20,
-        },
-      );
+      await Promise.race([
+        (async () => {
+          await this.queue.add(REMINDER_CRON_JOB, {}, {
+            repeat: { cron: REMINDER_CRON, tz: REMINDER_TZ }, jobId: REMINDER_JOB_ID, removeOnComplete: true, removeOnFail: 20,
+          });
+          await this.queue.add(DOC_EXPIRY_CRON_JOB, {}, {
+            repeat: { cron: DOC_EXPIRY_CRON, tz: REMINDER_TZ }, jobId: DOC_EXPIRY_JOB_ID, removeOnComplete: true, removeOnFail: 20,
+          });
+        })(),
+        timeout(8000),
+      ]);
       this.logger.log(
         `Nightly shift reminders scheduled at "${REMINDER_CRON}" and document-expiry reminders at "${DOC_EXPIRY_CRON}" (${REMINDER_TZ})`,
       );
     } catch (e) {
-      // Almost always "Redis unreachable" — the queue lives in Redis. Non-fatal: the rest
-      // of the app runs without it. Start Redis and restart to enable nightly reminders.
-      // WARN (not ERROR) so a missing dev Redis doesn't look like a crash.
+      // Non-fatal: the rest of the app runs without it. Add Redis (REDIS_HOST/REDIS_PORT) to
+      // enable nightly reminders + external notification delivery.
       this.logger.warn(
-        `Nightly shift reminders not scheduled — is Redis running at ` +
+        `Nightly reminders not scheduled — is Redis running at ` +
           `${process.env.REDIS_HOST || "127.0.0.1"}:${process.env.REDIS_PORT || "6379"}? (${formatError(e)})`,
       );
     }
