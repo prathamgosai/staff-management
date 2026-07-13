@@ -6,7 +6,7 @@
    - Static assets (Next hashes them → immutable): cache-first.
    BUMP `CACHE` whenever this file, the precache list, the icons or the manifest change,
    or installed clients will keep serving stale assets (the activate step purges old keys). */
-const CACHE = "bookendsshiftly-v4";
+const CACHE = "bookendsshiftly-v5";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icon-192.png", "/icon-512.png", "/manifest.webmanifest"];
 
