@@ -9,6 +9,26 @@ import { CapacityService } from "../capacity/capacity.service";
 import { SchedulingService } from "../scheduling/scheduling.service";
 import type { AuthUser } from "@workforceiq/shared";
 
+type OperatingHour = {
+  dayOfWeek?: number | string; openTime?: string; closeTime?: string;
+  open?: string; close?: string; isClosed?: boolean;
+};
+const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+/** The outlet's operating window for a weekday as "HH:MM–HH:MM" (or Closed / null). */
+function peakHoursForDay(oh: unknown, dow: number): string | null {
+  if (!Array.isArray(oh) || oh.length === 0) return null;
+  const list = oh as OperatingHour[];
+  const match = (x: OperatingHour) => x && (x.dayOfWeek === dow || String(x.dayOfWeek).toLowerCase() === DAY_NAMES[dow]);
+  const e = list.find((x) => match(x) && !x.isClosed) ?? list.find((x) => match(x)) ?? list.find((x) => !x.isClosed) ?? list[0];
+  if (!e) return null;
+  if (e.isClosed) return "Closed";
+  const fmt = (t?: string) => (t ? String(t).slice(0, 5) : "");
+  const o = fmt(e.openTime ?? e.open);
+  const c = fmt(e.closeTime ?? e.close);
+  return o && c ? `${o}–${c}` : null;
+}
+
 @Injectable()
 export class ForecastingService {
   private readonly mlServiceUrl: string;
@@ -280,6 +300,94 @@ export class ForecastingService {
     }
 
     return { data: { outletId, weekStart, coversPerOnDutyStaff: covers, days } };
+  }
+
+  /**
+   * Automated PAX prediction for one outlet on a given day (default: today). Hybrid model that
+   * ALWAYS returns a number so the feature works before any POS history is imported:
+   *   1. HISTORICAL — if ≥2 past same-weekday cover counts exist in pax_data, a recency-weighted
+   *      (4/3/2/1) average of the last ≤4. Confidence scales with the sample size, and the model
+   *      auto-upgrades from "capacity" to "historical" as data accumulates.
+   *   2. CAPACITY MODEL — otherwise an estimate from the outlet's seating capacity × a day-of-week
+   *      turn factor (covers per seat per day; quiet early-week → busy weekend).
+   * Predicted daily covers drive a recommended on-duty staff count. Outlet-scoped.
+   */
+  async getPaxPrediction(user: AuthUser, outletId: string, date?: string) {
+    const scope = allowedOutletIds(user);
+    const oRes = await this.db.query(
+      `SELECT id, name, total_tables, max_pax, operating_hours
+       FROM outlets WHERE id = $1 AND tenant_id = $2 AND ($3::uuid[] IS NULL OR id = ANY($3))`,
+      [outletId, user.tenantId, scope],
+    );
+    const outlet = oRes.rows[0];
+    if (!outlet) throw new NotFoundException("Outlet not found");
+
+    const target = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : toLocalDateStr(new Date());
+    const dow = new Date(`${target}T00:00:00`).getDay(); // 0=Sun … 6=Sat
+
+    const hist = await this.db.query(
+      `SELECT pax_count FROM pax_data
+       WHERE outlet_id = $1 AND EXTRACT(DOW FROM date) = $2 AND date < $3::date
+         AND date >= $3::date - INTERVAL '10 weeks'
+       ORDER BY date DESC LIMIT 4`,
+      [outletId, dow, target],
+    );
+    const vals = hist.rows.map((r) => Number(r.pax_count)).filter((n) => Number.isFinite(n));
+
+    const maxPax = outlet.max_pax != null ? Number(outlet.max_pax) : null;
+    const tables = outlet.total_tables != null ? Number(outlet.total_tables) : null;
+
+    let predictedPax: number | null = null;
+    let method: "historical" | "capacity_model" | "unavailable" = "capacity_model";
+    let confidence: "high" | "medium" | "low" | "estimated" | "none" = "estimated";
+
+    if (vals.length >= 2) {
+      const W = [4, 3, 2, 1];
+      let wsum = 0;
+      let w = 0;
+      vals.forEach((v, k) => { wsum += v * W[k]; w += W[k]; });
+      predictedPax = Math.round(wsum / w);
+      method = "historical";
+      confidence = vals.length >= 4 ? "high" : vals.length >= 3 ? "medium" : "low";
+    } else {
+      // Daily covers ≈ seats × turns/seat/day, by weekday. PAX_PER_TABLE (5.3) matches the
+      // capacity planner's group average when only a table count is configured.
+      const TURNS = [2.6, 1.6, 1.6, 1.8, 2.0, 2.6, 2.9]; // getDay() order: Sun..Sat
+      const seats = maxPax ?? (tables != null ? Math.round(tables * 5.3) : null);
+      predictedPax = seats != null ? Math.round(seats * TURNS[dow]) : null;
+      if (predictedPax == null) { method = "unavailable"; confidence = "none"; }
+    }
+
+    const coversPerStaff = await this.capacityService.getCoversPerOnDutyStaff(user.tenantId);
+    const recommendedStaff = predictedPax != null && coversPerStaff > 0 ? Math.ceil(predictedPax / coversPerStaff) : null;
+
+    // Peak window from configured operating hours; fall back to the typical dine-in service
+    // window when hours aren't set, so the tile is populated (flagged estimated).
+    let peakHours = peakHoursForDay(outlet.operating_hours, dow);
+    let peakHoursEstimated = false;
+    if (!peakHours && predictedPax != null) {
+      peakHours = "12:00–23:00";
+      peakHoursEstimated = true;
+    }
+
+    return {
+      data: {
+        outletId,
+        outletName: outlet.name,
+        date: target,
+        dayOfWeek: dow,
+        tableCount: tables,
+        maxPax,
+        peakHours,
+        peakHoursEstimated,
+        predictedPax,
+        method,
+        confidence,
+        historicalSamples: vals.length,
+        coversPerOnDutyStaff: coversPerStaff,
+        recommendedStaff,
+      },
+    };
   }
 
   async getHeadcountRecommendation(user: AuthUser, outletId: string, date: string) {

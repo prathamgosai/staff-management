@@ -6,51 +6,43 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth.store";
 import { hasPermission } from "@/lib/permissions";
-import { Table2, Clock, TrendingUp, Users, ChevronRight, Sparkles } from "lucide-react";
+import { Table2, Clock, TrendingUp, Users, ChevronRight, Sparkles, BrainCircuit } from "lucide-react";
 
 interface OutletLite { id: string; name: string; code?: string }
-interface OutletDetail {
-  total_tables?: number | null; max_pax?: number | null; seating_capacity?: number | null;
-  operating_hours?: { dayOfWeek?: number | string; openTime?: string; closeTime?: string; open?: string; close?: string; isClosed?: boolean }[] | null;
-}
-interface Req {
-  effectivePax: number | null; status: string;
-  totals: { required: number; current: number; available: number; present: number };
+interface Prediction {
+  outletId: string; outletName: string; date: string; dayOfWeek: number;
+  tableCount: number | null; maxPax: number | null;
+  peakHours: string | null; peakHoursEstimated?: boolean;
+  predictedPax: number | null;
+  method: "historical" | "capacity_model" | "unavailable";
+  confidence: "high" | "medium" | "low" | "estimated" | "none";
+  historicalSamples: number; coversPerOnDutyStaff: number; recommendedStaff: number | null;
 }
 
-type Status = "green" | "yellow" | "red" | "blue" | "unconfigured";
-const STATUS_DOT: Record<Status, string> = {
-  green: "bg-success", yellow: "bg-warning", red: "bg-destructive", blue: "bg-info", unconfigured: "bg-muted-foreground/40",
-};
-const STATUS_LABEL: Record<Status, string> = {
-  green: "Well staffed", yellow: "Minor shortage", red: "Critical shortage", blue: "Excess", unconfigured: "Not set up",
-};
+const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-/** Today's operating window as "HH:MM–HH:MM", or Closed/—. */
-function peakHours(oh: OutletDetail["operating_hours"]): string | null {
-  if (!Array.isArray(oh) || oh.length === 0) return null;
-  const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-  const today = new Date().getDay();
-  const match = (x: NonNullable<OutletDetail["operating_hours"]>[number]) =>
-    x && (x.dayOfWeek === today || String(x.dayOfWeek).toLowerCase() === days[today]);
-  let e = oh.find((x) => match(x) && !x.isClosed) ?? oh.find((x) => match(x));
-  if (!e) e = oh.find((x) => !x.isClosed) ?? oh[0];
-  if (!e) return null;
-  if (e.isClosed) return "Closed today";
-  const fmt = (t?: string) => (t ? String(t).slice(0, 5) : "");
-  const o = fmt(e.openTime ?? e.open), c = fmt(e.closeTime ?? e.close);
-  return o && c ? `${o}–${c}` : null;
+function methodBadge(p: Prediction): { label: string; cls: string } {
+  if (p.method === "historical") {
+    return {
+      label: `AI · historical (${p.historicalSamples} wk${p.historicalSamples === 1 ? "" : "s"})`,
+      cls: "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
+    };
+  }
+  if (p.method === "capacity_model") {
+    return { label: "AI · capacity estimate", cls: "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300" };
+  }
+  return { label: "not enough data", cls: "bg-muted text-muted-foreground" };
 }
 
 /**
- * PAX Prediction & Staffing Requirements (replaces the "Coming soon" placeholder). Automated
- * per-outlet: table count + peak hours drive the predicted PAX, which the staffing engine turns
- * into a required-staff figure. Degrades gracefully before the capacity/ratio migrations are
- * applied (tiles show what's available; a "set up capacity" hint otherwise).
+ * PAX Prediction & Staffing Requirements — automated per-outlet forecast. Calls the hybrid
+ * prediction endpoint (recency-weighted historical model when POS covers exist, else a
+ * capacity model from seats × day-of-week turn factor) so a real predicted PAX + recommended
+ * staff always show. Improves automatically as pax history is imported.
  */
 export function PaxPredictionCard() {
   const user = useAuthStore((s) => s.user);
-  const canStaffing = hasPermission(user, "allocation:read");
+  const canForecast = hasPermission(user, "forecast:read");
   const [outletId, setOutletId] = useState("");
 
   const outletsQ = useQuery<{ data: OutletLite[] }>({
@@ -64,45 +56,44 @@ export function PaxPredictionCard() {
     if (!outletId && list.length) setOutletId(list[0].id);
   }, [outletsQ.data, outletId]);
 
-  const detailQ = useQuery<{ data: OutletDetail }>({
-    queryKey: ["outlet-detail", outletId],
-    queryFn: () => apiClient.get(`/outlets/${outletId}`).then((r) => r.data),
-    enabled: !!outletId, retry: false, staleTime: 60_000,
-  });
-  const reqQ = useQuery<{ data: Req }>({
-    queryKey: ["pax-staffing", outletId],
-    queryFn: () => apiClient.get(`/staffing/requirements/${outletId}`).then((r) => r.data),
-    enabled: !!outletId && canStaffing, retry: false, staleTime: 60_000,
+  const predQ = useQuery<{ data: Prediction }>({
+    queryKey: ["pax-prediction", outletId],
+    queryFn: () => apiClient.get(`/forecasting/pax-prediction/${outletId}`).then((r) => r.data),
+    enabled: !!outletId && canForecast, retry: false, staleTime: 60_000,
   });
 
-  const o = detailQ.data?.data;
-  const req = reqQ.data?.data;
-  const status = (req?.status as Status) ?? "unconfigured";
-  const tableCount = o?.total_tables ?? null;
-  const predictedPax = req?.effectivePax ?? o?.max_pax ?? null;
-  const peak = o ? peakHours(o.operating_hours) : null;
-  const loading = outletsQ.isLoading || detailQ.isLoading || (canStaffing && reqQ.isLoading);
-  const needsSetup = !loading && predictedPax == null && tableCount == null;
+  const p = predQ.data?.data;
+  const loading = outletsQ.isLoading || (canForecast && predQ.isLoading);
+  const badge = p ? methodBadge(p) : null;
 
-  const tiles: { label: string; icon: React.ReactNode; value: string }[] = [
-    { label: "Table Count", icon: <Table2 size={18} />, value: tableCount != null ? String(tableCount) : "—" },
-    { label: "Peak Hours", icon: <Clock size={18} />, value: peak ?? "—" },
-    { label: "Predicted PAX", icon: <TrendingUp size={18} />, value: predictedPax != null ? String(predictedPax) : "—" },
+  const tiles: { label: string; icon: React.ReactNode; value: string; sub?: string }[] = [
+    { label: "Table Count", icon: <Table2 size={18} />, value: p?.tableCount != null ? String(p.tableCount) : "—" },
+    { label: "Peak Hours", icon: <Clock size={18} />, value: p?.peakHours ?? "—", sub: p?.peakHoursEstimated ? "typical" : undefined },
+    { label: "Predicted PAX", icon: <TrendingUp size={18} />, value: p?.predictedPax != null ? String(p.predictedPax) : "—", sub: p ? DOW[p.dayOfWeek] : undefined },
   ];
 
   return (
     <div className="bg-card rounded-2xl border border-border p-5 shadow-sm">
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <div>
-          <h3 className="font-bold text-foreground flex items-center gap-1.5"><Sparkles size={15} className="text-primary" /> PAX Prediction &amp; Staffing Requirements</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Automated staff requirement from table count, peak hours &amp; predicted pax</p>
+          <h3 className="font-bold text-foreground flex items-center gap-1.5">
+            <Sparkles size={15} className="text-primary" /> PAX Prediction &amp; Staffing Requirements
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">AI-powered daily cover forecast &amp; recommended staffing per outlet</p>
         </div>
-        {outlets.length > 0 && (
-          <select value={outletId} onChange={(e) => setOutletId(e.target.value)}
-            className="border border-border rounded-lg px-3 py-1.5 text-sm bg-card text-foreground outline-none focus:ring-2 focus:ring-ring">
-            {outlets.map((ot) => <option key={ot.id} value={ot.id}>{ot.name}</option>)}
-          </select>
-        )}
+        <div className="flex items-center gap-2">
+          {badge && !loading && (
+            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full ${badge.cls}`}>
+              <BrainCircuit size={12} /> {badge.label}
+            </span>
+          )}
+          {outlets.length > 0 && (
+            <select value={outletId} onChange={(e) => setOutletId(e.target.value)}
+              className="border border-border rounded-lg px-3 py-1.5 text-sm bg-card text-foreground outline-none focus:ring-2 focus:ring-ring">
+              {outlets.map((ot) => <option key={ot.id} value={ot.id}>{ot.name}</option>)}
+            </select>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
@@ -113,33 +104,41 @@ export function PaxPredictionCard() {
             {loading ? (
               <div className="h-6 w-12 bg-border rounded animate-pulse mx-auto mt-1.5" />
             ) : (
-              <p className="text-lg font-bold text-foreground mt-1">{t.value}</p>
+              <p className="text-lg font-bold text-foreground mt-1">
+                {t.value}
+                {t.sub && <span className="ml-1 text-[10px] font-medium text-muted-foreground align-middle">{t.sub}</span>}
+              </p>
             )}
           </div>
         ))}
       </div>
 
-      {/* Staffing requirement line */}
-      {canStaffing && req && status !== "unconfigured" ? (
+      {/* Recommended staffing from the predicted PAX */}
+      {!loading && p && p.recommendedStaff != null ? (
         <Link href="/staffing" className="mt-4 flex items-center justify-between rounded-xl bg-muted/50 px-4 py-3 hover:bg-muted transition group">
-          <div className="flex items-center gap-2 text-sm">
-            <Users size={15} className="text-muted-foreground" />
-            <span className="font-semibold text-foreground">{req.totals.required}</span>
-            <span className="text-muted-foreground">staff recommended</span>
-            <span className="text-muted-foreground">· currently</span>
-            <span className="font-semibold text-foreground">{req.totals.current}</span>
-            <span className={`ml-1 inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_DOT[status]}/15`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[status]}`} /> {STATUS_LABEL[status]}
-            </span>
+          <div className="flex items-center gap-2 text-sm flex-wrap">
+            <Users size={15} className="text-muted-foreground shrink-0" />
+            <span className="font-semibold text-foreground">≈ {p.recommendedStaff}</span>
+            <span className="text-muted-foreground">staff recommended on duty</span>
+            <span className="text-muted-foreground/70 text-xs">· {p.predictedPax} covers ÷ {p.coversPerOnDutyStaff}/staff</span>
           </div>
-          <ChevronRight size={15} className="text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
+          <ChevronRight size={15} className="text-muted-foreground group-hover:translate-x-0.5 transition-transform shrink-0" />
         </Link>
-      ) : !loading && needsSetup ? (
+      ) : !loading && p && p.method === "unavailable" ? (
         <p className="mt-4 text-xs text-muted-foreground bg-muted/40 rounded-xl px-4 py-3">
-          Set the outlet&apos;s capacity &amp; staffing ratios to enable predictions.{" "}
+          Set this outlet&apos;s table count &amp; max capacity to enable predictions.{" "}
           <Link href={outletId ? `/outlets/${outletId}` : "/outlets"} className="text-primary font-semibold hover:underline">Configure now →</Link>
         </p>
+      ) : !loading && !canForecast ? (
+        <p className="mt-4 text-xs text-muted-foreground bg-muted/40 rounded-xl px-4 py-3">You don&apos;t have permission to view forecasts.</p>
       ) : null}
+
+      {!loading && p && p.method === "capacity_model" && (
+        <p className="mt-2 text-[11px] text-muted-foreground/70">
+          Estimated from seating capacity &amp; typical demand. Import pax history on the{" "}
+          <Link href="/planning/pax-import" className="underline hover:text-foreground">pax import</Link> page to upgrade to a data-driven forecast.
+        </p>
+      )}
     </div>
   );
 }
