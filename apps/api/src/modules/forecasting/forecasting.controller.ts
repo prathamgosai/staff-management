@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Post, Body, Param, Query, UseGuards, ParseUUIDPipe } from "@nestjs/common";
 import { ApiTags, ApiBearerAuth, ApiOperation } from "@nestjs/swagger";
 import { ForecastingService } from "./forecasting.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -79,6 +79,24 @@ export class ForecastingController {
     @Query("date") date: string,
   ) {
     return this.forecastingService.getHeadcountRecommendation(user, outletId, date);
+  }
+
+  @Get("staffing-autopilot")
+  @RequirePermission("forecast:read")
+  @ApiOperation({ summary: "AI autopilot: predicted PAX -> required staff -> cross-outlet transfer recommendations" })
+  staffingAutopilot(@CurrentUser() user: AuthUser, @Query("date") date?: string) {
+    return this.forecastingService.getStaffingAutopilot(user, date);
+  }
+
+  @Get("pax-prediction/:outletId")
+  @RequirePermission("forecast:read")
+  @ApiOperation({ summary: "Automated PAX prediction (historical or capacity model) + recommended staff for a day" })
+  paxPrediction(
+    @CurrentUser() user: AuthUser,
+    @Param("outletId", ParseUUIDPipe) outletId: string,
+    @Query("date") date?: string,
+  ) {
+    return this.forecastingService.getPaxPrediction(user, outletId, date);
   }
 
   @Get("staffing-suggestions")

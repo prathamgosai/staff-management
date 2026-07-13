@@ -9,6 +9,60 @@ import { CapacityService } from "../capacity/capacity.service";
 import { SchedulingService } from "../scheduling/scheduling.service";
 import type { AuthUser } from "@workforceiq/shared";
 
+type OperatingHour = {
+  dayOfWeek?: number | string; openTime?: string; closeTime?: string;
+  open?: string; close?: string; isClosed?: boolean;
+};
+const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+/** The outlet's operating window for a weekday as "HH:MM–HH:MM" (or Closed / null). */
+function peakHoursForDay(oh: unknown, dow: number): string | null {
+  if (!Array.isArray(oh) || oh.length === 0) return null;
+  const list = oh as OperatingHour[];
+  const match = (x: OperatingHour) => x && (x.dayOfWeek === dow || String(x.dayOfWeek).toLowerCase() === DAY_NAMES[dow]);
+  const e = list.find((x) => match(x) && !x.isClosed) ?? list.find((x) => match(x)) ?? list.find((x) => !x.isClosed) ?? list[0];
+  if (!e) return null;
+  if (e.isClosed) return "Closed";
+  const fmt = (t?: string) => (t ? String(t).slice(0, 5) : "");
+  const o = fmt(e.openTime ?? e.open);
+  const c = fmt(e.closeTime ?? e.close);
+  return o && c ? `${o}–${c}` : null;
+}
+
+// Daily covers ≈ seats × turns/seat/day, by weekday (getDay() order Sun..Sat). Reflects
+// typical dine-in demand: quiet early-week → busy weekend.
+const TURN_FACTORS = [2.6, 1.6, 1.6, 1.8, 2.0, 2.6, 2.9];
+
+type PaxMethod = "historical" | "capacity_model" | "unavailable";
+type PaxConfidence = "high" | "medium" | "low" | "estimated" | "none";
+
+/**
+ * Shared pax model. Historical (recency-weighted 4/3/2/1 over the last ≤4 same-weekday covers)
+ * when ≥2 samples exist; otherwise the capacity estimate (seats × weekday turn factor). Pure.
+ */
+function computePaxPrediction(
+  maxPax: number | null, tables: number | null, dow: number, vals: number[],
+): { predictedPax: number | null; method: PaxMethod; confidence: PaxConfidence } {
+  if (vals.length >= 2) {
+    const W = [4, 3, 2, 1];
+    let wsum = 0;
+    let w = 0;
+    vals.forEach((v, k) => { wsum += v * W[k]; w += W[k]; });
+    return {
+      predictedPax: Math.round(wsum / w),
+      method: "historical",
+      confidence: vals.length >= 4 ? "high" : vals.length >= 3 ? "medium" : "low",
+    };
+  }
+  const seats = maxPax ?? (tables != null ? Math.round(tables * 5.3) : null);
+  const predictedPax = seats != null ? Math.round(seats * TURN_FACTORS[dow]) : null;
+  return {
+    predictedPax,
+    method: predictedPax != null ? "capacity_model" : "unavailable",
+    confidence: predictedPax != null ? "estimated" : "none",
+  };
+}
+
 @Injectable()
 export class ForecastingService {
   private readonly mlServiceUrl: string;
@@ -280,6 +334,181 @@ export class ForecastingService {
     }
 
     return { data: { outletId, weekStart, coversPerOnDutyStaff: covers, days } };
+  }
+
+  /**
+   * Automated PAX prediction for one outlet on a given day (default: today). Hybrid model that
+   * ALWAYS returns a number so the feature works before any POS history is imported:
+   *   1. HISTORICAL — if ≥2 past same-weekday cover counts exist in pax_data, a recency-weighted
+   *      (4/3/2/1) average of the last ≤4. Confidence scales with the sample size, and the model
+   *      auto-upgrades from "capacity" to "historical" as data accumulates.
+   *   2. CAPACITY MODEL — otherwise an estimate from the outlet's seating capacity × a day-of-week
+   *      turn factor (covers per seat per day; quiet early-week → busy weekend).
+   * Predicted daily covers drive a recommended on-duty staff count. Outlet-scoped.
+   */
+  async getPaxPrediction(user: AuthUser, outletId: string, date?: string) {
+    const scope = allowedOutletIds(user);
+    const oRes = await this.db.query(
+      `SELECT id, name, total_tables, max_pax, operating_hours
+       FROM outlets WHERE id = $1 AND tenant_id = $2 AND ($3::uuid[] IS NULL OR id = ANY($3))`,
+      [outletId, user.tenantId, scope],
+    );
+    const outlet = oRes.rows[0];
+    if (!outlet) throw new NotFoundException("Outlet not found");
+
+    const target = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : toLocalDateStr(new Date());
+    const dow = new Date(`${target}T00:00:00`).getDay(); // 0=Sun … 6=Sat
+
+    const hist = await this.db.query(
+      `SELECT pax_count FROM pax_data
+       WHERE outlet_id = $1 AND EXTRACT(DOW FROM date) = $2 AND date < $3::date
+         AND date >= $3::date - INTERVAL '10 weeks'
+       ORDER BY date DESC LIMIT 4`,
+      [outletId, dow, target],
+    );
+    const vals = hist.rows.map((r) => Number(r.pax_count)).filter((n) => Number.isFinite(n));
+
+    const maxPax = outlet.max_pax != null ? Number(outlet.max_pax) : null;
+    const tables = outlet.total_tables != null ? Number(outlet.total_tables) : null;
+    const { predictedPax, method, confidence } = computePaxPrediction(maxPax, tables, dow, vals);
+
+    const coversPerStaff = await this.capacityService.getCoversPerOnDutyStaff(user.tenantId);
+    const recommendedStaff = predictedPax != null && coversPerStaff > 0 ? Math.ceil(predictedPax / coversPerStaff) : null;
+
+    // Peak window from configured operating hours; fall back to the typical dine-in service
+    // window when hours aren't set, so the tile is populated (flagged estimated).
+    let peakHours = peakHoursForDay(outlet.operating_hours, dow);
+    let peakHoursEstimated = false;
+    if (!peakHours && predictedPax != null) {
+      peakHours = "12:00–23:00";
+      peakHoursEstimated = true;
+    }
+
+    return {
+      data: {
+        outletId,
+        outletName: outlet.name,
+        date: target,
+        dayOfWeek: dow,
+        tableCount: tables,
+        maxPax,
+        peakHours,
+        peakHoursEstimated,
+        predictedPax,
+        method,
+        confidence,
+        historicalSamples: vals.length,
+        coversPerOnDutyStaff: coversPerStaff,
+        recommendedStaff,
+      },
+    };
+  }
+
+  /**
+   * AI STAFFING AUTOPILOT — the full loop. Predicts PAX for every in-scope dine-in outlet,
+   * turns each forecast into a required on-duty staff count, compares to the outlet's current
+   * headcount to get a surplus/shortage, then greedily matches surplus outlets to short outlets
+   * to produce cross-outlet TRANSFER RECOMMENDATIONS that balance predicted demand. Read-only /
+   * advisory — the manager executes a recommendation through the existing allocation flow.
+   */
+  async getStaffingAutopilot(user: AuthUser, date?: string) {
+    const scope = allowedOutletIds(user);
+    const target = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : toLocalDateStr(new Date());
+    const dow = new Date(`${target}T00:00:00`).getDay();
+    const coversPerStaff = await this.capacityService.getCoversPerOnDutyStaff(user.tenantId);
+
+    const outletsRes = await this.db.query(
+      `SELECT o.id, o.name, o.total_tables, o.max_pax,
+              COUNT(s.id) FILTER (WHERE s.employment_status = 'active') AS current_staff
+       FROM outlets o
+       LEFT JOIN staff s ON s.current_outlet_id = o.id AND s.tenant_id = o.tenant_id
+       WHERE o.tenant_id = $1 AND o.is_active = true AND o.max_pax IS NOT NULL
+         AND ($2::uuid[] IS NULL OR o.id = ANY($2))
+       GROUP BY o.id, o.name, o.total_tables, o.max_pax
+       ORDER BY o.name`,
+      [user.tenantId, scope],
+    );
+    const ids = outletsRes.rows.map((o) => o.id as string);
+
+    // Same-weekday history for ALL outlets in one query (most-recent 4 each).
+    const histByOutlet = new Map<string, number[]>();
+    if (ids.length) {
+      const histRes = await this.db.query(
+        `SELECT outlet_id, pax_count FROM pax_data
+         WHERE EXTRACT(DOW FROM date) = $1 AND date < $2::date AND date >= $2::date - INTERVAL '10 weeks'
+           AND outlet_id = ANY($3::uuid[])
+         ORDER BY date DESC`,
+        [dow, target, ids],
+      );
+      for (const r of histRes.rows) {
+        const arr = histByOutlet.get(r.outlet_id) ?? [];
+        if (arr.length < 4) { arr.push(Number(r.pax_count)); histByOutlet.set(r.outlet_id, arr); }
+      }
+    }
+
+    const base = outletsRes.rows.map((o) => {
+      const vals = histByOutlet.get(o.id) ?? [];
+      const { predictedPax, method, confidence } = computePaxPrediction(
+        o.max_pax != null ? Number(o.max_pax) : null,
+        o.total_tables != null ? Number(o.total_tables) : null,
+        dow, vals,
+      );
+      const recommendedOnDuty = predictedPax != null && coversPerStaff > 0 ? Math.ceil(predictedPax / coversPerStaff) : null;
+      return { outletId: o.id as string, outletName: o.name as string, predictedPax, method, confidence, recommendedOnDuty, currentStaff: Number(o.current_staff) };
+    });
+
+    // Demand-weighted fair share: the AI redistributes the EXISTING dine-in workforce so each
+    // outlet's headcount matches its share of total predicted demand. gap>0 = over-resourced
+    // for its forecast (can give staff up); gap<0 = under-resourced (needs staff).
+    const totalStaff = base.reduce((s, o) => s + o.currentStaff, 0);
+    const totalPax = base.reduce((s, o) => s + (o.predictedPax ?? 0), 0);
+    const outlets = base.map((o) => {
+      const fairStaff = totalPax > 0 && o.predictedPax != null ? Math.round(totalStaff * (o.predictedPax / totalPax)) : o.currentStaff;
+      const demandSharePct = totalPax > 0 && o.predictedPax != null ? Math.round((o.predictedPax / totalPax) * 100) : null;
+      return { ...o, fairStaff, demandSharePct, gap: o.currentStaff - fairStaff };
+    });
+
+    // Greedy match: biggest over-resourced → biggest under-resourced, until one side runs out.
+    const surplus = outlets.filter((o) => o.gap != null && o.gap > 0).map((o) => ({ ...o, avail: o.gap as number })).sort((a, b) => b.avail - a.avail);
+    const shortage = outlets.filter((o) => o.gap != null && o.gap < 0).map((o) => ({ ...o, need: -(o.gap as number) })).sort((a, b) => b.need - a.need);
+
+    const transfers: Array<{ fromOutletId: string; fromOutletName: string; toOutletId: string; toOutletName: string; count: number; reason: string }> = [];
+    let si = 0;
+    let hi = 0;
+    while (si < surplus.length && hi < shortage.length) {
+      const move = Math.min(surplus[si].avail, shortage[hi].need);
+      if (move > 0) {
+        transfers.push({
+          fromOutletId: surplus[si].outletId, fromOutletName: surplus[si].outletName,
+          toOutletId: shortage[hi].outletId, toOutletName: shortage[hi].outletName,
+          count: move,
+          reason: `${shortage[hi].outletName} needs ${shortage[hi].need} more for ~${shortage[hi].predictedPax} predicted covers; ${surplus[si].outletName} has ${surplus[si].avail} spare.`,
+        });
+        surplus[si].avail -= move;
+        shortage[hi].need -= move;
+      }
+      if (surplus[si].avail <= 0) si++;
+      if (shortage[hi].need <= 0) hi++;
+    }
+
+    const totalShort = outlets.reduce((s, o) => s + (o.gap != null && o.gap < 0 ? -o.gap : 0), 0);
+    const totalSurplus = outlets.reduce((s, o) => s + (o.gap != null && o.gap > 0 ? o.gap : 0), 0);
+    return {
+      data: {
+        date: target,
+        dayOfWeek: dow,
+        coversPerOnDutyStaff: coversPerStaff,
+        outlets,
+        transfers,
+        summary: {
+          outletsShort: outlets.filter((o) => o.gap != null && o.gap < 0).length,
+          outletsSurplus: outlets.filter((o) => o.gap != null && o.gap > 0).length,
+          totalShort,
+          totalSurplus,
+          movesRecommended: transfers.reduce((s, t) => s + t.count, 0),
+        },
+      },
+    };
   }
 
   async getHeadcountRecommendation(user: AuthUser, outletId: string, date: string) {

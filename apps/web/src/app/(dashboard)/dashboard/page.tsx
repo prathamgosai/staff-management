@@ -19,6 +19,7 @@ import { CapacityStaffingSection } from "@/components/dashboard/capacity-staffin
 import { RebalancingCard } from "@/components/dashboard/rebalancing-card";
 import { DocumentsWidget } from "@/components/dashboard/documents-widget";
 import { PaxPredictionCard } from "@/components/dashboard/pax-prediction-card";
+import { StaffingAutopilotCard } from "@/components/dashboard/staffing-autopilot-card";
 
 interface OverviewData { totalOutlets: number; activeStaff: number; staffOnLeaveToday: number; presentToday: number; }
 interface TodaySnapshot { staffOnShift: number; pendingLeave: number; pendingApprovals: number; }
@@ -401,6 +402,9 @@ export default function DashboardPage() {
 
       {/* PAX prediction & staffing requirements (live, per-outlet) */}
       <PaxPredictionCard />
+
+      {/* AI staffing autopilot — prediction-driven cross-outlet transfer recommendations */}
+      <StaffingAutopilotCard />
     </div>
   );
 }
