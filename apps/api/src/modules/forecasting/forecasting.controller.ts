@@ -81,6 +81,13 @@ export class ForecastingController {
     return this.forecastingService.getHeadcountRecommendation(user, outletId, date);
   }
 
+  @Get("staffing-autopilot")
+  @RequirePermission("forecast:read")
+  @ApiOperation({ summary: "AI autopilot: predicted PAX -> required staff -> cross-outlet transfer recommendations" })
+  staffingAutopilot(@CurrentUser() user: AuthUser, @Query("date") date?: string) {
+    return this.forecastingService.getStaffingAutopilot(user, date);
+  }
+
   @Get("pax-prediction/:outletId")
   @RequirePermission("forecast:read")
   @ApiOperation({ summary: "Automated PAX prediction (historical or capacity model) + recommended staff for a day" })
