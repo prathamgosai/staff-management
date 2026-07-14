@@ -166,9 +166,13 @@ export class StaffingService {
 
       const roles: RoleInput[] = [];
       for (const p of positions) {
+        // A CATEGORISED restaurant is staffed from its own per-role config: outlet override →
+        // category template. It must NOT fall back to the company category default, because that
+        // default is a per-CATEGORY figure and the engine sums per POSITION — applying it to each
+        // of (e.g.) 6 kitchen roles multiplies the requirement ~6×. Only truly uncategorised
+        // outlets use the company default. Roles with no config are skipped (contribute nothing).
         const ratio = src.get(`${oid}:${p.id}`)
-          ?? (o.category_id ? tpl.get(`${o.category_id}:${p.id}`) : undefined)
-          ?? catRatio.get(p.category);
+          ?? (o.category_id ? tpl.get(`${o.category_id}:${p.id}`) : catRatio.get(p.category));
         const current = g(cur, oid, p.id);
         const present = g(pr, oid, p.id);
         const onLeave = g(lv, oid, p.id);

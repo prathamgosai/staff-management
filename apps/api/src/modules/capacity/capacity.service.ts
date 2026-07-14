@@ -223,7 +223,27 @@ export class CapacityService {
       activeStaffTotal += aTotal;
 
       if (o.max_pax === null || o.max_pax === undefined) {
-        if (aTotal > 0) supportUnits.push({ outletId: oid, name: o.name, actual: aTotal });
+        // Non-dining unit (bakery / prep kitchen / ODC / R&D): no seating capacity to model demand
+        // from, so track it against a HEADCOUNT TARGET (= its current active staff). It shows as a
+        // balanced row in the per-restaurant table instead of being hidden in a support footnote.
+        if (aTotal > 0) {
+          supportUnits.push({ outletId: oid, name: o.name, actual: aTotal });
+          outlets.push({
+            outletId: oid,
+            name: o.name,
+            code: o.code,
+            totalTables: o.total_tables,
+            maxPax: null,
+            basis: "headcount",
+            paxPerStaff: null,
+            categories: [],
+            requiredTotal: aTotal,
+            actualTotal: aTotal,
+            variance: 0,
+          });
+          totRequired += aTotal;
+          totActual += aTotal;
+        }
         continue;
       }
 
@@ -249,6 +269,7 @@ export class CapacityService {
         code: o.code,
         totalTables: o.total_tables,
         maxPax,
+        basis: "seating",
         paxPerStaff: aTotal > 0 ? Number((maxPax / aTotal).toFixed(2)) : null,
         categories,
         requiredTotal,
