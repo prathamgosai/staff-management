@@ -85,17 +85,36 @@ export class PredictionsService {
     const catRatio = new Map<string, { g: number; m: number }>(catRatioRes.rows.map((r) => [r.category as string, { g: Number(r.pax_per_staff), m: Number(r.min_staff) }]));
     const salary = new Map<string, number>(salaryRes.rows.map((r) => [r.position_id as string, Number(r.avg_monthly_salary)]));
 
-    return positionsRes.rows.map((p) => {
-      const ratio = tpl.get(p.id as string) ?? catRatio.get(p.category as string);
-      return {
-        positionId: p.id as string,
-        positionName: p.name as string,
-        category: p.category as string,
-        guestsPerStaff: ratio ? ratio.g : null,
-        minStaff: ratio ? ratio.m : 0,
-        avgMonthlySalary: salary.has(p.id as string) ? salary.get(p.id as string)! : null,
-      };
-    });
+    // A CALIBRATED category (has ≥1 ratio_template row) is sized PER-ROLE from its template only.
+    // It must NOT also fall back to the company category default, because that default is a
+    // per-CATEGORY figure and the strategy sums per POSITION — applying it to each position in a
+    // staff-category multiplies the requirement ~Nx (the same over-count fixed in StaffingService).
+    if (tpl.size > 0) {
+      return positionsRes.rows.map((p) => {
+        const t = tpl.get(p.id as string);
+        return {
+          positionId: p.id as string,
+          positionName: p.name as string,
+          category: p.category as string,
+          guestsPerStaff: t ? t.g : null,
+          minStaff: t ? t.m : 0,
+          avgMonthlySalary: salary.has(p.id as string) ? salary.get(p.id as string)! : null,
+        };
+      });
+    }
+
+    // UNCALIBRATED (no category, or a category with no templates yet): estimate from the company
+    // seating ratios (staffing_ratios) applied ONCE per staff-category — the same basis as the
+    // new-outlet planner — instead of per position. This keeps the total sane (no over-count) and
+    // never 500s on a category that simply has no per-role template configured.
+    return [...catRatio.entries()].map(([category, r]) => ({
+      positionId: `catdef:${category}`,
+      positionName: `${category} (company default)`,
+      category,
+      guestsPerStaff: r.g,
+      minStaff: r.m,
+      avgMonthlySalary: null,
+    }));
   }
 
   // ── role salaries (admin/hr only) ─────────────────────────────────────────

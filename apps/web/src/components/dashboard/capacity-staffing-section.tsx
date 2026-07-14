@@ -18,7 +18,7 @@ const CapacityChart = dynamic(() => import("./capacity-chart"), {
 interface Category { category: string; required: number; actual: number; variance: number; }
 interface OutletAnalysis {
   outletId: string; name: string; code: string;
-  totalTables: number | null; maxPax: number; paxPerStaff: number | null;
+  totalTables: number | null; maxPax: number | null; basis?: "seating" | "headcount"; paxPerStaff: number | null;
   categories: Category[]; requiredTotal: number; actualTotal: number; variance: number;
 }
 interface Analysis {
@@ -114,7 +114,7 @@ export function CapacityStaffingSection() {
         <div className="bg-card rounded-2xl border border-border p-5 shadow-sm">
           <div className="flex items-center gap-2 text-muted-foreground"><Sparkles size={15} /><p className="text-xs font-semibold uppercase tracking-widest">Staff required</p></div>
           <p className="text-3xl font-black text-foreground mt-1">{a.totals.requiredTotal}</p>
-          <p className="text-xs text-muted-foreground mt-1">capacity model · {a.outlets.length} dine-in outlets</p>
+          <p className="text-xs text-muted-foreground mt-1">capacity model · {a.outlets.length} restaurants</p>
         </div>
         <div className="bg-card rounded-2xl border border-border p-5 shadow-sm">
           <div className="flex items-center gap-2 text-muted-foreground">
@@ -159,9 +159,10 @@ export function CapacityStaffingSection() {
                   <td className="px-5 py-3">
                     <p className="font-semibold text-foreground">{o.name}</p>
                     <p className="text-xs text-muted-foreground font-mono">{o.code}</p>
+                    {o.basis === "headcount" && <p className="text-[10px] text-muted-foreground/70">target = current headcount</p>}
                   </td>
                   <td className="text-right px-3 py-3 text-muted-foreground">{o.totalTables ?? "—"}</td>
-                  <td className="text-right px-3 py-3 text-muted-foreground">{o.maxPax}</td>
+                  <td className="text-right px-3 py-3 text-muted-foreground">{o.maxPax ?? "—"}</td>
                   <td className="text-right px-3 py-3 font-semibold text-foreground">{o.requiredTotal}</td>
                   <td className="text-right px-3 py-3 font-semibold text-foreground">{o.actualTotal}</td>
                   <td className="text-right px-3 py-3"><VarianceBadge v={o.variance} /></td>
