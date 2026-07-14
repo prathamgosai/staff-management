@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
@@ -7,11 +6,10 @@ import { Providers } from "./providers";
 import { ServiceWorkerRegister } from "@/components/pwa/sw-register";
 import { InstallHint } from "@/components/pwa/install-hint";
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-sans",
-  display: "swap",
-});
+// NOTE: the UI font is a LOCAL/system stack (see --font-sans in globals.css) — NOT fetched from
+// Google Fonts. Fetching Inter from fonts.googleapis.com at build/compile time hung the dev
+// server (33s compiles) and could break the Render build on restricted networks. Systems with
+// Inter installed still use it; others fall back to the native system font.
 
 export const metadata: Metadata = {
   title: "BookendsShiftly — Restaurant Workforce Management",
@@ -52,7 +50,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const locale = await getLocale();
   const messages = await getMessages();
   return (
-    <html lang={locale} suppressHydrationWarning className={inter.variable}>
+    <html lang={locale} suppressHydrationWarning>
       <body className="min-h-screen overflow-x-hidden bg-background font-sans text-foreground antialiased">
         <NextIntlClientProvider locale={locale} messages={messages}>
           <Providers>{children}</Providers>
