@@ -16,6 +16,7 @@ import { toast } from "@/components/ui/sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CapacityStaffingSection } from "@/components/dashboard/capacity-staffing-section";
+import { NewRestaurantPredictorCard } from "@/components/dashboard/new-restaurant-predictor-card";
 import { RebalancingCard } from "@/components/dashboard/rebalancing-card";
 import { DocumentsWidget } from "@/components/dashboard/documents-widget";
 import { PaxPredictionCard } from "@/components/dashboard/pax-prediction-card";
@@ -227,6 +228,9 @@ export default function DashboardPage() {
 
       {/* Capacity & staffing (visible to allocation:read holders; self-hides otherwise) */}
       <CapacityStaffingSection />
+
+      {/* New-restaurant staffing predictor — pax in → team you'll need (self-hides without predictions:run) */}
+      <NewRestaurantPredictorCard />
 
       {/* Advisory cross-outlet rebalancing */}
       <RebalancingCard />
