@@ -12,6 +12,10 @@
   :root {
     color-scheme: light;
 
+    /* UI font — local/system stack (NOT fetched from Google Fonts). Uses Inter when the OS has
+       it installed, else the native system UI font. See the note in app/layout.tsx. */
+    --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+
     /* Canvas & surfaces (layered) */
     --background: 210 20% 98.5%;         /* app canvas */
     --surface: 0 0% 100%;                /* card / panel */
