@@ -73,3 +73,13 @@ assets/db/006_staff_exit_and_uncertain.sql
 assets/db/006_staff_exit_ROLLBACK.sql
 assets/db/007_staff_logins.sql
 assets/db/007_staff_logins_ROLLBACK.sql
+
+# Local go-live (ngrok) — secrets & logs, never commit
+.golive.secrets.json
+.golive.tunnel-auth.txt
+.golive*.log
+.server.*.log
+.ngrok.*.log
+.tools/
+go-live-local.ps1
+serve-public.ps1
