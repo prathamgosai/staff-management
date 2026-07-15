@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth.store";
 import { hasPermission } from "@/lib/permissions";
-import { Table2, Clock, TrendingUp, Users, ChevronRight, Sparkles, BrainCircuit } from "lucide-react";
+import { Table2, Clock, TrendingUp, Users, Sparkles, BrainCircuit } from "lucide-react";
 
 interface OutletLite { id: string; name: string; code?: string }
 interface Prediction {
@@ -115,15 +115,14 @@ export function PaxPredictionCard() {
 
       {/* Recommended staffing from the predicted PAX */}
       {!loading && p && p.recommendedStaff != null ? (
-        <Link href="/staffing" className="mt-4 flex items-center justify-between rounded-xl bg-muted/50 px-4 py-3 hover:bg-muted transition group">
+        <div className="mt-4 flex items-center justify-between rounded-xl bg-muted/50 px-4 py-3">
           <div className="flex items-center gap-2 text-sm flex-wrap">
             <Users size={15} className="text-muted-foreground shrink-0" />
             <span className="font-semibold text-foreground">≈ {p.recommendedStaff}</span>
             <span className="text-muted-foreground">staff recommended on duty</span>
             <span className="text-muted-foreground/70 text-xs">· {p.predictedPax} covers ÷ {p.coversPerOnDutyStaff}/staff</span>
           </div>
-          <ChevronRight size={15} className="text-muted-foreground group-hover:translate-x-0.5 transition-transform shrink-0" />
-        </Link>
+        </div>
       ) : !loading && p && p.method === "unavailable" ? (
         <p className="mt-4 text-xs text-muted-foreground bg-muted/40 rounded-xl px-4 py-3">
           Set this outlet&apos;s table count &amp; max capacity to enable predictions.{" "}

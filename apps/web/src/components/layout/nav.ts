@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Users, Building2, Calendar, Clock,
   CalendarOff, ArrowLeftRight, BarChart3, Calculator, Upload,
-  ShieldCheck, KeyRound, UserCog, Bell, Settings, Sliders, FileText, Gauge, History, type LucideIcon,
+  ShieldCheck, KeyRound, UserCog, Bell, Settings, Sliders, FileText, History, type LucideIcon,
 } from "lucide-react";
 
 export type NavItem = {
@@ -52,7 +52,6 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Insights",
     items: [
-      { href: "/staffing", label: "Company staffing", icon: Gauge, perm: "allocation:read" },
       { href: "/predictions", label: "Staff predictor", icon: Calculator, perm: "predictions:run" },
       { href: "/reports", label: "Reports", icon: BarChart3 },
       { href: "/planning/new-outlet", label: "New-outlet planner", icon: Calculator, perm: "allocation:read" },
