@@ -75,7 +75,7 @@ export default function RatioTemplatesPage() {
 
       <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground flex items-start gap-2">
         <Info size={14} className="mt-0.5 shrink-0" />
-        <p>When you “Prefill from template” on an outlet, roles not covered here fall back to the company category defaults (Staffing ratios page).</p>
+        <p>When you “Prefill from template” on an outlet, roles not covered here fall back to the company category defaults.</p>
       </div>
 
       <div>

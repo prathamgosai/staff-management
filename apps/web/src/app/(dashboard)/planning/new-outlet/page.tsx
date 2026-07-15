@@ -169,7 +169,7 @@ export default function NewOutletPlannerPage() {
           {/* Disclaimer */}
           <p className="text-xs text-muted-foreground flex items-start gap-2">
             <Info size={13} className="mt-0.5 shrink-0" />
-            <span>Estimates from your current group ratios — <Link href="/settings/staffing-ratios" className="text-blue-600 hover:underline">tune ratios in Settings</Link>.</span>
+            <span>Estimates from your current group ratios — <Link href="/settings/ratio-templates" className="text-blue-600 hover:underline">tune ratio templates in Settings</Link>.</span>
           </p>
         </div>
       )}
