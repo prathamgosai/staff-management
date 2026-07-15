@@ -107,8 +107,7 @@ export function NewRestaurantPredictorCard() {
           </button>
         </div>
         <p className="text-[11px] text-muted-foreground mt-2">
-          Peak covers = the busiest single shift (lunch or dinner). Ratios are editable at{" "}
-          <Link href="/settings/ratio-templates" className="text-primary hover:underline">Ratio templates</Link>.
+          Peak covers = the busiest single shift (lunch or dinner).
         </p>
 
         {run.isError && (
@@ -176,12 +175,12 @@ export function NewRestaurantPredictorCard() {
             {isFallback ? (
               <p className="text-[11px] text-muted-foreground flex items-start gap-1.5">
                 <Info size={12} className="mt-0.5 shrink-0" />
-                <span>No saved ratios for this cuisine yet — estimated from your company seating ratios. Add per-role ratios at <Link href="/settings/ratio-templates" className="text-primary hover:underline">Ratio templates</Link> for a sharper number.</span>
+                <span>No saved ratios for this cuisine yet — estimated from your company seating ratios.</span>
               </p>
             ) : result.roles.length <= 2 ? (
               <p className="text-[11px] text-amber-700 dark:text-amber-300 flex items-start gap-1.5">
                 <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-                <span>This cuisine has only a few saved ratios, so the estimate may be low. Complete it at <Link href="/settings/ratio-templates" className="text-primary hover:underline">Ratio templates</Link>.</span>
+                <span>This cuisine has only a few saved ratios, so the estimate may be low.</span>
               </p>
             ) : null}
 

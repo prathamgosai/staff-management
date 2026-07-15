@@ -69,7 +69,6 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Settings",
     items: [
-      { href: "/settings/ratio-templates", label: "Ratio templates", icon: Sliders, perm: "allocation:read" },
       { href: "/settings/role-salaries", label: "Role salaries", icon: Sliders, perm: "roles:manage" },
       { href: "/settings/document-types", label: "Document types", icon: FileText, perm: "staff:documents" },
       { href: "/planning/pax-import", label: "Import pax history", icon: Upload, perm: "outlet:write" },
