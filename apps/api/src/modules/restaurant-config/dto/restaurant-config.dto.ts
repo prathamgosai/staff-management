@@ -61,29 +61,6 @@ export class UpdateStaffRatiosDto {
   ratios!: RatioRowDto[];
 }
 
-export class TemplateRowDto {
-  @IsUUID()
-  positionId!: string;
-
-  @IsNumber() @Min(0.01)
-  guestsPerStaff!: number;
-
-  @IsInt() @Min(0)
-  minStaff!: number;
-}
-
-/** PUT /settings/ratio-templates — templates for one restaurant category. */
-export class UpdateTemplatesDto {
-  @IsUUID()
-  categoryId!: string;
-
-  @IsArray()
-  @ArrayMaxSize(100)
-  @ValidateNested({ each: true })
-  @Type(() => TemplateRowDto)
-  rows!: TemplateRowDto[];
-}
-
 /** POST /outlets/:id/staffing-ratios/apply-template */
 export class ApplyTemplateDto {
   @IsUUID()
