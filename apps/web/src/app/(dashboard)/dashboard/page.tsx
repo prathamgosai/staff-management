@@ -7,19 +7,16 @@ import { useAuthStore } from "@/store/auth.store";
 import { isAdminRole } from "@workforceiq/shared";
 import {
   Users, Building2, CalendarOff, Clock, ChevronDown,
-  Wand2, Shield, Loader2, ChevronRight, CheckCircle2,
+  Wand2, Shield, Loader2, ChevronRight,
   Pencil, X, Check,
 } from "lucide-react";
-import { format, startOfWeek } from "date-fns";
+import { format } from "date-fns";
 import Link from "next/link";
 import { toast } from "@/components/ui/sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CapacityStaffingSection } from "@/components/dashboard/capacity-staffing-section";
-import { NewRestaurantPredictorCard } from "@/components/dashboard/new-restaurant-predictor-card";
-import { RebalancingCard } from "@/components/dashboard/rebalancing-card";
 import { DocumentsWidget } from "@/components/dashboard/documents-widget";
-import { PaxPredictionCard } from "@/components/dashboard/pax-prediction-card";
 import { StaffingAutopilotCard } from "@/components/dashboard/staffing-autopilot-card";
 
 interface OverviewData { totalOutlets: number; activeStaff: number; staffOnLeaveToday: number; presentToday: number; }
@@ -229,33 +226,8 @@ export default function DashboardPage() {
       {/* Capacity & staffing (visible to allocation:read holders; self-hides otherwise) */}
       <CapacityStaffingSection />
 
-      {/* New-restaurant staffing predictor — pax in → team you'll need (self-hides without predictions:run) */}
-      <NewRestaurantPredictorCard />
-
-      {/* Advisory cross-outlet rebalancing */}
-      <RebalancingCard />
-
       {/* Document compliance (self-hides without documents:status) */}
       <DocumentsWidget />
-
-      {/* Shift legend */}
-      <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-2xl px-5 py-4 text-white">
-        <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">Weekly Auto-Rotation Shifts — All Restaurants</p>
-        <div className="flex gap-6 flex-wrap">
-          {[
-            { name: "Shift A", time: "12:00 – 21:00 (9 hrs)", dot: "bg-blue-400" },
-            { name: "Shift B", time: "13:00 – 22:00 (9 hrs)", dot: "bg-purple-400" },
-            { name: "Shift C", time: "15:00 – 00:00 (9 hrs)", dot: "bg-amber-400" },
-          ].map(s => (
-            <div key={s.name} className="flex items-center gap-2">
-              <div className={`w-2.5 h-2.5 rounded-full ${s.dot}`} />
-              <span className="font-bold text-sm">{s.name}</span>
-              <span className="text-slate-400 text-sm">{s.time}</span>
-            </div>
-          ))}
-          <span className="text-slate-500 text-xs self-center ml-2">Groups rotate A→B→C every Monday automatically</span>
-        </div>
-      </div>
 
       {/* Outlet cards */}
       <div>
@@ -304,9 +276,6 @@ export default function DashboardPage() {
                   <span><b className="text-foreground">{o.full_time}</b> FT</span>
                   <span><b className="text-foreground">{o.part_time}</b> PT</span>
                   {Number(o.pending_leaves) > 0 && <span className="text-amber-600 font-semibold">{o.pending_leaves} leave</span>}
-                </div>
-                <div className="flex items-center gap-1 text-xs text-emerald-600 font-semibold shrink-0">
-                  <CheckCircle2 size={12} /> Auto-scheduled
                 </div>
               </div>
             </div>
@@ -404,10 +373,9 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* PAX prediction & staffing requirements (live, per-outlet) */}
-      <PaxPredictionCard />
-
-      {/* AI staffing autopilot — prediction-driven cross-outlet transfer recommendations */}
+      {/* AI staffing autopilot — prediction-driven cross-outlet transfer recommendations.
+          Its per-outlet table carries predicted PAX for every outlet, which is why the
+          single-outlet PaxPredictionCard was removed as a subset of this. */}
       <StaffingAutopilotCard />
     </div>
   );

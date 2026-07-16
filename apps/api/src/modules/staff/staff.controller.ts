@@ -1,8 +1,8 @@
 import {
-  Controller, Get, Post, Put, Delete, Patch,
+  Controller, Get, Post, Put, Delete,
   Body, Param, Query, UseGuards, ParseUUIDPipe, HttpCode, HttpStatus,
 } from "@nestjs/common";
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from "@nestjs/swagger";
+import { ApiTags, ApiBearerAuth, ApiOperation } from "@nestjs/swagger";
 import { StaffService } from "./staff.service";
 import { CreateStaffDto } from "./dto/create-staff.dto";
 import { UpdateStaffDto } from "./dto/update-staff.dto";

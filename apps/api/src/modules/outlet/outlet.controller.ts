@@ -46,14 +46,6 @@ export class OutletController {
     return this.capacityService.getCapacityAnalysis(user);
   }
 
-  @Get("rebalancing-suggestions")
-  @UseGuards(PermissionsGuard)
-  @RequirePermission("allocation:read")
-  @ApiOperation({ summary: "Advisory cross-outlet staff rebalancing suggestions" })
-  rebalancingSuggestions(@CurrentUser() user: AuthUser) {
-    return this.capacityService.getRebalancingSuggestions(user);
-  }
-
   @Get(":id")
   findOne(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.outletService.findOne(user, id);
