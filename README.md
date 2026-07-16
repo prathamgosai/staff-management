@@ -13,7 +13,7 @@ API feature modules: auth, staff, staff-documents, outlet, capacity, restaurant-
 
 **Capacity planning & documents:** each staff profile has a document vault (IDs/contracts; Aadhaar stored masked to last-4). Per-outlet capacity (tables + max pax) plus tunable staffing ratios drive a required-vs-actual dashboard, a new-outlet staffing planner, and a Phase-1 day-of-week demand forecast (import daily covers under **Settings → Import pax history**). All advisory — no auto-transfers or auto-roster changes.
 
-**Workforce Intelligence extension** (see [docs/WORKFORCE-INTELLIGENCE.md](docs/WORKFORCE-INTELLIGENCE.md)): a compliance-grade **employee documents** module (encrypted, versioned, audit-logged, expiry/missing tracking); per-restaurant **configuration & per-role staffing ratios** with change history + category templates; a pure, unit-tested **real-time staffing engine** (required vs available, 4-colour status) feeding an executive **company dashboard** (`/staffing`); a **staff predictor** (`/predictions`) that estimates headcount + payroll for a planned outlet; and **intelligent transfer recommendations** that deep-link into the existing allocation flow. Additive migrations `019`–`023`; nothing existing was rewritten.
+**Workforce Intelligence:** a compliance-grade **employee documents** module (encrypted, versioned, audit-logged, expiry/missing tracking at `/documents`); per-restaurant **configuration & per-role staffing ratios**, edited per outlet at `/outlets/[id]`; a **staff predictor** (`/predictions`) that estimates headcount + payroll for a planned outlet; and an **AI staffing autopilot** on the dashboard that recommends cross-outlet transfers from forecast demand. Migrations `019`–`023`.
 
 ## Prerequisites
 
