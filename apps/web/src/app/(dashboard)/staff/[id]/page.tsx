@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "@/components/ui/sonner";
@@ -12,8 +12,8 @@ import { isAdminRole } from "@workforceiq/shared";
 import Link from "next/link";
 import { useState, useRef } from "react";
 import {
-  ArrowLeft, Phone, Mail, MapPin, Briefcase, Calendar,
-  Clock, Building2, User, ChevronDown, Check, Loader2,
+  ArrowLeft, Phone, Mail, Briefcase, Calendar,
+  Clock, Building2, User, Check, Loader2,
   Pencil, X, Shield, Hash, Camera,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -319,7 +319,6 @@ function AvatarUploader({ staffId, name, avatarUrl, canEdit }: { staffId: string
 /* ─── Page ────────────────────────────────────────────────────────────── */
 export default function StaffDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const [showEditStatus, setShowEditStatus] = useState(false);
   const [showEditContact, setShowEditContact] = useState(false);
   const currentUser = useAuthStore((s) => s.user);

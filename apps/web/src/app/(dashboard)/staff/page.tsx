@@ -9,7 +9,7 @@ import { toast } from "@/components/ui/sonner";
 import Link from "next/link";
 import {
   Search, Plus, Filter, Users, ChevronLeft, ChevronRight,
-  X, ChevronDown, Loader2, Check, Trash2, AlertTriangle,
+  X, ChevronDown, Loader2, Check, Trash2,
 } from "lucide-react";
 
 /* ─── types ──────────────────────────────────────────────────────────── */
@@ -302,8 +302,6 @@ function FilterDrawer({
   const set = (k: string, v: string) => setLocal(f => ({ ...f, [k]: v }));
 
   useEffect(() => { if (open) setLocal(filters); }, [open, filters]);
-
-  const activeCount = Object.values(filters).filter(Boolean).length;
 
   if (!open) return null;
 

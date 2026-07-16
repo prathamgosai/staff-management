@@ -330,7 +330,7 @@ function DeptChips({ staff, activeDept, onChange }: {
 }
 
 /* ─── Staff Panel — per outlet ────────────────────────────────────────── */
-function StaffPanel({ outletId, outletCode }: { outletId: string; outletCode: string }) {
+function StaffPanel({ outletId }: { outletId: string }) {
   const [activeDept, setActiveDept] = useState("All");
 
   const { data, isLoading } = useQuery<{ data: StaffRow[] }>({
@@ -523,7 +523,7 @@ function OutletAccordion({ outlet, expanded, onToggle, onDelete }: {
       {expanded && (
         <>
           <div className="border-t border-border mx-5" />
-          <StaffPanel outletId={outlet.id} outletCode={outlet.code} />
+          <StaffPanel outletId={outlet.id} />
         </>
       )}
     </div>
