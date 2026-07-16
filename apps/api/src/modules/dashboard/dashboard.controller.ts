@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
 import { ApiTags, ApiBearerAuth, ApiOperation } from "@nestjs/swagger";
 import { DashboardService } from "./dashboard.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -12,9 +12,16 @@ import type { AuthUser } from "@workforceiq/shared";
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
-  @Get("overview")
-  overview(@CurrentUser() user: AuthUser) {
-    return this.dashboardService.getOverview(user.tenantId);
+  @Get("summary")
+  @ApiOperation({ summary: "KPI summary: total staff, outlets, on-shift, on-leave/off (optionally ?outletId scoped)" })
+  summary(@CurrentUser() user: AuthUser, @Query("outletId") outletId?: string) {
+    return this.dashboardService.getSummary(user, outletId);
+  }
+
+  @Get("outlet/:outletId/staff-today")
+  @ApiOperation({ summary: "Per-staff today status for one outlet (on_shift / on_leave / off / late)" })
+  outletStaffToday(@CurrentUser() user: AuthUser, @Param("outletId") outletId: string) {
+    return this.dashboardService.getOutletStaffToday(user, outletId);
   }
 
   @Get("today-snapshot")
