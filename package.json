@@ -2,10 +2,6 @@
   "name": "workforceiq",
   "version": "0.1.0",
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
   "scripts": {
     "dev": "node scripts/check-node.mjs && turbo run dev",
     "clean": "node scripts/clean.mjs",
