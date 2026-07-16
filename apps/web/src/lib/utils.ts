@@ -6,6 +6,10 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** Rupees, whole-number. The app is INR throughout — never format money by hand. */
+export const inr = (n: number) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+
 export function formatDate(date: string | Date, fmt = "dd MMM yyyy"): string {
   try {
     const d = typeof date === "string" ? parseISO(date) : date;

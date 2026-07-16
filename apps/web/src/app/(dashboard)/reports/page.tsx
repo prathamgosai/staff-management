@@ -4,14 +4,43 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { format, subDays } from "date-fns";
-import { BarChart3, Users } from "lucide-react";
+import { BarChart3, Users, Download } from "lucide-react";
+import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { useAuthStore } from "@/store/auth.store";
+import { hasPermission } from "@/lib/permissions";
+import { inr } from "@/lib/utils";
 
 export default function ReportsPage() {
   const [selectedOutletId, setSelectedOutletId] = useState("");
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [exporting, setExporting] = useState<"payroll" | "attendance" | null>(null);
+  const user = useAuthStore((s) => s.user);
+  const canExport = hasPermission(user, "reports:export");
+
+  /** Streams a CSV from the reports API and saves it. */
+  async function exportCsv(kind: "payroll" | "attendance") {
+    setExporting(kind);
+    try {
+      const path = kind === "payroll" ? "/reports/payroll-summary.csv" : "/reports/attendance.csv";
+      const res = await apiClient.get(path, {
+        params: { startDate, endDate, outletId: selectedOutletId || undefined },
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(res.data as Blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${kind}-${startDate}-to-${endDate}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error(`Could not export the ${kind} CSV. Please try again.`);
+    } finally {
+      setExporting(null);
+    }
+  }
 
   const { data: outlets } = useQuery({
     queryKey: ["outlets"],
@@ -52,6 +81,25 @@ export default function ReportsPage() {
         </select>
         <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="border border-border rounded-lg px-3 py-2 text-sm outline-none" />
         <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="border border-border rounded-lg px-3 py-2 text-sm outline-none" />
+
+        {canExport && (
+          <div className="ml-auto flex gap-2">
+            {([
+              { kind: "payroll", label: "Payroll CSV" },
+              { kind: "attendance", label: "Attendance CSV" },
+            ] as const).map(({ kind, label }) => (
+              <button
+                key={kind}
+                onClick={() => exportCsv(kind)}
+                disabled={exporting !== null}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+              >
+                <Download size={15} />
+                {exporting === kind ? "Exporting…" : label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {!selectedOutletId ? (
@@ -66,7 +114,7 @@ export default function ReportsPage() {
             {[
               { label: "Coverage %", value: kpis?.data?.coverage?.coverage_pct ? `${kpis.data.coverage.coverage_pct}%` : "—" },
               { label: "Attendance Rate", value: kpis?.data?.attendance?.attendance_rate ? `${kpis.data.attendance.attendance_rate}%` : "—" },
-              { label: "Total Labor Cost", value: kpis?.data?.labor?.total_labor_cost ? `MYR ${Number(kpis.data.labor.total_labor_cost).toFixed(0)}` : "—" },
+              { label: "Total Labor Cost", value: kpis?.data?.labor?.total_labor_cost ? inr(Number(kpis.data.labor.total_labor_cost)) : "—" },
               { label: "Pending Leave", value: kpis?.data?.pendingLeaveRequests ?? "—" },
             ].map(({ label, value }) => (
               <div key={label} className="bg-card rounded-xl border border-border p-5">
