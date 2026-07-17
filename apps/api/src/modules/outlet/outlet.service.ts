@@ -82,6 +82,57 @@ export class OutletService {
     return { data: result.rows[0] };
   }
 
+  /**
+   * Set (or clear) an outlet's GPS coordinates and geofence radius.
+   *
+   * Until this is set, an outlet's punches record geo_status='not_evaluated' — the geofence
+   * has nothing to measure against. Coordinates are entered by a human (paste from Google
+   * Maps, or capture on-site); we deliberately don't geocode the stored address, because a
+   * street-level guess that lands 200m out silently sends real staff to review.
+   */
+  async updateLocation(
+    user: AuthUser,
+    id: string,
+    body: { latitude?: number | null; longitude?: number | null; geofenceRadiusM?: number },
+  ) {
+    assertOutletAllowed(user, id); // 403 if out of scope (admins bypass)
+
+    const { latitude, longitude, geofenceRadiusM } = body;
+    const settingLat = latitude !== undefined;
+    const settingLng = longitude !== undefined;
+    // A latitude without a longitude is not a location. The DB enforces this too, but a
+    // clear 400 beats a constraint violation surfacing as a 500.
+    if (settingLat !== settingLng) {
+      throw new BadRequestException("Provide latitude and longitude together.");
+    }
+    if (settingLat && (latitude === null) !== (longitude === null)) {
+      throw new BadRequestException("Provide both latitude and longitude, or null for both to clear the geofence.");
+    }
+
+    const sets: string[] = [];
+    const params: unknown[] = [id, user.tenantId];
+    let i = 3;
+    if (settingLat) {
+      sets.push(`latitude = $${i++}`, `longitude = $${i++}`);
+      params.push(latitude, longitude);
+      // Record who pinned it and when — a wrong coordinate blocks real staff, so it needs
+      // to be traceable to a person.
+      sets.push(`location_set_by = $${i++}`, "location_set_at = NOW()");
+      params.push(user.id);
+    }
+    if (geofenceRadiusM !== undefined) { sets.push(`geofence_radius_m = $${i++}`); params.push(geofenceRadiusM); }
+    if (sets.length === 0) throw new BadRequestException("Provide latitude+longitude and/or geofenceRadiusM.");
+
+    const result = await this.db.query(
+      `UPDATE outlets SET ${sets.join(", ")}, updated_at = NOW()
+       WHERE id = $1 AND tenant_id = $2
+       RETURNING id, code, name, latitude, longitude, geofence_radius_m, location_set_at`,
+      params,
+    );
+    if (!result.rows[0]) throw new NotFoundException("Outlet not found");
+    return { data: result.rows[0] };
+  }
+
   async getHeadcountStatus(user: AuthUser, outletId: string, date: string) {
     await assertOutletInScope(this.db, user, outletId); // was queried by raw outletId, no tenant filter
     const result = await this.db.query(

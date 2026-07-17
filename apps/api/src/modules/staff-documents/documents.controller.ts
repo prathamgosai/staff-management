@@ -41,8 +41,28 @@ export class DocumentsController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Active staff missing a mandatory (or specified) document type" })
   @ApiQuery({ name: "type", required: false, example: "aadhaar" })
-  missing(@CurrentUser() user: AuthUser, @Query("type") type?: string) {
-    return this.service.missing(user, type);
+  @ApiQuery({ name: "search", required: false, description: "Partial staff-name match (case-insensitive)" })
+  @ApiQuery({ name: "brandId", required: false, description: "Restaurant (brand) filter" })
+  @ApiQuery({ name: "outletId", required: false })
+  @ApiQuery({ name: "page", required: false, example: 1 })
+  @ApiQuery({ name: "limit", required: false, example: 20 })
+  missing(
+    @CurrentUser() user: AuthUser,
+    @Query("type") type?: string,
+    @Query("search") search?: string,
+    @Query("brandId") brandId?: string,
+    @Query("outletId") outletId?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.service.missing(user, {
+      typeKey: type,
+      search,
+      brandId,
+      outletId,
+      page: Number(page) || 1,
+      limit: Number(limit) || 20,
+    });
   }
 
   @Get("widgets")

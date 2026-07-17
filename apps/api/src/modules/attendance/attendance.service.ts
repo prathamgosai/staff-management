@@ -2,6 +2,9 @@ import { Injectable, Inject, ConflictException, NotFoundException } from "@nestj
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import { allowedOutletIds, assertOutletAllowed } from "../../common/auth/outlet-scope";
+import { resolveLateness } from "../../common/utils/lateness.util";
+import { evaluateGeofence } from "../../common/utils/geofence.util";
+import { toLocalDateStr } from "../../common/utils/week.util";
 import type { AuthUser } from "@workforceiq/shared";
 
 @Injectable()
@@ -37,18 +40,52 @@ export class AttendanceService {
 
   async clockIn(user: AuthUser, body: { staffId: string; outletId: string; shiftId?: string; method?: string; gpsLat?: number; gpsLng?: number }) {
     assertOutletAllowed(user, body.outletId);
-    const today = new Date().toISOString().split("T")[0];
+    // Local date, NOT toISOString() (UTC) — attendance is bucketed per local day
+    // to match the roster's local-Monday week keys, and the kiosk punch path
+    // already does this. Under UTC an early-morning IST punch lands on the
+    // previous day, dodging the duplicate check and misdating the record.
+    const now = new Date();
+    const today = toLocalDateStr(now);
     const existing = await this.db.query(
       "SELECT id FROM attendance_records WHERE staff_id = $1 AND date = $2 AND clock_out IS NULL",
       [body.staffId, today],
     );
     if (existing.rows.length > 0) throw new ConflictException("Staff is already clocked in");
 
+    const [late, geo] = await Promise.all([
+      resolveLateness(this.db, {
+        tenantId: user.tenantId,
+        staffId: body.staffId,
+        date: today,
+        shiftId: body.shiftId,
+        at: now,
+      }),
+      // Verdict is computed here, from coordinates stored on the outlet — the client sends
+      // readings only. gpsLat/gpsLng were accepted and silently discarded before this.
+      evaluateGeofence(this.db, user.tenantId, {
+        outletId: body.outletId,
+        lat: body.gpsLat,
+        lng: body.gpsLng,
+        accuracyM: body.gpsAccuracyM,
+        source: body.method === "kiosk" ? "kiosk" : "self",
+      }),
+    ]);
+
     const result = await this.db.query(
-      `INSERT INTO attendance_records (staff_id, outlet_id, shift_id, date, clock_in, status, clock_in_method)
-       VALUES ($1, $2, $3, $4, NOW(), 'present', $5)
+      `INSERT INTO attendance_records
+         (staff_id, outlet_id, shift_id, date, clock_in, status, late_minutes, clock_in_method,
+          gps_clock_in, geo_status, geo_reason, geo_distance_m, geo_accuracy_m)
+       VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7,
+               CASE WHEN $8::float8 IS NULL THEN NULL ELSE point($9::float8, $8::float8) END,
+               $10, $11, $12, $13)
        RETURNING *`,
-      [body.staffId, body.outletId, body.shiftId ?? null, today, body.method ?? null],
+      [
+        body.staffId, body.outletId, body.shiftId ?? late.shiftId, today,
+        late.status, late.lateMinutes, body.method ?? null,
+        // point(x, y) is (longitude, latitude) — x is the east/west axis.
+        body.gpsLat ?? null, body.gpsLng ?? null,
+        geo.status, geo.reason, geo.distanceM, geo.accuracyM,
+      ],
     );
     return { data: result.rows[0] };
   }
@@ -78,9 +115,19 @@ export class AttendanceService {
     return { data: result.rows[0] };
   }
 
+  /**
+   * A manager records attendance on someone else's behalf.
+   *
+   * The GPS here is the MANAGER'S, not the staff member's — it evidences that whoever marked
+   * this was standing at the outlet, not marking a shift from home. It is deliberately NOT
+   * written to gps_clock_in (that column means "where the staff member punched"); putting a
+   * manager's coordinates there would misattribute someone's location. It lands in geo_reason
+   * instead, plainly labelled.
+   */
   async manualEntry(user: AuthUser, body: {
     staffId: string; outletId: string; date: string;
     clockIn: string; clockOut?: string; status: string; note?: string;
+    gpsLat?: number; gpsLng?: number; gpsAccuracyM?: number;
   }) {
     assertOutletAllowed(user, body.outletId);
     const { staffId, outletId, date, clockIn, clockOut, status, note } = body;
@@ -99,12 +146,29 @@ export class AttendanceService {
       overtimeHours = parseFloat(Math.max(0, totalMinutes / 60 - 8).toFixed(2));
     }
 
+    // Where was the manager when they marked this? Judged against the same outlet geofence
+    // as a real punch, so "marked from home" is visible rather than invisible.
+    const geo = await evaluateGeofence(this.db, user.tenantId, {
+      outletId,
+      lat: body.gpsLat,
+      lng: body.gpsLng,
+      accuracyM: body.gpsAccuracyM,
+      source: "self",
+    });
+    const markedBy = geo.status === "approved"
+      ? `Marked by manager at the outlet (${Math.round(geo.distanceM ?? 0)}m away)`
+      : `Marked by manager — ${geo.reason}`;
+
     const result = await this.db.query(
       `INSERT INTO attendance_records
-         (staff_id, outlet_id, date, clock_in, clock_out, status, clock_in_method, regular_hours, overtime_hours, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, 'manual', $7, $8, $9)
+         (staff_id, outlet_id, date, clock_in, clock_out, status, clock_in_method, regular_hours, overtime_hours, notes,
+          geo_status, geo_reason, geo_distance_m, geo_accuracy_m)
+       VALUES ($1, $2, $3, $4, $5, $6, 'manual', $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
-      [staffId, outletId, date, clockIn, clockOut ?? null, status, regularHours, overtimeHours, note ?? null],
+      [
+        staffId, outletId, date, clockIn, clockOut ?? null, status, regularHours, overtimeHours, note ?? null,
+        geo.status, markedBy, geo.distanceM, geo.accuracyM,
+      ],
     );
     return { data: result.rows[0] };
   }

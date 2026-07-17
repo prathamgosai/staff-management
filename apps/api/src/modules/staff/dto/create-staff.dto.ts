@@ -1,6 +1,5 @@
-import { IsString, IsEmail, IsOptional, IsUUID, IsEnum, IsDate, IsNumber, IsBoolean } from "class-validator";
+import { IsString, IsEmail, IsOptional, IsEnum, IsNumber, IsBoolean } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
 import { EmploymentType } from "@workforceiq/shared";
 
 export class CreateStaffDto {

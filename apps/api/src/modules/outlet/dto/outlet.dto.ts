@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsObject } from "class-validator";
+import { IsString, IsOptional, IsNumber, IsObject, IsInt, Min, Max } from "class-validator";
 
 export class CreateOutletDto {
   @IsOptional()
@@ -27,6 +27,26 @@ export class CreateOutletDto {
   @IsOptional()
   @IsNumber()
   seatingCapacity?: number;
+}
+
+export class UpdateOutletLocationDto {
+  // Both nullable together: clearing one clears the geofence entirely (a latitude with no
+  // longitude is not a location — the DB enforces this too).
+  @IsOptional()
+  @IsNumber()
+  @Min(-90) @Max(90)
+  latitude?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-180) @Max(180)
+  longitude?: number | null;
+
+  /** Per-outlet: a mall unit needs a wider fence than a standalone cafe. DB caps at 25-2000m. */
+  @IsOptional()
+  @IsInt()
+  @Min(25) @Max(2000)
+  geofenceRadiusM?: number;
 }
 
 export class UpdateCapacityDto {

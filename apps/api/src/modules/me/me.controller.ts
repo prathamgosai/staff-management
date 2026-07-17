@@ -9,6 +9,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
 import { CreateLeaveRequestDto } from "./dto/create-leave-request.dto";
+import { SelfPunchDto } from "./dto/self-punch.dto";
 import type { AuthUser } from "@workforceiq/shared";
 
 /**
@@ -50,6 +51,24 @@ export class MeController {
   @ApiQuery({ name: "month", required: false, example: "2026-07" })
   getAttendance(@CurrentUser() user: AuthUser, @Query("month") month?: string) {
     return this.meService.getAttendance(user, month);
+  }
+
+  @Get("clock-status")
+  @ApiOperation({ summary: "Own clock state today: outlet, whether clocked in, today's record" })
+  getClockStatus(@CurrentUser() user: AuthUser) {
+    return this.meService.getClockStatus(user);
+  }
+
+  @Post("clock-in")
+  @ApiOperation({ summary: "Clock IN as yourself from your own device (geofenced server-side)" })
+  clockIn(@CurrentUser() user: AuthUser, @Body() body: SelfPunchDto) {
+    return this.meService.clockInSelf(user, body);
+  }
+
+  @Post("clock-out")
+  @ApiOperation({ summary: "Clock OUT of your own open record for today" })
+  clockOut(@CurrentUser() user: AuthUser, @Body() body: SelfPunchDto) {
+    return this.meService.clockOutSelf(user, body);
   }
 
   @Get("leave")

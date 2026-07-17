@@ -280,10 +280,6 @@ export default function SchedulingPage() {
   // Pick the first available day if filtering
   const displayDays = selectedDay ? weekDays.filter(d => format(d, "yyyy-MM-dd") === selectedDay) : weekDays;
 
-  // Count staff on a given shift+day
-  const staffCount = (shift: RosterShift, day: Date) =>
-    shift.dates[format(day, "yyyy-MM-dd")]?.staff?.length ?? 0;
-
   return (
     <div className="space-y-5">
       {/* Header */}

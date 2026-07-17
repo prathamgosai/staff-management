@@ -10,6 +10,15 @@ import { istTodayStr } from "../../common/utils/date.util";
 import type { AuthUser } from "@workforceiq/shared";
 import { CreateDocumentDto } from "./dto/create-document.dto";
 import { UpsertDocumentTypeDto } from "./dto/document-type.dto";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Empty/absent → null (filter off); malformed → 400 rather than a Postgres cast error. */
+function asUuidOrNull(v: string | undefined, field: string): string | null {
+  if (!v) return null;
+  if (!UUID_RE.test(v)) throw new BadRequestException(`${field} must be a UUID.`);
+  return v;
+}
 import { DocumentCryptoService } from "./document-crypto.service";
 import { DocumentStorageService } from "./document-storage.service";
 import { sniffMime, AllowedMime, fileNameForMime } from "./file-signature";
@@ -366,32 +375,63 @@ export class StaffDocumentsService {
     };
   }
 
-  /** Active staff missing a mandatory (or a specified) document type. */
-  async missing(user: AuthUser, typeKey?: string) {
+  /**
+   * Active staff missing a mandatory (or a specified) document type.
+   *
+   * Filterable by staff name, brand ("restaurant") and outlet, and paginated —
+   * the unfiltered result is one row per (staff × missing type), which is ~750
+   * rows at 248 staff and was previously returned in full with no LIMIT.
+   */
+  async missing(
+    user: AuthUser,
+    opts: { typeKey?: string; search?: string; brandId?: string; outletId?: string; page?: number; limit?: number } = {},
+  ) {
     this.assertStatusAccess(user);
     const allowed = allowedOutletIds(user);
+    const page = Math.max(1, Number(opts.page) || 1);
+    const limit = Math.min(Math.max(Number(opts.limit) || 20, 1), 100);
+    // These land in a ::uuid cast, where a malformed value would raise a Postgres
+    // error and surface as a 500. Reject early with a 400 instead.
+    const brandId = asUuidOrNull(opts.brandId, "brandId");
+    const outletId = asUuidOrNull(opts.outletId, "outletId");
+
+    // COUNT(*) OVER() rides along with the page rather than costing a second
+    // query — the DB is remote and round-trips dominate request latency.
     const res = await this.db.query(
       `SELECT s.id AS staff_id, s.name AS staff_name, s.current_outlet_id, o.name AS outlet_name,
-              dt.key AS doc_type, dt.name AS type_name
+              b.name AS brand_name, dt.key AS doc_type, dt.name AS type_name,
+              COUNT(*) OVER() AS total_count
        FROM staff s
        CROSS JOIN document_types dt
        LEFT JOIN outlets o ON o.id = s.current_outlet_id
+       LEFT JOIN brands b ON b.id = o.brand_id
        WHERE s.tenant_id = $1 AND s.employment_status = 'active'
          AND dt.tenant_id = $1 AND dt.is_active = TRUE AND dt.deleted_at IS NULL
          AND ($2::text IS NULL AND dt.is_mandatory = TRUE OR dt.key = $2)
          AND ($3::uuid[] IS NULL OR s.current_outlet_id = ANY($3))
+         AND ($4::text IS NULL OR s.name ILIKE '%' || $4 || '%')
+         AND ($5::uuid IS NULL OR o.brand_id = $5)
+         AND ($6::uuid IS NULL OR s.current_outlet_id = $6)
          AND NOT EXISTS (
            SELECT 1 FROM staff_documents d
            WHERE d.staff_id = s.id AND d.document_type_id = dt.id AND d.deleted_at IS NULL
          )
-       ORDER BY s.name ASC, dt.sort_order ASC`,
-      [user.tenantId, typeKey ?? null, allowed],
+       ORDER BY s.name ASC, dt.sort_order ASC
+       LIMIT $7 OFFSET $8`,
+      [
+        user.tenantId, opts.typeKey ?? null, allowed,
+        opts.search?.trim() || null, brandId, outletId,
+        limit, (page - 1) * limit,
+      ],
     );
+
+    const total = res.rows[0] ? Number(res.rows[0].total_count) : 0;
     return {
       data: res.rows.map((r) => ({
         staffId: r.staff_id, staffName: r.staff_name, outletName: r.outlet_name,
-        docType: r.doc_type, typeName: r.type_name,
+        brandName: r.brand_name, docType: r.doc_type, typeName: r.type_name,
       })),
+      pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
     };
   }
 

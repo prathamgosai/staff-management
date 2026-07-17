@@ -274,6 +274,9 @@ export class StaffService {
       positionName: row.position_name,
       outletName: row.outlet_name,
       outletCode: row.outlet_code,
+      // Whether a kiosk PIN exists — never the hash itself. Staff cannot punch in
+      // without one, so the profile needs to surface the gap.
+      kioskPinSet: row.kiosk_pin_hash != null,
     };
   }
 

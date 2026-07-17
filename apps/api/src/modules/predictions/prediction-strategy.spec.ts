@@ -1,4 +1,4 @@
-import { RatioBasedStrategy, RoleRatio, PredictionInputs, effectivePaxFromInputs } from "./prediction-strategy";
+import { RatioBasedStrategy, RoleRatio, PredictionInputs, effectivePaxFromInputs, resolveEffectivePax, PEAK_TURNS_PER_SERVICE } from "./prediction-strategy";
 
 const strat = new RatioBasedStrategy();
 
@@ -16,6 +16,52 @@ describe("prediction-strategy: effectivePax", () => {
     expect(effectivePaxFromInputs({ expectedLunchPax: 120, expectedDinnerPax: 200 })).toBe(200);
     expect(effectivePaxFromInputs({ expectedDailyPax: 350 })).toBe(350);
     expect(effectivePaxFromInputs({})).toBe(0);
+  });
+
+  it("reports where the pax figure came from", () => {
+    expect(resolveEffectivePax({ expectedLunchPax: 120, expectedDinnerPax: 200 })).toEqual({ pax: 200, source: "peak_service" });
+    expect(resolveEffectivePax({ expectedDailyPax: 350 })).toEqual({ pax: 350, source: "daily" });
+    expect(resolveEffectivePax({})).toEqual({ pax: 0, source: "none" });
+  });
+
+  it("falls back to a seating estimate — seating used to be collected and ignored", () => {
+    const r = resolveEffectivePax({ totalSeating: 60 });
+    expect(r.source).toBe("seating_estimate");
+    expect(r.pax).toBe(Math.ceil(60 * PEAK_TURNS_PER_SERVICE)); // 90
+  });
+
+  it("prefers stated pax over the seating estimate", () => {
+    expect(resolveEffectivePax({ totalSeating: 60, expectedDinnerPax: 200 }).source).toBe("peak_service");
+    expect(resolveEffectivePax({ totalSeating: 60, expectedDailyPax: 300 }).source).toBe("daily");
+  });
+
+  it("seating now changes the answer (the bug: it never did)", () => {
+    const small = strat.predict({ totalSeating: 40 } as PredictionInputs, roles());
+    const large = strat.predict({ totalSeating: 200 } as PredictionInputs, roles());
+    expect(large.totalStaff).toBeGreaterThan(small.totalStaff);
+  });
+});
+
+describe("prediction-strategy: revenue + labour cost", () => {
+  it("avg bill now produces revenue and labour-cost % (it was discarded before)", () => {
+    const out = strat.predict({ expectedDinnerPax: 200, expectedAvgBill: 700 } as PredictionInputs, roles());
+    expect(out.monthlyRevenue).toBe(200 * 700 * 30); // 4,200,000
+    expect(out.laborCostPct).toBeCloseTo(Math.round((out.monthlyPayroll / (200 * 700 * 30)) * 1000) / 10, 5);
+    expect(out.laborCostPct).toBeGreaterThan(0);
+  });
+
+  it("no avg bill -> no revenue and no percentage, rather than a zero", () => {
+    const out = strat.predict({ expectedDinnerPax: 200 } as PredictionInputs, roles());
+    expect(out.monthlyRevenue).toBeNull();
+    expect(out.laborCostPct).toBeNull();
+  });
+
+  it("withholds labour-cost % when payroll is incomplete — a partial one reads too low", () => {
+    const partial = roles().map((r) => (r.positionId === "s" ? { ...r, avgMonthlySalary: null } : r));
+    const out = strat.predict({ expectedDinnerPax: 200, expectedAvgBill: 700 } as PredictionInputs, partial);
+    expect(out.payrollComplete).toBe(false);
+    expect(out.monthlyRevenue).not.toBeNull(); // revenue is still knowable
+    expect(out.laborCostPct).toBeNull();
   });
 });
 

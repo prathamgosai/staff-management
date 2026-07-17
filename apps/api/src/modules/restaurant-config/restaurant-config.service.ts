@@ -4,7 +4,7 @@ import { DB_POOL } from "../../database/database.module";
 import { allowedOutletIds, assertOutletAllowed } from "../../common/auth/outlet-scope";
 import type { AuthUser } from "@workforceiq/shared";
 import {
-  UpdateConfigurationDto, UpdateStaffRatiosDto, UpdateTemplatesDto, UpsertCategoryDto,
+  UpdateConfigurationDto, UpdateStaffRatiosDto, UpsertCategoryDto,
 } from "./dto/restaurant-config.dto";
 import { diffRatios, ExistingRatio, RatioInput } from "./ratio-diff";
 
@@ -241,51 +241,6 @@ export class RestaurantConfigService {
       if ((e as { code?: string }).code === "23505") throw new BadRequestException(`Category "${dto.name}" already exists.`);
       throw e;
     }
-  }
-
-  // ── ratio templates ─────────────────────────────────────────────────────────
-  async getTemplates(user: AuthUser, categoryId?: string) {
-    const res = await this.db.query(
-      `SELECT rt.id, rt.category_id, rt.position_id, p.name AS position_name, rt.guests_per_staff, rt.min_staff
-       FROM ratio_templates rt LEFT JOIN positions p ON p.id = rt.position_id
-       WHERE rt.tenant_id = $1 AND rt.deleted_at IS NULL AND ($2::uuid IS NULL OR rt.category_id = $2)
-       ORDER BY p.level DESC, p.name ASC`,
-      [user.tenantId, categoryId ?? null],
-    );
-    return {
-      data: res.rows.map((r) => ({
-        id: r.id, categoryId: r.category_id, positionId: r.position_id, positionName: r.position_name,
-        guestsPerStaff: Number(r.guests_per_staff), minStaff: r.min_staff,
-      })),
-    };
-  }
-
-  async updateTemplates(user: AuthUser, dto: UpdateTemplatesDto) {
-    const cat = await this.db.query(
-      "SELECT 1 FROM restaurant_categories WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
-      [dto.categoryId, user.tenantId],
-    );
-    if (!cat.rowCount) throw new BadRequestException("Unknown restaurant category.");
-    const client = await this.db.connect();
-    try {
-      await client.query("BEGIN");
-      for (const r of dto.rows) {
-        await client.query(
-          `INSERT INTO ratio_templates (tenant_id, category_id, position_id, guests_per_staff, min_staff, created_by, updated_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$6)
-           ON CONFLICT (category_id, position_id) WHERE deleted_at IS NULL
-           DO UPDATE SET guests_per_staff = EXCLUDED.guests_per_staff, min_staff = EXCLUDED.min_staff, updated_by = EXCLUDED.updated_by`,
-          [user.tenantId, dto.categoryId, r.positionId, r.guestsPerStaff, r.minStaff, user.id],
-        );
-      }
-      await client.query("COMMIT");
-    } catch (e) {
-      await client.query("ROLLBACK");
-      throw e;
-    } finally {
-      client.release();
-    }
-    return this.getTemplates(user, dto.categoryId);
   }
 
   /**

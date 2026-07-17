@@ -1,42 +1,40 @@
 # ─────────────────────────────────────────────────────────────
-# Render Blueprint — WorkforceIQ
-#   Database : Supabase (YOUR project — Sydney, ap-southeast-2) · external
-#   Redis    : Render-managed Key Value (free)
-#   Hosted   : NestJS API + Next.js Web (Render web services)
+# Render Blueprint — WorkforceIQ (SINGLE COMBINED SERVICE)
+#   One Render web service runs BOTH the Next.js web and the NestJS API via
+#   scripts/start-render.mjs. The web listens on Render's public $PORT and
+#   proxies /api/* to the co-located API on 127.0.0.1:4000 (no CORS, no second
+#   service to keep warm or get suspended). This replaces the old two-service
+#   split (separate bookends-shiftly API), which is what caused login 503s when
+#   the API service was suspended.
 #
-# Deploy: Render Dashboard → New → Blueprint → connect this repo → Apply.
-# Redis is provisioned automatically. You MUST set these by hand (sync:false)
-# in the Render dashboard after creating the blueprint:
-#   • workforceiq-api → DB_PASSWORD          = your Supabase DB password
-#   • workforceiq-api → APP_URL              = https://workforceiq-web.onrender.com   (after 1st web deploy)
-#   • workforceiq-web → NEXT_PUBLIC_API_URL  = https://workforceiq-api.onrender.com/api/v1
-#   • workforceiq-web → NEXT_PUBLIC_WS_URL   = wss://workforceiq-api.onrender.com
+#   Database : Supabase (Sydney, ap-southeast-2) · external · session pooler
+#   Redis    : optional (Render Key Value). App degrades gracefully without it.
 #
-# NOTE: the DB (Supabase) is in Sydney while these services are Singapore —
-# cross-region latency is fine, just not co-located. Keep Render services in
-# one region so the API↔Redis hop stays on Render's private network.
+# Set by hand in the Render dashboard (sync:false):
+#   • DB_PASSWORD  = your Supabase DB password (Supabase → Connect → Session pooler)
 # ─────────────────────────────────────────────────────────────
 
 services:
-  # ── Redis (Render Key Value) ───────────────────────────────
+  # ── Optional Redis (Render Key Value). Remove this block to run without it. ──
   - type: keyvalue
     name: workforceiq-redis
     plan: free
     region: singapore
-    ipAllowList: []              # empty = reachable only from within Render
-    maxmemoryPolicy: noeviction  # required by BullMQ (must not evict jobs)
+    ipAllowList: []               # empty = reachable only from within Render
+    maxmemoryPolicy: noeviction   # required by Bull (must not evict jobs)
 
-  # ── NestJS API ─────────────────────────────────────────────
+  # ── Combined Web + API (one service) ───────────────────────
   - type: web
-    name: workforceiq-api
+    name: workforceiq
     runtime: node
     plan: free
     region: singapore
     branch: main
-    buildCommand: corepack enable && pnpm install --prod=false && pnpm --filter @workforceiq/shared build && pnpm --filter @workforceiq/api build
-    startCommand: pnpm --filter @workforceiq/api start
-    # DB-free liveness route. Lets Render restart the dyno if the app stops
-    # responding, and gives an external keep-warm pinger a cheap target.
+    # Build shared + API + web (the combined launcher needs all three built).
+    buildCommand: corepack enable && pnpm install --prod=false && pnpm --filter @workforceiq/shared build && pnpm --filter @workforceiq/api build && pnpm --filter @workforceiq/web build
+    # One process manager launches the API (internal :4000) then the web ($PORT).
+    startCommand: node scripts/start-render.mjs
+    # The web proxies this through to the co-located API.
     healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_VERSION
@@ -45,10 +43,9 @@ services:
         value: production
       - key: API_PREFIX
         value: api/v1
+      - key: INTERNAL_API_PORT
+        value: "4000"             # the co-located API's internal port (start-render.mjs)
       # ── Postgres — YOUR Supabase project (Sydney, session pooler) ──
-      # DB_PASSWORD is a secret (sync:false) — paste it in the Render dashboard;
-      # never hard-code it here (this file is committed). Get host + password
-      # from Supabase → Connect → "Session pooler".
       - key: DB_HOST
         value: aws-1-ap-southeast-2.pooler.supabase.com
       - key: DB_PORT
@@ -58,12 +55,21 @@ services:
       - key: DB_USER
         value: postgres.ypgkyytgpszlfhosolec
       - key: DB_PASSWORD
-        sync: false              # ← set in Render dashboard = your Supabase DB password
+        sync: false               # ← paste your Supabase DB password in the dashboard
       - key: DB_SSL
-        value: "true"            # Supabase requires SSL (app uses rejectUnauthorized:false)
+        value: "true"
       - key: DB_POOL_MAX
-        value: "8"               # keep modest on Supabase free tier + session pooler
-      # ── Redis (wired from the Key Value service above) ──
+        value: "8"                # modest for Supabase free tier + session pooler
+      # ── Auth ──
+      - key: JWT_SECRET
+        generateValue: true       # Render generates a strong secret (or set your own)
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      # ── Redis (optional — wired from the Key Value service above) ──
       - key: REDIS_HOST
         fromService:
           type: keyvalue
@@ -75,39 +81,8 @@ services:
           name: workforceiq-redis
           property: port
       - key: REDIS_TLS
-        value: "false"           # internal Render Key Value is plaintext on the private network
-      # ── Auth (Render generates strong secrets) ──
-      - key: JWT_SECRET
-        generateValue: true
-      - key: JWT_REFRESH_SECRET
-        generateValue: true
-      - key: JWT_EXPIRES_IN
-        value: 15m
-      - key: JWT_REFRESH_EXPIRES_IN
-        value: 7d
-      # ── CORS: set to the web service URL after first deploy ──
+        value: "false"
+      # ── CORS: the browser stays same-origin (proxy), but set this to the
+      #    service's own public URL so any direct API call is allowed too. ──
       - key: APP_URL
-        sync: false              # https://workforceiq-web.onrender.com
-
-  # ── Next.js Web ────────────────────────────────────────────
-  - type: web
-    name: workforceiq-web
-    runtime: node
-    plan: free
-    region: singapore
-    branch: main
-    buildCommand: corepack enable && pnpm install --prod=false && pnpm --filter @workforceiq/shared build && pnpm --filter @workforceiq/web build
-    startCommand: pnpm --filter @workforceiq/web start
-    envVars:
-      - key: NODE_VERSION
-        value: "20"
-      # The web server proxies every /api/* call to the API (see next.config.mjs),
-      # so the browser stays same-origin (no CORS) and there is NO build-time API
-      # URL to misconfigure. Point this at the API service's public URL. If Render
-      # gave the API a suffixed hostname, set the real value here and redeploy web.
-      # (If left unset, next.config.mjs falls back to a hard-coded default — set it
-      #  explicitly so a rename can't silently break the proxy.)
-      - key: API_ORIGIN
-        sync: false              # e.g. https://bookends-shiftly.onrender.com
-      - key: NEXT_PUBLIC_APP_NAME
-        value: WorkforceIQ
+        sync: false               # e.g. https://staff-management-yf21.onrender.com

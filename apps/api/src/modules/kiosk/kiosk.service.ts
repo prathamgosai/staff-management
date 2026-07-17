@@ -8,6 +8,8 @@ import { randomBytes, createHash } from "crypto";
 import { DB_POOL } from "../../database/database.module";
 import { assertOutletAllowed, allowedOutletIds } from "../../common/auth/outlet-scope";
 import { toLocalDateStr } from "../../common/utils/week.util";
+import { resolveLateness } from "../../common/utils/lateness.util";
+import { evaluateGeofence } from "../../common/utils/geofence.util";
 import type { AuthUser } from "@workforceiq/shared";
 
 /** Resolved kiosk device context, stamped onto the request by KioskDeviceGuard. */
@@ -189,7 +191,8 @@ export class KioskService {
     // Local date, NOT toISOString() (UTC) — attendance is bucketed per local day
     // to match the roster's local-Monday week keys; UTC would misdate/lose
     // early-morning IST punches. See common/utils/week.util.ts.
-    const today = toLocalDateStr(new Date());
+    const now = new Date();
+    const today = toLocalDateStr(now);
 
     // Check for ANY record today, not just an open one: attendance_records has
     // UNIQUE(staff_id, date), so a second INSERT after a completed cycle (or a
@@ -206,14 +209,37 @@ export class KioskService {
       );
     }
 
+    const [late, geo] = await Promise.all([
+      resolveLateness(this.db, {
+        tenantId: device.tenantId,
+        staffId: staff.id,
+        date: today,
+        at: now,
+      }),
+      // A kiosk is bolted to the restaurant, so it sends no GPS and this resolves to
+      // 'not_evaluated' rather than a failure. Recorded anyway so every punch carries a
+      // geo_status and the attendance view never has to special-case the source.
+      evaluateGeofence(this.db, device.tenantId, { outletId: device.outletId, source: "kiosk" }),
+    ]);
+
     const res = await this.db.query(
       `INSERT INTO attendance_records
-         (staff_id, outlet_id, date, clock_in, status, clock_in_method, source)
-       VALUES ($1, $2, $3, NOW(), 'present', 'kiosk', 'kiosk')
+         (staff_id, outlet_id, shift_id, date, clock_in, status, late_minutes, clock_in_method, source,
+          geo_status, geo_reason)
+       VALUES ($1, $2, $3, $4, NOW(), $5, $6, 'kiosk', 'kiosk', $7, $8)
        RETURNING id, clock_in`,
-      [staff.id, device.outletId, today],
+      [staff.id, device.outletId, late.shiftId, today, late.status, late.lateMinutes, geo.status, geo.reason],
     );
-    return { data: { action: "clock-in", staffName: staff.name, at: res.rows[0].clock_in } };
+    return {
+      data: {
+        action: "clock-in",
+        staffName: staff.name,
+        at: res.rows[0].clock_in,
+        // Surfaced so the kiosk can tell the punching staff member they're late.
+        late: late.status === "late",
+        lateMinutes: late.lateMinutes,
+      },
+    };
   }
 
   /** Clock the staff member OUT of their open record for today (source='kiosk'). */

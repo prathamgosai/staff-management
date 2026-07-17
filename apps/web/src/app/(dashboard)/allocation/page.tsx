@@ -34,8 +34,10 @@ const TRANSFER_TYPES = [
 ];
 
 /* ─── Request Transfer Modal ─────────────────────────────────────────── */
-function RequestTransferModal({ open, onClose, onSuccess, outlets }: {
+function RequestTransferModal({ open, onClose, onSuccess, outlets, initialFrom, initialTo }: {
   open: boolean; onClose: () => void; onSuccess: () => void; outlets: OutletRow[];
+  /** Prefill from the dashboard autopilot's ?from=&to= deep link. */
+  initialFrom?: string; initialTo?: string;
 }) {
   const [form, setForm] = useState({
     staffId: "", fromOutletId: "", toOutletId: "",
@@ -49,10 +51,15 @@ function RequestTransferModal({ open, onClose, onSuccess, outlets }: {
 
   useEffect(() => {
     if (open) {
-      setForm({ staffId: "", fromOutletId: "", toOutletId: "", type: "temporary", effectiveDate: "", endDate: "", reason: "" });
+      // Only honour a prefill that names an outlet the user can actually pick.
+      const known = (id?: string) => (id && outlets.some(o => o.id === id) ? id : "");
+      setForm({
+        staffId: "", fromOutletId: known(initialFrom), toOutletId: known(initialTo),
+        type: "temporary", effectiveDate: "", endDate: "", reason: "",
+      });
       setErrors({}); setSearch(""); setSelectedStaff(null);
     }
-  }, [open]);
+  }, [open, initialFrom, initialTo, outlets]);
 
   const { data: staffRes } = useQuery({
     queryKey: ["staff-all", search],
@@ -338,6 +345,27 @@ export default function AllocationPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [showModal, setShowModal]       = useState(false);
   const [reviewingId, setReviewingId]   = useState<string | null>(null);
+  const [prefill, setPrefill]           = useState<{ from?: string; to?: string }>({});
+
+  // The dashboard autopilot links here as /allocation?from=<id>&to=<id> to start a
+  // recommended move. Read it from the URL (as /kiosk does) rather than via
+  // useSearchParams, which would need a Suspense boundary around the page.
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      const from = url.searchParams.get("from") ?? undefined;
+      const to   = url.searchParams.get("to") ?? undefined;
+      if (!from && !to) return;
+      setPrefill({ from, to });
+      setShowModal(true);
+      // Drop the params so a refresh or back-nav doesn't reopen the modal.
+      url.searchParams.delete("from");
+      url.searchParams.delete("to");
+      window.history.replaceState({}, "", url.pathname + url.search);
+    } catch {
+      /* no-op — a malformed URL just means no prefill */
+    }
+  }, []);
 
   const { data: outletsRes } = useQuery({
     queryKey: ["outlets"],
@@ -373,9 +401,11 @@ export default function AllocationPage() {
     <>
       <RequestTransferModal
         open={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => { setShowModal(false); setPrefill({}); }}
         onSuccess={() => refetch()}
         outlets={outlets}
+        initialFrom={prefill.from}
+        initialTo={prefill.to}
       />
 
       <div className="space-y-6">

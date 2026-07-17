@@ -1,9 +1,9 @@
 import {
-  Controller, Get, Post, Put, Body, Query, UseGuards,
+  Controller, Get, Post, Body, UseGuards,
 } from "@nestjs/common";
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from "@nestjs/swagger";
+import { ApiTags, ApiBearerAuth, ApiOperation } from "@nestjs/swagger";
 import { RestaurantConfigService } from "./restaurant-config.service";
-import { UpsertCategoryDto, UpdateTemplatesDto } from "./dto/restaurant-config.dto";
+import { UpsertCategoryDto } from "./dto/restaurant-config.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
@@ -11,8 +11,13 @@ import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "@workforceiq/shared";
 
 /**
- * Tenant-level lookups: restaurant categories + category → role ratio templates.
- * View = allocation:read; edit = staffing:ratios.
+ * Tenant-level lookups: restaurant categories.
+ *
+ * The ratio-templates GET/PUT lived here until the Ratio templates settings page
+ * was removed (d576ec5) and left them with no caller. The template DATA is still
+ * live — read by RestaurantConfigService.applyTemplate (POST
+ * /outlets/:id/staffing-ratios/apply-template) and by the predictor — it just has
+ * no HTTP editor. Edit templates via SQL/migration.
  */
 @ApiTags("Restaurant Settings")
 @ApiBearerAuth()
@@ -35,18 +40,4 @@ export class RestaurantSettingsController {
     return this.service.createCategory(user, dto);
   }
 
-  @Get("ratio-templates")
-  @RequirePermission("allocation:read")
-  @ApiOperation({ summary: "Category → role ratio templates (optionally filtered by category)" })
-  @ApiQuery({ name: "categoryId", required: false })
-  templates(@CurrentUser() user: AuthUser, @Query("categoryId") categoryId?: string) {
-    return this.service.getTemplates(user, categoryId);
-  }
-
-  @Put("ratio-templates")
-  @RequirePermission("staffing:ratios")
-  @ApiOperation({ summary: "Upsert ratio templates for one restaurant category" })
-  updateTemplates(@CurrentUser() user: AuthUser, @Body() dto: UpdateTemplatesDto) {
-    return this.service.updateTemplates(user, dto);
-  }
 }

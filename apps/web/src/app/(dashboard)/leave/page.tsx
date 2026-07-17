@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "@/components/ui/sonner";
 import { Plus, X, ChevronDown, Loader2, Check, Calendar, User } from "lucide-react";
@@ -9,7 +9,6 @@ import { format } from "date-fns";
 
 /* ─── types ──────────────────────────────────────────────────────────── */
 interface LeaveType   { id: string; name: string; type: string; }
-interface StaffOption { id: string; name: string; employeeId?: string; outletName?: string; }
 interface LeaveRequest {
   id: string; staff_name: string; employee_id: string;
   leave_type_name: string; start_date: string; end_date: string;
@@ -26,7 +25,6 @@ const STATUS_COLORS: Record<string, string> = {
 
 /* ─── Apply Leave Modal ───────────────────────────────────────────────── */
 function ApplyLeaveModal({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void }) {
-  const qc = useQueryClient();
   const [form, setForm] = useState({
     staffId: "", leaveTypeId: "", startDate: "", endDate: "", reason: "",
   });

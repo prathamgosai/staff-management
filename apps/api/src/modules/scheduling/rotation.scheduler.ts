@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger, OnApplicationBootstrap } from "@nestjs/common";
-import { Cron, CronExpression } from "@nestjs/schedule";
+import { Cron } from "@nestjs/schedule";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import { SchedulingService } from "./scheduling.service";

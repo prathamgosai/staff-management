@@ -1,46 +1,146 @@
 import { Injectable, Inject } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
-import { assertOutletInScope, allowedOutletIds } from "../../common/auth/outlet-scope";
+import { assertOutletInScope, allowedOutletIds, resolveOutletFilter } from "../../common/auth/outlet-scope";
 import type { AuthUser } from "@workforceiq/shared";
 
 @Injectable()
 export class DashboardService {
   constructor(@Inject(DB_POOL) private readonly db: Pool) {}
 
-  async getOverview(tenantId: string) {
-    const [outlets, staff, activeLeave, todayAttendance] = await Promise.all([
-      this.db.query("SELECT COUNT(*) FROM outlets WHERE tenant_id = $1 AND is_active = true", [tenantId]),
-      this.db.query("SELECT COUNT(*) FROM staff WHERE tenant_id = $1 AND employment_status = 'active'", [tenantId]),
-      this.db.query(
-        // "On leave" = distinct staff whose approved leave is active today OR
-        // begins within the next 7 days. Counting a small window (not just the
-        // exact current date) keeps the KPI meaningful instead of reading 0
-        // whenever nobody happens to be off on precisely today.
-        `SELECT COUNT(DISTINCT lr.staff_id) FROM leave_requests lr
-         JOIN staff s ON s.id = lr.staff_id
-         WHERE s.tenant_id = $1 AND lr.status = 'approved'
-           AND lr.start_date <= CURRENT_DATE + INTERVAL '7 days'
-           AND lr.end_date >= CURRENT_DATE`,
-        [tenantId],
-      ),
-      this.db.query(
-        `SELECT COUNT(*) FROM attendance_records ar
-         JOIN staff s ON s.id = ar.staff_id
-         WHERE s.tenant_id = $1 AND ar.date = CURRENT_DATE AND ar.status = 'present'`,
-        [tenantId],
-      ),
-    ]);
+  /**
+   * The four operational KPIs for the dashboard's top row, optionally scoped to a
+   * single outlet. `resolveOutletFilter` turns the optional client `outletId` into
+   * a uuid[] the caller may actually see (or null = every outlet in their scope),
+   * throwing 403 for an out-of-scope outlet — the client is never trusted here.
+   *
+   *   onShift      = distinct staff assigned to a shift TODAY (roster-based, so it
+   *                  stays meaningful even where live clock-in data is sparse),
+   *                  excluding anyone on approved leave today.
+   *   onLeaveOrOff = active staff who are either on approved leave today OR have no
+   *                  shift scheduled today (a weekly/rotational rest day).
+   */
+  async getSummary(user: AuthUser, outletId?: string) {
+    const scope = resolveOutletFilter(user, outletId); // uuid[] | null; 403s if out of scope
+    const result = await this.db.query(
+      `SELECT
+         (SELECT COUNT(*) FROM staff s
+            WHERE s.tenant_id = $1 AND s.employment_status = 'active'
+              AND ($2::uuid[] IS NULL OR s.current_outlet_id = ANY($2))) AS total_staff,
+         (SELECT COUNT(*) FROM outlets o
+            WHERE o.tenant_id = $1 AND o.is_active = true
+              AND ($2::uuid[] IS NULL OR o.id = ANY($2))) AS total_outlets,
+         (SELECT COUNT(DISTINCT sa.staff_id)
+            FROM shift_assignments sa
+            JOIN schedule_shifts ss ON ss.id = sa.shift_id AND ss.date = CURRENT_DATE
+            JOIN staff s ON s.id = sa.staff_id
+                        AND s.tenant_id = $1 AND s.employment_status = 'active'
+            WHERE sa.status != 'cancelled'
+              AND ($2::uuid[] IS NULL OR ss.outlet_id = ANY($2))
+              AND NOT EXISTS (
+                SELECT 1 FROM leave_requests lr
+                 WHERE lr.staff_id = s.id AND lr.status = 'approved'
+                   AND CURRENT_DATE BETWEEN lr.start_date AND lr.end_date)) AS on_shift,
+         (SELECT COUNT(*) FROM staff s
+            WHERE s.tenant_id = $1 AND s.employment_status = 'active'
+              AND ($2::uuid[] IS NULL OR s.current_outlet_id = ANY($2))
+              AND (
+                EXISTS (SELECT 1 FROM leave_requests lr
+                         WHERE lr.staff_id = s.id AND lr.status = 'approved'
+                           AND CURRENT_DATE BETWEEN lr.start_date AND lr.end_date)
+                OR NOT EXISTS (SELECT 1 FROM shift_assignments sa
+                                JOIN schedule_shifts ss ON ss.id = sa.shift_id
+                                WHERE sa.staff_id = s.id AND sa.status != 'cancelled'
+                                  AND ss.date = CURRENT_DATE)
+              )) AS on_leave_or_off`,
+      [user.tenantId, scope],
+    );
+    const r = result.rows[0];
+    return {
+      data: {
+        totalStaff: parseInt(r.total_staff),
+        totalOutlets: parseInt(r.total_outlets),
+        onShift: parseInt(r.on_shift),
+        onLeaveOrOff: parseInt(r.on_leave_or_off),
+      },
+    };
+  }
+
+  /**
+   * Per-staff "today" view for a single outlet — the drill-down table shown when the
+   * dashboard is filtered to one outlet. Scope is enforced (404 for out-of-scope /
+   * cross-tenant). Status is resolved leave > late > on-shift > off so an approved
+   * leave always wins over a stale roster row.
+   */
+  async getOutletStaffToday(user: AuthUser, outletId: string) {
+    await assertOutletInScope(this.db, user, outletId);
+
+    const outletRes = await this.db.query(
+      `SELECT name,
+              NULLIF(TRIM(CONCAT_WS(', ', address->>'line1', address->>'city', address->>'state')), '') AS address
+       FROM outlets WHERE id = $1`,
+      [outletId],
+    );
+    const outlet = outletRes.rows[0];
+
+    const staffRes = await this.db.query(
+      `SELECT
+         s.id, s.name,
+         COALESCE(p.name, 'Unassigned') AS role,
+         sh.shift_time,
+         to_char(att.clock_in, 'HH24:MI') AS check_in_time,
+         att.status AS att_status,
+         lv.leave_type
+       FROM staff s
+       LEFT JOIN positions p ON p.id = s.position_id
+       LEFT JOIN LATERAL (
+         SELECT to_char(ss.start_time, 'HH24:MI') || ' - ' || to_char(ss.end_time, 'HH24:MI') AS shift_time
+         FROM shift_assignments sa
+         JOIN schedule_shifts ss ON ss.id = sa.shift_id
+         WHERE sa.staff_id = s.id AND sa.status != 'cancelled' AND ss.date = CURRENT_DATE
+         ORDER BY ss.start_time LIMIT 1
+       ) sh ON true
+       LEFT JOIN LATERAL (
+         SELECT ar.clock_in, ar.status
+         FROM attendance_records ar
+         WHERE ar.staff_id = s.id AND ar.date = CURRENT_DATE
+         ORDER BY ar.clock_in DESC NULLS LAST LIMIT 1
+       ) att ON true
+       LEFT JOIN LATERAL (
+         SELECT ltc.name AS leave_type
+         FROM leave_requests lr
+         JOIN leave_type_configs ltc ON ltc.id = lr.leave_type_id
+         WHERE lr.staff_id = s.id AND lr.status = 'approved'
+           AND CURRENT_DATE BETWEEN lr.start_date AND lr.end_date
+         LIMIT 1
+       ) lv ON true
+       WHERE s.current_outlet_id = $1 AND s.employment_status = 'active'
+       ORDER BY s.name`,
+      [outletId],
+    );
+
+    const staff = staffRes.rows.map((row) => {
+      let status: "on_shift" | "on_leave" | "off" | "late";
+      if (row.leave_type) status = "on_leave";
+      else if (row.att_status === "late") status = "late";
+      else if (row.shift_time) status = "on_shift";
+      else status = "off";
+      return {
+        id: row.id,
+        name: row.name,
+        role: row.role,
+        status,
+        shiftTime: row.shift_time ?? null,
+        checkInTime: row.check_in_time ?? null,
+        leaveType: row.leave_type ?? null,
+      };
+    });
 
     return {
       data: {
-        totalOutlets: parseInt(outlets.rows[0].count),
-        activeStaff: parseInt(staff.rows[0].count),
-        staffOnLeaveToday: parseInt(activeLeave.rows[0].count),
-        presentToday: parseInt(todayAttendance.rows[0].count),
-        attendanceRate: staff.rows[0].count > 0
-          ? Math.round((parseInt(todayAttendance.rows[0].count) / parseInt(staff.rows[0].count)) * 100)
-          : 0,
+        outletName: outlet?.name ?? "",
+        address: outlet?.address ?? null,
+        staff,
       },
     };
   }

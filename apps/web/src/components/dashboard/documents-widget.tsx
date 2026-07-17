@@ -15,7 +15,7 @@ interface Widgets {
 
 /**
  * Compact document-compliance widget for the main dashboard. Self-hides when the caller lacks
- * documents:status or the endpoint errors (mirrors RebalancingCard / ForecastStrip).
+ * documents:status or the endpoint errors (mirrors ForecastStrip).
  */
 export function DocumentsWidget() {
   const user = useAuthStore((s) => s.user);

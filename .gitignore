@@ -83,3 +83,4 @@ assets/db/007_staff_logins_ROLLBACK.sql
 .tools/
 go-live-local.ps1
 serve-public.ps1
+restart-app.ps1

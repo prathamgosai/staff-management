@@ -15,7 +15,6 @@ import { CapacityModule } from "./modules/capacity/capacity.module";
 import { RestaurantConfigModule } from "./modules/restaurant-config/restaurant-config.module";
 import { StaffingModule } from "./modules/staffing/staffing.module";
 import { PredictionsModule } from "./modules/predictions/predictions.module";
-import { TransferRecommendationsModule } from "./modules/transfer-recommendations/transfer-recommendations.module";
 import { DepartmentModule } from "./modules/department/department.module";
 import { SchedulingModule } from "./modules/scheduling/scheduling.module";
 import { AttendanceModule } from "./modules/attendance/attendance.module";
@@ -68,7 +67,6 @@ import { DatabaseModule } from "./database/database.module";
     RestaurantConfigModule,
     StaffingModule,
     PredictionsModule,
-    TransferRecommendationsModule,
     DepartmentModule,
     SchedulingModule,
     AttendanceModule,

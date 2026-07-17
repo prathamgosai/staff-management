@@ -1,9 +1,9 @@
-import { Injectable, Inject, BadRequestException, ForbiddenException } from "@nestjs/common";
+import { Injectable, Inject, BadRequestException } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
-import { isAdminRole } from "@workforceiq/shared";
+import { allowedOutletIds } from "../../common/auth/outlet-scope";
 import type { AuthUser } from "@workforceiq/shared";
-import { RunPredictionDto, UpdateSalariesDto } from "./dto/prediction.dto";
+import { RunPredictionDto } from "./dto/prediction.dto";
 import { RatioBasedStrategy, PredictionStrategy, RoleRatio, effectivePaxFromInputs } from "./prediction-strategy";
 
 /**
@@ -20,7 +20,8 @@ export class PredictionsService {
 
   async run(user: AuthUser, dto: RunPredictionDto) {
     if (effectivePaxFromInputs(dto) <= 0) {
-      throw new BadRequestException("Provide expected lunch/dinner pax or expected daily pax.");
+      // Seating counts too — it falls back to a pax estimate (see resolveEffectivePax).
+      throw new BadRequestException("Enter expected lunch/dinner pax, daily pax, or total seating.");
     }
     const roles = await this.resolveRoles(user.tenantId, dto.categoryName);
     const outputs = this.strategy.predict(dto, roles);
@@ -31,6 +32,46 @@ export class PredictionsService {
       [user.tenantId, JSON.stringify(dto), JSON.stringify(outputs), outputs.strategyVersion, user.id],
     );
     return { data: { id: saved.rows[0].id, createdAt: saved.rows[0].created_at, ...outputs } };
+  }
+
+  /**
+   * Existing outlets the predictor can be measured against: their configured peak covers,
+   * their category, and how many staff they ACTUALLY employ today.
+   *
+   * This is what turns the page from a calculator into a planning tool — "required" means
+   * little until you can see it beside the headcount you really run. Only outlets with a
+   * category and a peak-pax figure appear; the rest have nothing to compare against, and a
+   * guessed baseline would be worse than an absent one.
+   */
+  async outletBaselines(user: AuthUser) {
+    const scope = allowedOutletIds(user);
+    const res = await this.db.query(
+      `SELECT o.id, o.name AS outlet_name, rc.name AS category_name,
+              cfg.peak_pax, cfg.avg_daily_pax,
+              COUNT(s.id) FILTER (WHERE s.employment_status = 'active')::int AS actual_staff,
+              EXISTS (SELECT 1 FROM ratio_templates rt WHERE rt.category_id = cfg.category_id) AS category_calibrated
+         FROM restaurant_configurations cfg
+         JOIN outlets o ON o.id = cfg.outlet_id AND o.is_active = TRUE
+         LEFT JOIN restaurant_categories rc ON rc.id = cfg.category_id
+         LEFT JOIN staff s ON s.current_outlet_id = o.id
+        WHERE o.tenant_id = $1
+          AND cfg.peak_pax > 0
+          AND ($2::uuid[] IS NULL OR o.id = ANY($2))
+        GROUP BY o.id, o.name, rc.name, cfg.peak_pax, cfg.avg_daily_pax, cfg.category_id
+        ORDER BY rc.name NULLS LAST, o.name`,
+      [user.tenantId, scope],
+    );
+    return {
+      data: res.rows.map((r) => ({
+        outletId: r.id,
+        outletName: r.outlet_name,
+        categoryName: r.category_name,
+        peakPax: Number(r.peak_pax),
+        avgDailyPax: r.avg_daily_pax == null ? null : Number(r.avg_daily_pax),
+        actualStaff: Number(r.actual_staff),
+        categoryCalibrated: !!r.category_calibrated,
+      })),
+    };
   }
 
   async history(user: AuthUser) {
@@ -117,64 +158,4 @@ export class PredictionsService {
     }));
   }
 
-  // ── role salaries (admin/hr only) ─────────────────────────────────────────
-  private assertSalaryAccess(user: AuthUser) {
-    if (!(user.role === "super_admin" || isAdminRole(user.role))) {
-      throw new ForbiddenException("Only Admin/HR may view or edit role salaries.");
-    }
-  }
-
-  async listSalaries(user: AuthUser) {
-    this.assertSalaryAccess(user);
-    const res = await this.db.query(
-      `SELECT p.id AS position_id, p.name AS position_name, p.level, rs.avg_monthly_salary, rs.currency, rs.effective_from
-       FROM positions p
-       LEFT JOIN LATERAL (
-         SELECT avg_monthly_salary, currency, effective_from FROM role_salary_configs rc
-         WHERE rc.position_id = p.id AND rc.tenant_id = $1 AND rc.deleted_at IS NULL AND rc.effective_from <= CURRENT_DATE
-         ORDER BY rc.effective_from DESC LIMIT 1
-       ) rs ON TRUE
-       WHERE p.tenant_id = $1 AND p.is_active = true
-       ORDER BY p.level DESC, p.name ASC`,
-      [user.tenantId],
-    );
-    return {
-      data: res.rows.map((r) => ({
-        positionId: r.position_id, positionName: r.position_name, level: r.level,
-        avgMonthlySalary: r.avg_monthly_salary === null ? null : Number(r.avg_monthly_salary),
-        currency: r.currency ?? "INR", effectiveFrom: r.effective_from,
-      })),
-    };
-  }
-
-  async updateSalaries(user: AuthUser, dto: UpdateSalariesDto) {
-    this.assertSalaryAccess(user);
-    const rows = dto.salaries ?? [];
-    if (rows.length === 0) throw new BadRequestException("Provide at least one salary row.");
-    const valid = await this.db.query("SELECT id FROM positions WHERE tenant_id = $1 AND id = ANY($2::uuid[])", [user.tenantId, rows.map((r) => r.positionId)]);
-    const validIds = new Set(valid.rows.map((r) => r.id as string));
-    for (const r of rows) if (!validIds.has(r.positionId)) throw new BadRequestException("One or more roles are invalid for this tenant.");
-
-    const client = await this.db.connect();
-    try {
-      await client.query("BEGIN");
-      for (const r of rows) {
-        // New effective-dated row per (position, today); re-saving same day updates in place.
-        await client.query(
-          `INSERT INTO role_salary_configs (tenant_id, position_id, avg_monthly_salary, effective_from, created_by, updated_by)
-           VALUES ($1, $2, $3, CURRENT_DATE, $4, $4)
-           ON CONFLICT (position_id, effective_from) WHERE deleted_at IS NULL
-           DO UPDATE SET avg_monthly_salary = EXCLUDED.avg_monthly_salary, updated_by = EXCLUDED.updated_by`,
-          [user.tenantId, r.positionId, r.avgMonthlySalary, user.id],
-        );
-      }
-      await client.query("COMMIT");
-    } catch (e) {
-      await client.query("ROLLBACK");
-      throw e;
-    } finally {
-      client.release();
-    }
-    return this.listSalaries(user);
-  }
 }

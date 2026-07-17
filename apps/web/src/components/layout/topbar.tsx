@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Menu, Search, LogOut, KeyRound } from "lucide-react";
+import { Menu, Search, LogOut, KeyRound, UserRound } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { NotificationBell } from "./notification-bell";
 import { ALL_NAV_ITEMS } from "./nav";
@@ -119,6 +119,10 @@ export function Topbar() {
               <span className="truncate text-xs font-normal text-muted-foreground">{user?.email}</span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            {/* Desktop's only route to /profile — the mobile bottom tabs are md:hidden. */}
+            <DropdownMenuItem className="gap-2" onClick={() => router.push("/profile")}>
+              <UserRound className="size-4" /> Profile
+            </DropdownMenuItem>
             <DropdownMenuItem className="gap-2" onClick={() => router.push("/change-password")}>
               <KeyRound className="size-4" /> Change password
             </DropdownMenuItem>

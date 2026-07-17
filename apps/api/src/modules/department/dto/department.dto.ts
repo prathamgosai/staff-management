@@ -1,7 +1,8 @@
 import { IsString, IsOptional, IsUUID, IsNumber } from "class-validator";
+import { IsDbUuid } from "../../../common/validators/is-db-uuid";
 
 export class CreateDepartmentDto {
-  @IsUUID()
+  @IsDbUuid()
   outletId: string;
 
   @IsString()

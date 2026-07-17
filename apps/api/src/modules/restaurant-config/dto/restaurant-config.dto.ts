@@ -2,6 +2,7 @@ import {
   IsOptional, IsInt, IsNumber, IsUUID, IsIn, IsArray, ValidateNested, Min, ArrayMaxSize, IsString, MaxLength,
 } from "class-validator";
 import { Type } from "class-transformer";
+import { IsDbUuid } from "../../../common/validators/is-db-uuid";
 
 /** PUT /outlets/:id/configuration — all optional (partial update / upsert). */
 export class UpdateConfigurationDto {
@@ -37,7 +38,7 @@ export class UpdateConfigurationDto {
 }
 
 export class RatioRowDto {
-  @IsUUID()
+  @IsDbUuid()
   positionId!: string;
 
   @IsNumber()
@@ -59,29 +60,6 @@ export class UpdateStaffRatiosDto {
   @ValidateNested({ each: true })
   @Type(() => RatioRowDto)
   ratios!: RatioRowDto[];
-}
-
-export class TemplateRowDto {
-  @IsUUID()
-  positionId!: string;
-
-  @IsNumber() @Min(0.01)
-  guestsPerStaff!: number;
-
-  @IsInt() @Min(0)
-  minStaff!: number;
-}
-
-/** PUT /settings/ratio-templates — templates for one restaurant category. */
-export class UpdateTemplatesDto {
-  @IsUUID()
-  categoryId!: string;
-
-  @IsArray()
-  @ArrayMaxSize(100)
-  @ValidateNested({ each: true })
-  @Type(() => TemplateRowDto)
-  rows!: TemplateRowDto[];
 }
 
 /** POST /outlets/:id/staffing-ratios/apply-template */
