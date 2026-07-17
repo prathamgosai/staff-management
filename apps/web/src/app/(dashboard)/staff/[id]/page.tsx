@@ -15,6 +15,7 @@ import {
   ArrowLeft, Phone, Mail, Briefcase, Calendar,
   Clock, Building2, User, Check, Loader2,
   Pencil, X, Shield, Hash, Camera,
+  ClipboardList, ChevronDown, AlertTriangle,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -32,6 +33,7 @@ interface StaffDetail {
   overtimeEligible: boolean;
   departmentName: string; positionName: string;
   outletName: string; outletCode: string;
+  kioskPinSet: boolean;
 }
 
 const STATUS_CLS: Record<string, string> = {
@@ -114,6 +116,241 @@ function EditStatusModal({ staffId, current, onClose }: { staffId: string; curre
           {mutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
           Save Status
         </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Role playbook: SOPs + KPIs ──────────────────────────────────────── */
+interface Sop {
+  id: string; name: string; purpose: string | null; inputs: string | null;
+  procedureSteps: string[]; qualityChecks: string[]; commonMistakes: string[];
+  exceptionsEscalation: string | null; documentation: string | null;
+  frequency: string | null; timeTarget: string | null; ownerLabel: string | null; isDraft: boolean;
+}
+interface Kpi {
+  id: string; name: string; definition: string | null; formula: string | null;
+  targetValue: string | null; measurementFrequency: string | null; dataSource: string | null;
+  belowTargetAction: string | null; category: string | null; isMeasurableToday: boolean; isDraft: boolean;
+}
+
+const KPI_CATEGORY_CLS: Record<string, string> = {
+  throughput:   "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300",
+  quality:      "bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300",
+  timeliness:   "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300",
+  satisfaction: "bg-teal-100 dark:bg-teal-500/20 text-teal-700 dark:text-teal-300",
+  risk:         "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300",
+};
+
+/**
+ * SOPs and KPIs are authored per position and inherited by everyone holding it —
+ * so this is read-only here. Editing one Cashier SOP must change it for all 47
+ * cashiers, not fork a copy onto this profile.
+ */
+function RolePlaybook({ positionId, positionName }: { positionId: string | null; positionName: string }) {
+  const [openSop, setOpenSop] = useState<string | null>(null);
+
+  const { data, isLoading } = useQuery<{ data: { sops: Sop[]; kpis: Kpi[] } }>({
+    queryKey: ["position-playbook", positionId],
+    queryFn: () => apiClient.get(`/departments/positions/${positionId}/playbook`).then(r => r.data),
+    staleTime: 300_000,
+    enabled: !!positionId,
+  });
+
+  if (!positionId) return null;
+  const sops = data?.data.sops ?? [];
+  const kpis = data?.data.kpis ?? [];
+  if (!isLoading && sops.length === 0 && kpis.length === 0) return null;
+
+  return (
+    <div className="bg-card rounded-2xl border border-border shadow-sm p-5 space-y-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Role playbook</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            SOPs and KPIs for <span className="font-semibold text-foreground">{positionName}</span> — shared by everyone in this role.
+          </p>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">{[0, 1, 2].map(i => <div key={i} className="h-10 bg-muted rounded-lg animate-pulse" />)}</div>
+      ) : (
+        <>
+          {/* SOPs — collapsed to titles; the full procedure is long and rarely read at once */}
+          {sops.length > 0 && (
+            <div className="space-y-1.5">
+              {sops.map(s => (
+                <div key={s.id} className="border border-border rounded-xl overflow-hidden">
+                  <button onClick={() => setOpenSop(openSop === s.id ? null : s.id)}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-muted/50 transition">
+                    <ClipboardList size={14} className="text-muted-foreground shrink-0" />
+                    <span className="flex-1 text-sm font-semibold text-foreground truncate">{s.name}</span>
+                    {s.isDraft && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 shrink-0">
+                        UNREVIEWED DRAFT
+                      </span>
+                    )}
+                    {s.frequency && <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline">{s.frequency}</span>}
+                    <ChevronDown size={14} className={`text-muted-foreground shrink-0 transition-transform ${openSop === s.id ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {openSop === s.id && (
+                    <div className="px-3 pb-3 pt-1 space-y-3 border-t border-border text-sm">
+                      {s.isDraft && (
+                        <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg px-2.5 py-2">
+                          This is a best-practice starting draft, not yet checked against how this kitchen actually runs. A manager should correct and approve it.
+                        </p>
+                      )}
+                      {s.purpose && <p className="text-muted-foreground"><span className="font-semibold text-foreground">Purpose: </span>{s.purpose}</p>}
+                      {s.inputs && <p className="text-muted-foreground"><span className="font-semibold text-foreground">Inputs: </span>{s.inputs}</p>}
+                      {s.procedureSteps.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-foreground mb-1">Procedure</p>
+                          <ol className="list-decimal ml-5 space-y-1 text-muted-foreground">
+                            {s.procedureSteps.map((step, i) => <li key={i}>{step}</li>)}
+                          </ol>
+                        </div>
+                      )}
+                      {s.qualityChecks.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-foreground mb-1">Quality checks</p>
+                          <ul className="ml-5 list-disc space-y-1 text-muted-foreground">
+                            {s.qualityChecks.map((c, i) => <li key={i}>{c}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {s.commonMistakes.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-foreground mb-1">Common mistakes</p>
+                          <ul className="ml-5 list-disc space-y-1 text-muted-foreground">
+                            {s.commonMistakes.map((c, i) => <li key={i}>{c}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {s.exceptionsEscalation && (
+                        <p className="text-muted-foreground"><span className="font-semibold text-foreground">When it goes wrong: </span>{s.exceptionsEscalation}</p>
+                      )}
+                      {s.documentation && <p className="text-muted-foreground"><span className="font-semibold text-foreground">Record: </span>{s.documentation}</p>}
+                      {s.timeTarget && <p className="text-muted-foreground"><span className="font-semibold text-foreground">Time target: </span>{s.timeTarget}</p>}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* KPIs */}
+          {kpis.length > 0 && (
+            <div>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">KPIs</p>
+              <div className="space-y-1.5">
+                {kpis.map(k => (
+                  <div key={k.id} className="border border-border rounded-xl px-3 py-2.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-foreground">{k.name}</span>
+                      {k.category && (
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${KPI_CATEGORY_CLS[k.category] ?? "bg-muted text-muted-foreground"}`}>
+                          {k.category}
+                        </span>
+                      )}
+                      {k.targetValue && <span className="text-xs text-muted-foreground ml-auto">Target: <b className="text-foreground">{k.targetValue}</b></span>}
+                    </div>
+                    {k.definition && <p className="text-xs text-muted-foreground mt-1">{k.definition}</p>}
+                    {/* Say plainly when a KPI cannot be scored yet, rather than showing a
+                        target against a data source that has no rows. */}
+                    {!k.isMeasurableToday && (
+                      <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1.5 inline-flex items-start gap-1">
+                        <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+                        Not measurable yet — {k.dataSource}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ─── Kiosk PIN Modal ─────────────────────────────────────────────────── */
+/**
+ * Sets (or clears) the PIN a staff member types at the kiosk to clock in.
+ * Without a PIN they cannot punch at all — the kiosk authenticates on
+ * employee ID + PIN — which is why every staff member had zero attendance
+ * records: the endpoint existed but no screen ever called it.
+ */
+function KioskPinModal({ staffId, staffName, pinSet, onClose }: { staffId: string; staffName: string; pinSet: boolean; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = useMutation({
+    // null clears the PIN; the server hashes with bcrypt and only ever returns
+    // whether one is set, never the value.
+    mutationFn: (value: string | null) => apiClient.put(`/kiosk/staff/${staffId}/pin`, { pin: value }),
+    onSuccess: (_r, value) => {
+      toast.success(value === null ? "Kiosk PIN cleared." : "Kiosk PIN set.");
+      qc.invalidateQueries({ queryKey: ["staff-detail", staffId] });
+      onClose();
+    },
+    onError: (e) => {
+      const m = (e as { response?: { data?: { message?: string | string[] } } }).response?.data?.message;
+      setErr(Array.isArray(m) ? m.join(", ") : m ?? "Could not save the PIN. Please try again.");
+    },
+  });
+
+  function submit() {
+    setErr(null);
+    if (!/^\d{4,6}$/.test(pin)) { setErr("PIN must be 4 to 6 digits."); return; }
+    if (pin !== confirmPin) { setErr("The two PINs don't match."); return; }
+    save.mutate(pin);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-card rounded-2xl shadow-2xl w-96 max-w-[calc(100vw-2rem)] mx-4 p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-bold text-foreground">{pinSet ? "Change Kiosk PIN" : "Set Kiosk PIN"}</h3>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted"><X size={16} /></button>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">{staffName} uses this PIN to clock in at the kiosk.</p>
+
+        <label className="block text-xs font-semibold text-muted-foreground mb-1.5">New PIN (4–6 digits)</label>
+        <input
+          type="password" inputMode="numeric" autoComplete="new-password" maxLength={6} value={pin}
+          onChange={e => setPin(e.target.value.replace(/\D/g, ""))}
+          className="w-full text-sm border border-border rounded-xl px-3 py-2 mb-3 bg-card outline-none focus:ring-2 focus:ring-blue-500 tracking-[0.4em] font-mono"
+          placeholder="••••"
+        />
+        <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Confirm PIN</label>
+        <input
+          type="password" inputMode="numeric" autoComplete="new-password" maxLength={6} value={confirmPin}
+          onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ""))}
+          onKeyDown={e => { if (e.key === "Enter") submit(); }}
+          className="w-full text-sm border border-border rounded-xl px-3 py-2 mb-3 bg-card outline-none focus:ring-2 focus:ring-blue-500 tracking-[0.4em] font-mono"
+          placeholder="••••"
+        />
+
+        {err && <p className="text-xs text-red-600 bg-red-50 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30 rounded-lg px-3 py-2 mb-3">{err}</p>}
+
+        <button onClick={submit} disabled={save.isPending || !pin || !confirmPin}
+          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition flex items-center justify-center gap-2">
+          {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+          {pinSet ? "Change PIN" : "Set PIN"}
+        </button>
+
+        {pinSet && (
+          <button onClick={() => save.mutate(null)} disabled={save.isPending}
+            className="w-full mt-2 text-xs font-semibold text-red-600 hover:text-red-700 disabled:opacity-50 py-2 transition">
+            Clear PIN — blocks kiosk clock-in for this staff member
+          </button>
+        )}
       </div>
     </div>
   );
@@ -321,6 +558,7 @@ export default function StaffDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [showEditStatus, setShowEditStatus] = useState(false);
   const [showEditContact, setShowEditContact] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
   const currentUser = useAuthStore((s) => s.user);
 
   const { data, isLoading, isError } = useQuery<{ data: StaffDetail }>({
@@ -334,6 +572,9 @@ export default function StaffDetailPage() {
   const isSelf = !!staff && !!currentUser && staff.userId === currentUser.id;
   const canEditProfile = isAdmin || isSelf; // super admin edits anyone; others edit only their own profile
   const canManageDocuments = hasPermission(currentUser, "staff:documents");
+  // Mirrors the endpoint's own gate (PUT /kiosk/staff/:id/pin requires attendance:write),
+  // so the button never appears to someone the server would 403.
+  const canManageAttendance = hasPermission(currentUser, "attendance:write");
 
   if (isLoading) {
     return (
@@ -375,6 +616,9 @@ export default function StaffDetailPage() {
       )}
       {showEditContact && (
         <EditContactModal staffId={id} current={{ phone: staff.phone, email: staff.email, employeeId: staff.employeeId }} allowEmployeeId={isAdmin} onClose={() => setShowEditContact(false)} />
+      )}
+      {showPinModal && (
+        <KioskPinModal staffId={id} staffName={staff.name} pinSet={staff.kioskPinSet} onClose={() => setShowPinModal(false)} />
       )}
 
       <div className="max-w-3xl mx-auto space-y-5">
@@ -461,7 +705,38 @@ export default function StaffDetailPage() {
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Leave History</p>
             <LeaveHistory staffId={id} />
           </div>
+
+          {/* Kiosk PIN — gated on attendance:write, the same permission the endpoint requires */}
+          {canManageAttendance && (
+            <div className="bg-card rounded-2xl border border-border shadow-sm p-5">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Kiosk PIN</p>
+                <button onClick={() => setShowPinModal(true)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition">
+                  <Pencil size={11} /> {staff.kioskPinSet ? "Change" : "Set PIN"}
+                </button>
+              </div>
+              {staff.kioskPinSet ? (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                    PIN set
+                  </span>
+                  <span className="text-xs text-muted-foreground">Can clock in at the kiosk.</span>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2">
+                  <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 shrink-0">
+                    No PIN
+                  </span>
+                  <span className="text-xs text-muted-foreground">Cannot clock in at the kiosk until a PIN is set.</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Role playbook — inherited from this staff member's position */}
+        <RolePlaybook positionId={staff.positionId} positionName={staff.positionName} />
 
         {/* Documents (admin/hr — holders of staff:documents) */}
         {canManageDocuments && (

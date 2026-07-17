@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useMemo, type ReactNode } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth.store";
 import { hasPermission } from "@/lib/permissions";
-import { FileText, AlertTriangle, CalendarClock, UploadCloud, ShieldAlert, ChevronRight } from "lucide-react";
+import { useDebounce } from "@/hooks/use-debounce";
+import {
+  FileText, AlertTriangle, CalendarClock, UploadCloud, ShieldAlert, ChevronRight,
+  Search, X, ChevronLeft, Loader2,
+} from "lucide-react";
 import { format } from "date-fns";
 
 interface Widgets {
@@ -14,7 +18,10 @@ interface Widgets {
   employeesMissingMandatory: number;
   recentlyUploaded: { id: string; staffId: string; staffName: string; docType: string; typeName: string | null; createdAt: string }[];
 }
-interface MissingRow { staffId: string; staffName: string; outletName: string | null; docType: string; typeName: string | null; }
+interface MissingRow { staffId: string; staffName: string; outletName: string | null; brandName: string | null; docType: string; typeName: string | null; }
+interface Pagination { page: number; limit: number; total: number; totalPages: number }
+/** /outlets already returns brand_id + brand_name, so both dropdowns come from this one list. */
+interface OutletRow { id: string; name: string; brand_id: string; brand_name: string }
 interface ExpiringRow { id: string; staffId: string; staffName: string; outletName: string | null; docType: string; typeName: string | null; expiresOn: string; status: string; }
 
 const MANDATORY_FILTERS = [
@@ -30,16 +37,79 @@ export default function DocumentsCompliancePage() {
   const [missingType, setMissingType] = useState("");
   const [days, setDays] = useState(30);
 
+  // Missing-documents filters
+  const [search, setSearch] = useState("");
+  const [brandId, setBrandId] = useState("");
+  const [outletId, setOutletId] = useState("");
+  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebounce(search, 300);
+
   const widgets = useQuery<{ data: Widgets }>({
     queryKey: ["document-widgets"],
     queryFn: () => apiClient.get("/documents/widgets").then((r) => r.data),
     staleTime: 30_000, enabled: allowed,
   });
-  const missing = useQuery<{ data: MissingRow[] }>({
-    queryKey: ["documents-missing", missingType],
-    queryFn: () => apiClient.get("/documents/missing", { params: missingType ? { type: missingType } : {} }).then((r) => r.data),
-    staleTime: 30_000, enabled: allowed,
+
+  const outlets = useQuery<{ data: OutletRow[] }>({
+    queryKey: ["outlets"],
+    queryFn: () => apiClient.get("/outlets").then((r) => r.data),
+    staleTime: 300_000, enabled: allowed,
   });
+
+  // Restaurants and their outlets are both derived from the single /outlets
+  // response — a dependent fetch would add a spinner and a race for data we hold.
+  const brands = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const o of outlets.data?.data ?? []) if (o.brand_id) seen.set(o.brand_id, o.brand_name);
+    return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [outlets.data]);
+
+  /**
+   * Outlets grouped under their restaurant, narrowed to one restaurant when a
+   * brand is picked. The dropdown stays usable with no restaurant selected —
+   * there are only ~12 outlets, so forcing a two-step choice to reach one costs
+   * more than it saves.
+   */
+  const outletGroups = useMemo(() => {
+    const rows = (outlets.data?.data ?? []).filter((o) => !brandId || o.brand_id === brandId);
+    const groups = new Map<string, OutletRow[]>();
+    for (const o of rows) {
+      const key = o.brand_name ?? "Other";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(o);
+    }
+    return [...groups]
+      .map(([brand, list]) => ({ brand, list: list.sort((a, b) => a.name.localeCompare(b.name)) }))
+      .sort((a, b) => a.brand.localeCompare(b.brand));
+  }, [outlets.data, brandId]);
+
+  const missing = useQuery<{ data: MissingRow[]; pagination: Pagination }>({
+    queryKey: ["documents-missing", missingType, debouncedSearch, brandId, outletId, page],
+    queryFn: () => apiClient.get("/documents/missing", {
+      params: {
+        ...(missingType ? { type: missingType } : {}),
+        ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
+        ...(brandId ? { brandId } : {}),
+        ...(outletId ? { outletId } : {}),
+        page, limit: 20,
+      },
+    }).then((r) => r.data),
+    staleTime: 30_000, enabled: allowed,
+    // Keep the previous page visible while the next loads, so paging and typing
+    // don't flash the list away to a skeleton.
+    placeholderData: keepPreviousData,
+  });
+
+  /** Changing restaurant invalidates any outlet chosen under the old one. */
+  function selectBrand(id: string) {
+    setBrandId(id);
+    setOutletId("");
+    setPage(1);
+  }
+  function clearFilters() {
+    setSearch(""); setBrandId(""); setOutletId(""); setMissingType(""); setPage(1);
+  }
+  const filtersActive = !!(search || brandId || outletId || missingType);
   const expiring = useQuery<{ data: ExpiringRow[] }>({
     queryKey: ["documents-expiring", days],
     queryFn: () => apiClient.get("/documents/expiring", { params: { days } }).then((r) => r.data),
@@ -96,18 +166,86 @@ export default function DocumentsCompliancePage() {
 
       {/* Missing */}
       <section className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-          <h2 className="text-sm font-bold text-foreground">Missing documents</h2>
-          <select value={missingType} onChange={(e) => setMissingType(e.target.value)}
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border">
+          <h2 className="text-sm font-bold text-foreground">
+            Missing documents
+            {missing.data && (
+              <span className="ml-2 font-normal text-xs text-muted-foreground">
+                {missing.data.pagination.total.toLocaleString()} result{missing.data.pagination.total === 1 ? "" : "s"}
+              </span>
+            )}
+          </h2>
+          <select value={missingType} onChange={(e) => { setMissingType(e.target.value); setPage(1); }}
             className="border border-border rounded-lg px-2.5 py-1.5 text-xs bg-card text-foreground outline-none focus:ring-2 focus:ring-ring">
             {MANDATORY_FILTERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
         </div>
+
+        {/* Filter row — stacks on mobile, one row from sm up */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-5 py-3 border-b border-border bg-muted/30">
+          <div className="relative flex-1 min-w-0">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              placeholder="Search staff name…"
+              aria-label="Search staff name"
+              className="w-full text-sm border border-border rounded-lg pl-8 pr-8 py-1.5 bg-card text-foreground outline-none focus:ring-2 focus:ring-ring"
+            />
+            {/* Spinner only while a *new* search is in flight, not on first paint */}
+            {missing.isFetching && !missing.isLoading && (
+              <Loader2 size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />
+            )}
+          </div>
+
+          <select value={brandId} onChange={(e) => selectBrand(e.target.value)} aria-label="Select restaurant"
+            className="text-sm border border-border rounded-lg px-2.5 py-1.5 bg-card text-foreground outline-none focus:ring-2 focus:ring-ring sm:w-44">
+            <option value="">All restaurants</option>
+            {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+
+          <select value={outletId} onChange={(e) => { setOutletId(e.target.value); setPage(1); }}
+            aria-label="Select outlet"
+            className="text-sm border border-border rounded-lg px-2.5 py-1.5 bg-card text-foreground outline-none focus:ring-2 focus:ring-ring sm:w-44">
+            <option value="">All outlets</option>
+            {outletGroups.map((g) => (
+              <optgroup key={g.brand} label={g.brand}>
+                {g.list.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </optgroup>
+            ))}
+          </select>
+
+          {filtersActive && (
+            <button onClick={clearFilters}
+              className="inline-flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground border border-border rounded-lg px-2.5 py-1.5 transition shrink-0">
+              <X size={13} /> Clear
+            </button>
+          )}
+        </div>
+
         <ComplianceTable
           loading={missing.isLoading}
           rows={(missing.data?.data ?? []).map((r) => ({ staffId: r.staffId, staffName: r.staffName, outletName: r.outletName, right: r.typeName ?? r.docType, rightTone: "muted" as const }))}
-          empty="No missing documents for this filter. 🎉"
+          empty={filtersActive ? "No results found. Try clearing the filters." : "No missing documents. 🎉"}
         />
+
+        {missing.data && missing.data.pagination.totalPages > 1 && (
+          <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-border">
+            <p className="text-xs text-muted-foreground">
+              Page {missing.data.pagination.page} of {missing.data.pagination.totalPages}
+            </p>
+            <div className="flex items-center gap-1.5">
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
+                className="inline-flex items-center gap-1 text-xs font-semibold border border-border rounded-lg px-2.5 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted transition">
+                <ChevronLeft size={13} /> Prev
+              </button>
+              <button onClick={() => setPage((p) => p + 1)} disabled={page >= missing.data.pagination.totalPages}
+                className="inline-flex items-center gap-1 text-xs font-semibold border border-border rounded-lg px-2.5 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted transition">
+                Next <ChevronRight size={13} />
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Expiring */}

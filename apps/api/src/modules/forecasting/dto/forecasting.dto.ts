@@ -1,8 +1,9 @@
 import { IsString, IsOptional, IsUUID, IsDateString, IsNumber, IsArray, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
+import { IsDbUuid } from "../../../common/validators/is-db-uuid";
 
 export class GenerateForecastDto {
-  @IsUUID()
+  @IsDbUuid()
   outletId: string;
 
   @IsDateString()
@@ -32,7 +33,7 @@ export class PaxDataItemDto {
 }
 
 export class IngestPaxDataDto {
-  @IsUUID()
+  @IsDbUuid()
   outletId: string;
 
   @IsArray()

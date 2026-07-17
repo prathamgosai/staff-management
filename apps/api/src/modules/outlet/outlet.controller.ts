@@ -7,7 +7,7 @@ import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "@workforceiq/shared";
-import { CreateOutletDto, UpdateCapacityDto } from "./dto/outlet.dto";
+import { CreateOutletDto, UpdateCapacityDto, UpdateOutletLocationDto } from "./dto/outlet.dto";
 
 @ApiTags("Outlets")
 @ApiBearerAuth()
@@ -61,6 +61,18 @@ export class OutletController {
     @Body() body: UpdateCapacityDto,
   ) {
     return this.outletService.updateCapacity(user, id, body);
+  }
+
+  @Put(":id/location")
+  @UseGuards(PermissionsGuard)
+  @RequirePermission("outlet:write")
+  @ApiOperation({ summary: "Set an outlet's GPS coordinates and geofence radius (attendance)" })
+  updateLocation(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body() body: UpdateOutletLocationDto,
+  ) {
+    return this.outletService.updateLocation(user, id, body);
   }
 
   @Delete(":id")

@@ -1,7 +1,8 @@
 import { IsString, IsOptional, IsUUID, IsDateString, IsNumber, IsArray, IsIn } from "class-validator";
+import { IsDbUuid } from "../../../common/validators/is-db-uuid";
 
 export class GenerateScheduleDto {
-  @IsUUID()
+  @IsDbUuid()
   outletId: string;
 
   @IsDateString()
@@ -31,7 +32,7 @@ export class UpdateTemplateDto {
 }
 
 export class MoveStaffDto {
-  @IsUUID()
+  @IsDbUuid()
   outletId: string;
 
   @IsUUID()

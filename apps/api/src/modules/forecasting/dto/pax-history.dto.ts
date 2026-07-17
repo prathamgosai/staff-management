@@ -1,9 +1,10 @@
 import { IsString, IsOptional, IsUUID, IsDateString, IsNumber, IsArray, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
+import { IsDbUuid } from "../../../common/validators/is-db-uuid";
 
 export class PaxHistoryRowDto {
   @IsOptional()
-  @IsUUID()
+  @IsDbUuid()
   outletId?: string;
 
   @IsOptional()

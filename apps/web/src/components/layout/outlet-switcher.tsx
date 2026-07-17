@@ -20,8 +20,8 @@ interface Outlet {
 
 /**
  * Multi-brand context switcher. Persists the choice to the UI store so screens
- * can read `selectedOutletId` as a global filter. Does not alter any existing
- * per-page data fetching — screens opt in during their own refactor.
+ * can read `selectedOutletId` as a global filter. Screens opt in individually;
+ * the dashboard does, so its filter and this switcher drive the same value.
  */
 export function OutletSwitcher() {
   const [open, setOpen] = React.useState(false);

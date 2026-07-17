@@ -5,7 +5,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "@/components/ui/sonner";
 import { format } from "date-fns";
-import { Plus, X, Clock, CheckCircle2, AlertCircle, Search, ChevronDown } from "lucide-react";
+import { useUiStore } from "@/store/ui.store";
+import { requestGeolocation, geoToBody, geoMessage, type GeoReading } from "@/hooks/use-geolocation";
+import { Plus, X, Clock, CheckCircle2, AlertCircle, Search, ChevronDown, MapPin, MapPinOff, Loader2 } from "lucide-react";
 
 interface AttendanceRecord {
   id: string; staff_name: string; employee_id: string;
@@ -13,7 +15,7 @@ interface AttendanceRecord {
   regular_hours: number; overtime_hours: number;
   late_minutes: number; status: string;
 }
-interface StaffRow { id: string; name: string; employeeId: string; }
+interface StaffRow { id: string; name: string; employeeId: string; currentOutletId: string; outletName?: string }
 
 const STATUS_OPTIONS = [
   { value: "present",        label: "Present" },
@@ -102,10 +104,15 @@ function StaffPicker({ staff, value, onChange }: {
 export default function AttendancePage() {
   const today = format(new Date(), "yyyy-MM-dd");
   const [selectedDate, setSelectedDate] = useState(today);
-  const [selectedOutletId, setSelectedOutletId] = useState("");
+  // Shared with the top-bar OutletSwitcher, so the header and this page never disagree.
+  // "" = all outlets the caller may see, which is what the API returns with no outletId.
+  const selectedOutletId = useUiStore((s) => s.selectedOutletId) ?? "";
+  const setSelectedOutletId = useUiStore((s) => s.setSelectedOutletId);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState("");
+  const [geo, setGeo] = useState<GeoReading | null>(null);
+  const [geoAsking, setGeoAsking] = useState(false);
   const qc = useQueryClient();
 
   const { data: outlets } = useQuery({
@@ -113,43 +120,60 @@ export default function AttendancePage() {
     queryFn: () => apiClient.get("/outlets").then(r => r.data),
   });
 
+  // No outletId => every outlet in scope. The page used to sit blank behind a mandatory
+  // outlet choice even though the API happily returns all of them.
   const { data: attendance, isLoading } = useQuery({
     queryKey: ["attendance", selectedOutletId, selectedDate],
     queryFn: () => apiClient.get("/attendance", {
-      params: { outletId: selectedOutletId, date: selectedDate },
+      params: { outletId: selectedOutletId || undefined, date: selectedDate },
     }).then(r => r.data),
-    enabled: !!selectedOutletId,
   });
 
   const { data: liveStatus } = useQuery({
     queryKey: ["attendance-live", selectedOutletId],
     queryFn: () => apiClient.get("/attendance/live-status", {
-      params: { outletId: selectedOutletId },
+      params: { outletId: selectedOutletId || undefined },
     }).then(r => r.data),
-    enabled: !!selectedOutletId && selectedDate === today,
+    enabled: selectedDate === today,
     refetchInterval: 30000,
   });
 
-  // Staff list for the selected outlet (for the modal dropdown)
+  // Staff list for the modal dropdown — all outlets in scope when none is picked.
   const { data: staffRes } = useQuery({
     queryKey: ["staff", selectedOutletId],
     queryFn: () => apiClient.get("/staff", {
-      params: { outletId: selectedOutletId, limit: 500 },
+      params: { outletId: selectedOutletId || undefined, limit: 500 },
     }).then(r => r.data),
-    enabled: !!selectedOutletId && showModal,
+    enabled: showModal,
   });
   const staffList: StaffRow[] = staffRes?.data ?? [];
 
   const markMutation = useMutation({
-    mutationFn: () => apiClient.post("/attendance/manual-entry", {
-      staffId: form.staffId,
-      outletId: selectedOutletId,
-      date: selectedDate,
-      clockIn: `${selectedDate}T${form.clockIn}:00`,
-      clockOut: form.clockOut ? `${selectedDate}T${form.clockOut}:00` : undefined,
-      status: form.status,
-      note: form.note || undefined,
-    }),
+    mutationFn: async () => {
+      // Attendance belongs at the STAFF MEMBER's outlet, not whichever outlet the page is
+      // filtered to — and with "All outlets" selected there is no page outlet at all.
+      const outletId = staffList.find(s => s.id === form.staffId)?.currentOutletId;
+      if (!outletId) throw new Error("That staff member has no outlet assigned.");
+
+      // Ask for the manager's location every time they save. Evidence that attendance was
+      // marked at the outlet, not from home. A refusal doesn't block the save — it flags the
+      // record for review, matching the policy used everywhere else here.
+      setGeoAsking(true);
+      const reading = await requestGeolocation();
+      setGeo(reading);
+      setGeoAsking(false);
+
+      return apiClient.post("/attendance/manual-entry", {
+        staffId: form.staffId,
+        outletId,
+        date: selectedDate,
+        clockIn: `${selectedDate}T${form.clockIn}:00`,
+        clockOut: form.clockOut ? `${selectedDate}T${form.clockOut}:00` : undefined,
+        status: form.status,
+        note: form.note || undefined,
+        ...geoToBody(reading),
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["attendance", selectedOutletId, selectedDate] });
       qc.invalidateQueries({ queryKey: ["attendance-live", selectedOutletId] });
@@ -181,23 +205,22 @@ export default function AttendancePage() {
           <h1 className="text-2xl font-bold text-foreground">Attendance</h1>
           <p className="text-muted-foreground text-sm mt-1">Daily attendance tracking and correction management</p>
         </div>
-        {selectedOutletId && (
-          <button
-            onClick={() => { setShowModal(true); setFormError(""); setForm(EMPTY_FORM); }}
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition">
-            <Plus size={16} />
-            Mark Attendance
-          </button>
-        )}
+        {/* No longer gated on picking an outlet — the outlet comes from the chosen staff member. */}
+        <button
+          onClick={() => { setShowModal(true); setFormError(""); setForm(EMPTY_FORM); setGeo(null); }}
+          className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition">
+          <Plus size={16} />
+          Mark Attendance
+        </button>
       </div>
 
       {/* Controls */}
       <div className="flex gap-3 mb-5 flex-wrap">
         <select
           value={selectedOutletId}
-          onChange={e => setSelectedOutletId(e.target.value)}
+          onChange={e => setSelectedOutletId(e.target.value || null)}
           className="border border-border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]">
-          <option value="">Select Outlet</option>
+          <option value="">All outlets</option>
           {outlets?.data?.map((o: { id: string; name: string }) => (
             <option key={o.id} value={o.id}>{o.name}</option>
           ))}
@@ -242,9 +265,7 @@ export default function AttendancePage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {!selectedOutletId ? (
-              <tr><td colSpan={7} className="text-center py-12 text-muted-foreground">Select an outlet to view attendance</td></tr>
-            ) : isLoading ? (
+            {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>{Array.from({ length: 7 }).map((_, j) => (
                   <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded animate-pulse" /></td>
@@ -354,6 +375,20 @@ export default function AttendancePage() {
                   onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
                   className="w-full border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              {/* Location — asked for on save, so say what will happen before they press it */}
+              <div className="flex items-start gap-2 bg-muted/50 border border-border rounded-xl px-3 py-2.5">
+                {geoAsking ? <Loader2 size={14} className="mt-0.5 shrink-0 animate-spin text-muted-foreground" />
+                  : geo?.kind === "ok" ? <MapPin size={14} className="mt-0.5 shrink-0 text-emerald-600" />
+                  : geo ? <MapPinOff size={14} className="mt-0.5 shrink-0 text-amber-600" />
+                  : <MapPin size={14} className="mt-0.5 shrink-0 text-muted-foreground" />}
+                <p className="text-xs text-muted-foreground">
+                  {geoAsking ? "Getting your location…"
+                    : geo?.kind === "ok" ? `Your location was recorded (±${Math.round(geo.accuracy)}m) as proof this was marked at the outlet.`
+                    : geo ? `${geoMessage(geo)} Saved anyway — this record is flagged for review.`
+                    : "Your location is requested when you save, to record that attendance was marked at the outlet."}
+                </p>
               </div>
 
               {/* Error */}

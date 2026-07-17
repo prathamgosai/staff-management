@@ -1,7 +1,7 @@
 import {
-  LayoutDashboard, Users, Building2, Calendar, Clock,
+  LayoutDashboard, Users, Building2, Calendar, Clock, MapPin,
   CalendarOff, ArrowLeftRight, BarChart3, Calculator, Upload,
-  ShieldCheck, KeyRound, UserCog, Bell, Settings, Sliders, FileText, History, type LucideIcon,
+  ShieldCheck, KeyRound, UserCog, Bell, Settings, FileText, History, type LucideIcon,
 } from "lucide-react";
 
 export type NavItem = {
@@ -10,6 +10,12 @@ export type NavItem = {
   icon: LucideIcon;
   /** Permission required to see this item (via hasPermission). Absent = always visible. */
   perm?: string;
+  /**
+   * Only for accounts linked to a staff record. Not a permission — self-service pages act on
+   * "your own staff row", so an admin login with no staff profile has nothing to act on and
+   * would only ever see an explanatory dead end.
+   */
+  staffOnly?: boolean;
   /** Shows the pending-approvals count badge. */
   badge?: boolean;
 };
@@ -29,6 +35,10 @@ export const NAV_GROUPS: NavGroup[] = [
     label: null,
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      // Self-service: staff punch here from their own device. No perm gate — the endpoint
+      // resolves the caller's own staff row — but hidden from logins with no staff record
+      // (e.g. System Admin), who have no-one to clock in.
+      { href: "/punch", label: "Clock in / out", icon: MapPin, staffOnly: true },
       { href: "/notifications", label: "Notifications", icon: Bell },
     ],
   },
@@ -54,7 +64,6 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/predictions", label: "Staff predictor", icon: Calculator, perm: "predictions:run" },
       { href: "/reports", label: "Reports", icon: BarChart3 },
-      { href: "/planning/new-outlet", label: "New-outlet planner", icon: Calculator, perm: "allocation:read" },
     ],
   },
   {
@@ -69,7 +78,6 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Settings",
     items: [
-      { href: "/settings/role-salaries", label: "Role salaries", icon: Sliders, perm: "roles:manage" },
       { href: "/settings/document-types", label: "Document types", icon: FileText, perm: "staff:documents" },
       { href: "/planning/pax-import", label: "Import pax history", icon: Upload, perm: "outlet:write" },
       { href: "/settings/notifications", label: "Notification settings", icon: Settings },

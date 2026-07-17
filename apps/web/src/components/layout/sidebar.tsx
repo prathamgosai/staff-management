@@ -7,6 +7,7 @@ import { useAuthStore } from "@/store/auth.store";
 import { useUiStore } from "@/store/ui.store";
 import { hasPermission } from "@/lib/permissions";
 import { usePendingApprovals } from "@/hooks/use-pending-approvals";
+import { useHasStaffProfile } from "@/hooks/use-has-staff-profile";
 import { NAV_GROUPS } from "./nav";
 import { cn, getInitials } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -37,13 +38,19 @@ function SidebarBody({ collapsed, onNavigate }: { collapsed: boolean; onNavigate
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
   const pending = usePendingApprovals();
+  const { hasStaffProfile } = useHasStaffProfile();
 
   return (
     <TooltipProvider delayDuration={0}>
       <ScrollArea className="flex-1">
         <nav className="flex flex-col gap-5 px-3 py-4" aria-label="Primary">
           {NAV_GROUPS.map((group, gi) => {
-            const items = group.items.filter((it) => !it.perm || hasPermission(user, it.perm));
+            const items = group.items.filter((it) =>
+              (!it.perm || hasPermission(user, it.perm)) &&
+              // Hidden until we know: showing a self-service link to an admin and then
+              // removing it a moment later is worse than showing it a beat late.
+              (!it.staffOnly || hasStaffProfile),
+            );
             if (items.length === 0) return null;
             return (
               <div key={group.label ?? `g-${gi}`} className="flex flex-col gap-1">

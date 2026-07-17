@@ -1,14 +1,16 @@
 import {
-  IsOptional, IsString, IsNumber, IsInt, IsUUID, IsArray, ValidateNested, Min, ArrayMaxSize, MaxLength,
+  IsOptional, IsString, IsNumber, IsInt, Min, MaxLength,
 } from "class-validator";
-import { Type } from "class-transformer";
 
+/**
+ * areaSqft and operatingHours were removed: both were validated here and then never read by
+ * the strategy, so the form invited a planner to tune numbers that could not move the answer.
+ * There is no defensible staff-per-sqft or staff-per-operating-hour ratio to derive without
+ * measured data, so they are gone rather than left as decoration.
+ */
 export class RunPredictionDto {
   @IsOptional() @IsString() @MaxLength(80)
   categoryName?: string;
-
-  @IsOptional() @IsInt() @Min(0)
-  areaSqft?: number;
 
   @IsOptional() @IsInt() @Min(0)
   totalSeating?: number;
@@ -24,23 +26,5 @@ export class RunPredictionDto {
 
   @IsOptional() @IsNumber() @Min(0)
   expectedAvgBill?: number;
-
-  @IsOptional() @IsString() @MaxLength(120)
-  operatingHours?: string;
 }
 
-export class RoleSalaryRowDto {
-  @IsUUID()
-  positionId!: string;
-
-  @IsNumber() @Min(0)
-  avgMonthlySalary!: number;
-}
-
-export class UpdateSalariesDto {
-  @IsArray()
-  @ArrayMaxSize(100)
-  @ValidateNested({ each: true })
-  @Type(() => RoleSalaryRowDto)
-  salaries!: RoleSalaryRowDto[];
-}

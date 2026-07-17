@@ -1,4 +1,4 @@
-import { Injectable, Inject, BadRequestException } from "@nestjs/common";
+import { Injectable, Inject } from "@nestjs/common";
 import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import { allowedOutletIds } from "../../common/auth/outlet-scope";
@@ -170,88 +170,6 @@ export class CapacityService {
         totals: { requiredTotal: totRequired, actualTotal: totActual, variance: totActual - totRequired },
         supportUnits: supportUnits.sort((a, b) => b.actual - a.actual),
         activeStaffTotal,
-      },
-    };
-  }
-
-  /**
-   * Stateless projection for a PLANNED outlet: given planned pax (or tables → pax via the
-   * group average), returns per-category required staff, comparable existing outlets (within
-   * ±20% pax, as a reality check), and Expansion-pool coverage. Outlet-scoped.
-   */
-  async getStaffingProjection(user: AuthUser, input: { plannedPax?: number; plannedTables?: number }) {
-    const PAX_PER_TABLE = 5.3; // group average: 563 pax / 106 tables
-
-    let pax = typeof input.plannedPax === "number" ? input.plannedPax : NaN;
-    let inferred = false;
-    if (!(pax > 0) && typeof input.plannedTables === "number" && input.plannedTables > 0) {
-      pax = Math.round(input.plannedTables * PAX_PER_TABLE);
-      inferred = true;
-    }
-    if (!(pax > 0)) throw new BadRequestException("Provide plannedPax (or plannedTables) as a positive number.");
-    if (pax > 100000) throw new BadRequestException("plannedPax is unrealistically large.");
-
-    const scope = allowedOutletIds(user);
-    const lo = Math.floor(pax * 0.8);
-    const hi = Math.ceil(pax * 1.2);
-
-    const [ratiosRes, comparableRes, poolRes] = await Promise.all([
-      this.db.query("SELECT category, pax_per_staff, min_staff FROM staffing_ratios WHERE tenant_id = $1", [user.tenantId]),
-      this.db.query(
-        `SELECT o.id, o.name, o.max_pax,
-                COUNT(s.id) FILTER (WHERE s.employment_status = 'active')::int AS actual
-         FROM outlets o
-         LEFT JOIN staff s ON s.current_outlet_id = o.id
-         WHERE o.tenant_id = $1 AND o.is_active = true AND o.max_pax IS NOT NULL
-           AND o.max_pax BETWEEN $2 AND $3
-           AND ($4::uuid[] IS NULL OR o.id = ANY($4))
-         GROUP BY o.id, o.name, o.max_pax
-         ORDER BY ABS(o.max_pax - $5)
-         LIMIT 5`,
-        [user.tenantId, lo, hi, scope, pax],
-      ),
-      this.db.query(
-        `SELECT COUNT(*)::int AS n
-         FROM staff s JOIN outlets o ON o.id = s.current_outlet_id
-         WHERE s.tenant_id = $1 AND s.employment_status = 'active'
-           AND o.name ILIKE '%expansion%'
-           AND ($2::uuid[] IS NULL OR o.id = ANY($2))`,
-        [user.tenantId, scope],
-      ),
-    ]);
-
-    const rank = (c: string): number => {
-      const i = CATEGORY_ORDER.indexOf(c);
-      return i === -1 ? 99 : i;
-    };
-    const categories = ratiosRes.rows
-      .map((r) => {
-        const paxPerStaff = Number(r.pax_per_staff);
-        const minStaff = Number(r.min_staff);
-        // Guard the divisor (see getCapacityAnalysis): 0 pax_per_staff → Infinity.
-        const required = paxPerStaff > 0 ? Math.max(minStaff, Math.ceil(pax / paxPerStaff)) : minStaff;
-        return { category: r.category as string, required };
-      })
-      .sort((a, b) => rank(a.category) - rank(b.category) || a.category.localeCompare(b.category));
-    const requiredTotal = categories.reduce((s, c) => s + c.required, 0);
-
-    const poolSize = Number(poolRes.rows[0]?.n ?? 0);
-
-    return {
-      data: {
-        plannedPax: pax,
-        plannedTables: input.plannedTables ?? null,
-        paxInferred: inferred,
-        paxPerTableAssumed: inferred ? PAX_PER_TABLE : null,
-        categories,
-        requiredTotal,
-        comparableOutlets: comparableRes.rows.map((o) => ({
-          outletId: o.id, name: o.name, maxPax: Number(o.max_pax), actualStaff: Number(o.actual),
-        })),
-        expansionPool: {
-          poolSize,
-          coveragePct: requiredTotal > 0 ? Math.round((poolSize / requiredTotal) * 100) : null,
-        },
       },
     };
   }

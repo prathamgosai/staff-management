@@ -2,6 +2,7 @@ import {
   IsOptional, IsInt, IsNumber, IsUUID, IsIn, IsArray, ValidateNested, Min, ArrayMaxSize, IsString, MaxLength,
 } from "class-validator";
 import { Type } from "class-transformer";
+import { IsDbUuid } from "../../../common/validators/is-db-uuid";
 
 /** PUT /outlets/:id/configuration — all optional (partial update / upsert). */
 export class UpdateConfigurationDto {
@@ -37,7 +38,7 @@ export class UpdateConfigurationDto {
 }
 
 export class RatioRowDto {
-  @IsUUID()
+  @IsDbUuid()
   positionId!: string;
 
   @IsNumber()

@@ -6,6 +6,8 @@ import { Pool } from "pg";
 import { DB_POOL } from "../../database/database.module";
 import { LeaveService } from "../leave/leave.service";
 import { getMondayStr, toLocalDateStr } from "../../common/utils/week.util";
+import { resolveLateness } from "../../common/utils/lateness.util";
+import { evaluateGeofence } from "../../common/utils/geofence.util";
 import type { AuthUser } from "@workforceiq/shared";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
 import { CreateLeaveRequestDto } from "./dto/create-leave-request.dto";
@@ -32,6 +34,141 @@ export class MeService {
       throw new NotFoundException("No staff profile is linked to your account.");
     }
     return res.rows[0].id as string;
+  }
+
+  /**
+   * The caller's own staff row plus the outlet they are posted to. The outlet comes from
+   * the staff record, never from the request — a self-punch must not be able to name the
+   * outlet it is measured against, or the geofence is meaningless.
+   */
+  private async getSelf(user: AuthUser): Promise<{ id: string; name: string; outletId: string; outletName: string }> {
+    const res = await this.db.query(
+      `SELECT s.id, s.name, s.current_outlet_id, o.name AS outlet_name
+         FROM staff s
+         LEFT JOIN outlets o ON o.id = s.current_outlet_id
+        WHERE s.user_id = $1 AND s.tenant_id = $2`,
+      [user.id, user.tenantId],
+    );
+    const row = res.rows[0];
+    if (!row) throw new NotFoundException("No staff profile is linked to your account.");
+    if (!row.current_outlet_id) throw new BadRequestException("You are not assigned to an outlet. Ask your manager to set one.");
+    return { id: row.id, name: row.name, outletId: row.current_outlet_id, outletName: row.outlet_name };
+  }
+
+  /** Where the caller stands right now: their outlet, and whether they're already punched in. */
+  async getClockStatus(user: AuthUser) {
+    const self = await this.getSelf(user);
+    const today = toLocalDateStr(new Date());
+    const res = await this.db.query(
+      `SELECT id, clock_in, clock_out, status, late_minutes, geo_status, geo_reason, geo_distance_m
+         FROM attendance_records WHERE staff_id = $1 AND date = $2`,
+      [self.id, today],
+    );
+    const rec = res.rows[0];
+    const outlet = await this.db.query(
+      "SELECT latitude IS NOT NULL AS has_location, geofence_radius_m FROM outlets WHERE id = $1",
+      [self.outletId],
+    );
+    return {
+      data: {
+        staffName: self.name,
+        outletName: self.outletName,
+        // Lets the UI say "location isn't set for your outlet yet" instead of demanding a
+        // GPS permission that cannot be used for anything.
+        outletHasLocation: !!outlet.rows[0]?.has_location,
+        geofenceRadiusM: outlet.rows[0]?.geofence_radius_m ?? null,
+        clockedIn: !!rec && !rec.clock_out,
+        completedToday: !!rec?.clock_out,
+        record: rec ? {
+          clockIn: rec.clock_in, clockOut: rec.clock_out, status: rec.status,
+          lateMinutes: rec.late_minutes, geoStatus: rec.geo_status,
+          geoReason: rec.geo_reason, geoDistanceM: rec.geo_distance_m,
+        } : null,
+      },
+    };
+  }
+
+  /**
+   * Clock IN as yourself, from your own device.
+   *
+   * staffId and outletId are both derived server-side; the client supplies only raw GPS
+   * readings, which evaluateGeofence judges against the outlet's stored coordinates. The
+   * client can neither choose whose attendance this is nor what the verdict should be.
+   */
+  async clockInSelf(user: AuthUser, body: { gpsLat?: number; gpsLng?: number; gpsAccuracyM?: number }) {
+    const self = await this.getSelf(user);
+    const now = new Date();
+    const today = toLocalDateStr(now);
+
+    // attendance_records is UNIQUE(staff_id, date), so a second INSERT would 500. Give the
+    // duplicate policy a clean answer instead.
+    const existing = await this.db.query(
+      "SELECT clock_out FROM attendance_records WHERE staff_id = $1 AND date = $2",
+      [self.id, today],
+    );
+    if (existing.rows[0]) {
+      throw new ConflictException(
+        existing.rows[0].clock_out ? "You have already completed attendance for today." : "You are already clocked in.",
+      );
+    }
+
+    const [late, geo] = await Promise.all([
+      resolveLateness(this.db, { tenantId: user.tenantId, staffId: self.id, date: today, at: now }),
+      evaluateGeofence(this.db, user.tenantId, {
+        outletId: self.outletId,
+        lat: body.gpsLat, lng: body.gpsLng, accuracyM: body.gpsAccuracyM,
+        source: "self",
+      }),
+    ]);
+
+    const res = await this.db.query(
+      `INSERT INTO attendance_records
+         (staff_id, outlet_id, shift_id, date, clock_in, status, late_minutes, clock_in_method, source,
+          gps_clock_in, geo_status, geo_reason, geo_distance_m, geo_accuracy_m)
+       VALUES ($1, $2, $3, $4, NOW(), $5, $6, 'mobile_gps', 'self',
+               CASE WHEN $7::float8 IS NULL THEN NULL ELSE point($8::float8, $7::float8) END,
+               $9, $10, $11, $12)
+       RETURNING id, clock_in, status, late_minutes, geo_status, geo_reason, geo_distance_m`,
+      [
+        self.id, self.outletId, late.shiftId, today, late.status, late.lateMinutes,
+        body.gpsLat ?? null, body.gpsLng ?? null, // point(x=lng, y=lat)
+        geo.status, geo.reason, geo.distanceM, geo.accuracyM,
+      ],
+    );
+    return { data: { ...res.rows[0], outletName: self.outletName } };
+  }
+
+  /** Clock OUT of your own open record for today. */
+  async clockOutSelf(user: AuthUser, body: { gpsLat?: number; gpsLng?: number; gpsAccuracyM?: number }) {
+    const self = await this.getSelf(user);
+    const today = toLocalDateStr(new Date());
+
+    const open = await this.db.query(
+      "SELECT id, clock_in, break_minutes FROM attendance_records WHERE staff_id = $1 AND date = $2 AND clock_out IS NULL",
+      [self.id, today],
+    );
+    const rec = open.rows[0];
+    if (!rec) throw new ConflictException("You are not clocked in.");
+
+    // Same hours maths as the manager and kiosk paths: 8h regular, remainder overtime.
+    const clockIn = new Date(rec.clock_in);
+    const totalMinutes = (Date.now() - clockIn.getTime()) / 60000;
+    const breakMinutes = rec.break_minutes || 0;
+    const worked = (totalMinutes - breakMinutes) / 60;
+    const regularHours = Math.min(worked, 8);
+    const overtimeHours = Math.max(0, worked - 8);
+
+    const res = await this.db.query(
+      `UPDATE attendance_records
+          SET clock_out = NOW(), clock_out_method = 'mobile_gps',
+              regular_hours = $2, overtime_hours = $3,
+              gps_clock_out = CASE WHEN $4::float8 IS NULL THEN NULL ELSE point($5::float8, $4::float8) END,
+              updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, clock_in, clock_out, regular_hours, overtime_hours`,
+      [rec.id, regularHours.toFixed(2), overtimeHours.toFixed(2), body.gpsLat ?? null, body.gpsLng ?? null],
+    );
+    return { data: res.rows[0] };
   }
 
   async getProfile(user: AuthUser) {

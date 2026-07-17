@@ -1,10 +1,11 @@
-import { IsString, IsOptional, IsUUID, IsDateString, IsNumber, IsIn } from "class-validator";
+import { IsString, IsOptional, IsUUID, IsDateString, IsNumber, IsIn, Min, Max } from "class-validator";
+import { IsDbUuid } from "../../../common/validators/is-db-uuid";
 
 export class ClockInDto {
   @IsUUID()
   staffId: string;
 
-  @IsUUID()
+  @IsDbUuid()
   outletId: string;
 
   @IsOptional()
@@ -17,13 +18,23 @@ export class ClockInDto {
   @IsString()
   method?: string;
 
+  // Raw readings only. The client never sends a verdict — the geofence decision is made
+  // server-side in evaluateGeofence() against coordinates stored on the outlet.
   @IsOptional()
   @IsNumber()
+  @Min(-90) @Max(90)
   gpsLat?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-180) @Max(180)
   gpsLng?: number;
+
+  /** navigator.geolocation coords.accuracy, in metres. A punch without it can't be trusted. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  gpsAccuracyM?: number;
 }
 
 export class ClockOutDto {
@@ -49,7 +60,7 @@ export class ManualEntryDto {
   @IsUUID()
   staffId: string;
 
-  @IsUUID()
+  @IsDbUuid()
   outletId: string;
 
   @IsDateString()
@@ -68,6 +79,23 @@ export class ManualEntryDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  // The MARKING MANAGER's position, captured by the browser when they press Save. Evidences
+  // that attendance was recorded at the outlet rather than off-site.
+  @IsOptional()
+  @IsNumber()
+  @Min(-90) @Max(90)
+  gpsLat?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-180) @Max(180)
+  gpsLng?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  gpsAccuracyM?: number;
 }
 
 export class RequestCorrectionDto {

@@ -1,7 +1,8 @@
 import { IsString, IsUUID, ValidateIf } from "class-validator";
+import { IsDbUuid } from "../../../common/validators/is-db-uuid";
 
 export class CreateDeviceDto {
-  @IsUUID()
+  @IsDbUuid()
   outletId: string;
 
   @IsString()
